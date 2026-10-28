@@ -1,0 +1,11 @@
+node_modules
+dist
+dist-single
+data/*.db*
+data/*.log
+*.local
+*.tsbuildinfo
+dist-server
+.vercel
+.netlify
+dist-cotizador

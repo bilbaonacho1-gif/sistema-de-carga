@@ -1,0 +1,8 @@
+# Publica la versión que funciona sola en el navegador (cada visitante tiene sus datos).
+# La versión con servidor Node y base compartida no corre en un hosting estático.
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "24"
