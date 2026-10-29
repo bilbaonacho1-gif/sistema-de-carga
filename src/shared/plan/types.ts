@@ -52,6 +52,21 @@ export interface PlanZone {
   name: string
 }
 
+/** Un rack ubicado en el plano: una fila (o un par de filas espalda con espalda) de módulos. */
+export interface RackPlacement {
+  id: string
+  /** Esquina superior izquierda del rectángulo que ocupa, en mm del plano. */
+  x: number
+  y: number
+  orientation: 'x' | 'y'
+  modules: number
+  /** Largo a lo largo de la fila (mm). */
+  length: number
+  /** Profundidad que ocupa (mm): una fila, o las dos del par más su separación. */
+  depth: number
+  pair: boolean
+}
+
 export interface Plan {
   outline: PlanOutline
   wallHeight: number
@@ -60,6 +75,11 @@ export interface Plan {
   walls: PlanWall[]
   doors: PlanDoor[]
   zones: PlanZone[]
+  /**
+   * Racks ubicados a mano. Si no hay, los ubica la distribución automática; al mover, girar o
+   * borrar uno, la distribución se copia acá y desde ahí se edita libremente.
+   */
+  racks?: RackPlacement[]
 }
 
 /** Lo que se puede seleccionar en el editor. */
@@ -70,4 +90,5 @@ export type PlanSelection =
   | { kind: 'wall'; id: string }
   | { kind: 'door'; id: string }
   | { kind: 'zone'; id: string }
+  | { kind: 'rack'; id: string }
   | null

@@ -5,11 +5,12 @@
  * cuántos racks entran en ESE depósito (filas, pasillos, columnas y zonas) y todo lo demás
  * (materiales, presupuesto) sale del depósito completo.
  */
-import { Calculator, ChevronLeft, ChevronRight, Download, Lightbulb, Mail, Phone } from 'lucide-react'
+import { AlertTriangle, Calculator, ChevronLeft, ChevronRight, Download, Lightbulb, Mail, Phone, Plus, RotateCcw } from 'lucide-react'
 import { useMemo } from 'react'
 import { buildDepot, moduleSize, type Depot } from '../shared/plan/depot'
 import { planArea } from '../shared/plan/geometry'
 import { placementRect } from '../shared/plan/layout'
+import { addRack, freezeRacks } from '../shared/plan/racks'
 import { calculateRackStructure } from '../shared/rack/calculateRackStructure'
 import { beamCapacityForSpan } from '../shared/rack/rules'
 import { BEAM_PROFILES, CONTACT, DESIGN_RULES, OFFICIAL_REFERENCE, UPRIGHT_PROFILES } from '../shared/rack/technicalSpecs'
@@ -32,7 +33,7 @@ const META: Record<FlowStep, { title: string; short: string; help: string }> = {
   deposito: { title: 'Tu depósito', short: 'Depósito', help: 'Dibujá el lugar: contorno, columnas, portones y las zonas donde no van racks. Todo lo demás se calcula a partir de este plano.' },
   rack: { title: 'Cómo es el rack', short: 'Rack', help: 'Elegí el módulo que se va a repetir en el depósito: largo de viga, profundidad, altura y niveles.' },
   carga: { title: 'Pallet y carga', short: 'Carga', help: 'El pallet define cuántos entran por módulo. Si el cliente usa uno especial, elegí "A medida".' },
-  distribucion: { title: 'Cuántos racks entran', short: 'Distribución', help: 'El cotizador arma las filas dentro de tu depósito, esquivando columnas y zonas libres. Probá la orientación y el ancho de pasillo para ver qué conviene.' },
+  distribucion: { title: 'Cuántos racks entran', short: 'Distribución', help: 'El cotizador arma las filas dentro de tu depósito, esquivando columnas y zonas libres. Después podés tocar cualquier rack (en el plano o en 3D) y arrastrarlo, girarlo, duplicarlo o borrarlo.' },
   accesorios: { title: 'Accesorios', short: 'Accesorios', help: 'Protección, seguridad y piso de los niveles, para todos los racks del depósito.' },
   resumen: { title: 'Resumen y materiales', short: 'Resumen', help: 'El depósito completo: racks, posiciones y todas las piezas. Desde acá se pide el presupuesto.' },
 }
@@ -72,7 +73,7 @@ export function DepotFlow({ onQuote }: { onQuote(): void }) {
       </section>
       {rackView
         ? <Viewport s={preview} />
-        : <PlanStage rackLayer={showRacks ? { racks: depot.layout.placements, size } : undefined} racks={showRacks ? depot.racks : undefined} />}
+        : <PlanStage rackLayer={showRacks ? { racks: depot.layout.placements, size, issues: depot.issues } : undefined} racks={showRacks ? depot.racks : undefined} />}
       <aside className="designer__side">
         <DepotPlate depot={depot} area={planArea(plan.outline)} />
         <Warnings warnings={preview.warnings.filter((w) => w.code !== 'free-positions')} />
@@ -180,12 +181,51 @@ function RackStep({ s }: { s: RackStructure }) {
 /* ------------------------------ 4. Distribución ------------------------------ */
 
 function LayoutStep({ depot }: { depot: Depot }) {
-  const { layout, setLayout, plan } = usePlan()
+  const { layout, setLayout, plan, commit, select } = usePlan()
   const config = useDesigner((s) => s.config)
   // la otra orientación, para comparar
   const other = useMemo(() => buildDepot(plan, config, { ...layout, orientation: layout.orientation === 'x' ? 'y' : 'x' }), [plan, config, layout])
   const area = planArea(plan.outline)
   const used = depot.layout.placements.reduce((n, p) => { const r = placementRect(p); return n + (r.w * r.h) / 1e6 }, 0)
+  const issues = Object.entries(depot.issues)
+  const add = () => {
+    let id = ''
+    commit((p) => { const r = addRack(freezeRacks(p, depot.layout.placements), moduleSize(config).size); id = r.id; return r.plan })
+    if (id) select({ kind: 'rack', id })
+  }
+  const results = (
+    <>
+      <KeyValue items={[
+        ['Filas de rack', fmt(depot.layout.rows)],
+        ['Módulos', fmt(depot.layout.modules)],
+        ['Posiciones de pallet', fmt(depot.positions)],
+        ['Capacidad estimada', kg(depot.capacity)],
+        ['Piso ocupado por racks', area ? `${fmt(Math.round((used / area) * 100))} %` : '—'],
+      ]} />
+      {issues.length > 0 && (
+        <div className="note note--amber depot-issues">
+          <strong><AlertTriangle size={14} aria-hidden /> {plural(issues.length, 'rack con problemas', 'racks con problemas')}</strong>
+          <ul>{issues.slice(0, 6).map(([id, why]) => (
+            <li key={id}><button type="button" onClick={() => select({ kind: 'rack', id })}>{why}</button></li>
+          ))}</ul>
+        </div>
+      )}
+      <Button icon={Plus} onClick={add} block>Agregar un rack</Button>
+    </>
+  )
+
+  if (depot.manual) return (
+    <div className="cot-fields">
+      <p className="note note--blue">
+        Racks ubicados a mano: tocá uno en el plano o en el 3D para moverlo, girarlo, cambiarle los módulos, duplicarlo o borrarlo.
+      </p>
+      {results}
+      <Button variant="ghost" icon={RotateCcw} block onClick={() => { commit((p) => ({ ...p, racks: undefined })); select(null) }}>
+        Volver a la distribución automática
+      </Button>
+    </div>
+  )
+
   return (
     <div className="cot-fields">
       <Field label="Filas">{() => (
@@ -207,13 +247,8 @@ function LayoutStep({ depot }: { depot: Depot }) {
         <NumberStepper label="Separación de la pared" unit="mm" value={layout.wallGap} min={0} max={2000} step={50} onChange={(wallGap) => setLayout({ wallGap })} />
         <NumberStepper label="Separación de columnas y zonas" unit="mm" value={layout.obstacleGap} min={0} max={2000} step={50} onChange={(obstacleGap) => setLayout({ obstacleGap })} />
       </details>
-      <KeyValue items={[
-        ['Filas de rack', fmt(depot.layout.rows)],
-        ['Módulos', fmt(depot.layout.modules)],
-        ['Posiciones de pallet', fmt(depot.positions)],
-        ['Capacidad estimada', kg(depot.capacity)],
-        ['Piso ocupado por racks', area ? `${fmt(Math.round((used / area) * 100))} %` : '—'],
-      ]} />
+      {results}
+      <p className="muted small">Tocá cualquier rack en el plano o en el 3D para moverlo a mano.</p>
       {!depot.layout.placements.length && <p className="note note--amber">No entra ningún rack: revisá el plano, el ancho de pasillo o las separaciones.</p>}
     </div>
   )

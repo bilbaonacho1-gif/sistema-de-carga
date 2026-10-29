@@ -8,7 +8,9 @@
  * zonas libres. En cada tramo entran todos los módulos posibles; una columna parte la fila en dos.
  */
 import { outlinePolygon } from './geometry'
-import type { Plan, PlanPoint } from './types'
+import type { Plan, PlanPoint, RackPlacement } from './types'
+
+export type { RackPlacement } from './types'
 
 export interface LayoutOptions {
   /** 'x' = las filas corren a lo largo del eje X del plano; 'y' = a lo largo del Y. */
@@ -38,21 +40,6 @@ export interface RackModuleSize {
   upright: number
   /** Separación entre las dos filas de un par espalda con espalda. */
   backToBackGap: number
-}
-
-/** Un rack ubicado en el plano: una fila (o un par de filas espalda con espalda) de módulos. */
-export interface RackPlacement {
-  id: string
-  /** Esquina superior izquierda del rectángulo que ocupa, en mm del plano. */
-  x: number
-  y: number
-  orientation: 'x' | 'y'
-  modules: number
-  /** Largo a lo largo de la fila (mm). */
-  length: number
-  /** Profundidad que ocupa (mm): una fila, o las dos del par más su separación. */
-  depth: number
-  pair: boolean
 }
 
 export interface LayoutResult {

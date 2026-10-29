@@ -5,6 +5,7 @@
  *  - Contorno: clic punto por punto; se cierra tocando el primero (o Enter).
  *  - Tabique: clic en cada extremo (encadena el siguiente; Esc termina).
  *  - Columna / Portón / Zona: clic donde va.
+ *  - Racks (si están a la vista): se arrastran igual; Supr los borra.
  * Rueda o pellizco: zoom. Arrastrar el fondo: mover. Ctrl+Z / Ctrl+Y: deshacer / rehacer.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -12,6 +13,7 @@ import { itemsOutside, moveVertex, newId, removeItem, removeVertex, sagFromPoint
 import { apex, arcOf, edgeLength, edges, nearestOnEdge, planBounds, pointOnEdge, tangentOnEdge, type Edge } from '../../shared/plan/geometry'
 import type { Plan, PlanPoint } from '../../shared/plan/types'
 import type { RackModuleSize, RackPlacement } from '../../shared/plan/layout'
+import { freezeRacks, moveRack } from '../../shared/plan/racks'
 import { PlanCotas } from './PlanCotas'
 import { PlanRacks } from './PlanRacks'
 import { usePlan } from './planStore'
@@ -25,6 +27,7 @@ type Drag =
   | { type: 'wall'; id: string; dx: number; dy: number; started: boolean }
   | { type: 'wall-end'; id: string; end: 'a' | 'b'; started: boolean }
   | { type: 'door'; id: string; started: boolean }
+  | { type: 'rack'; id: string; dx: number; dy: number; started: boolean }
 
 const RED = '#be1e30'
 const meters = (mm: number) => `${(Math.round(mm / 10) / 100 + 0).toLocaleString('es-AR', { maximumFractionDigits: 2 })} m`
@@ -54,8 +57,8 @@ function fitView(plan: Plan, aspect: number): VB {
   return { x: (b.minX + b.maxX) / 2 - w / 2, y: (b.minY + b.maxY) / 2 - h / 2, w, h }
 }
 
-/** Racks a dibujar sobre el plano (los calcula la distribución automática). */
-export interface PlanRackLayer { racks: RackPlacement[]; size: RackModuleSize }
+/** Racks a dibujar sobre el plano (de la distribución automática o ubicados a mano). */
+export interface PlanRackLayer { racks: RackPlacement[]; size: RackModuleSize; issues?: Record<string, string> }
 
 export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rackLayer?: PlanRackLayer }) {
   const { plan, tool, selection, draft, snap, showCotas, commit, begin, live, select, setDraft, setTool } = usePlan()
@@ -67,6 +70,9 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
   const drag = useRef<Drag | null>(null)
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const pinch = useRef<{ d: number; vb: VB; mid: PlanPoint } | null>(null)
+  // los racks a la vista, para copiarlos al plano en la primera edición a mano
+  const layerRef = useRef(rackLayer)
+  layerRef.current = rackLayer
   const scale = vb.w / Math.max(1, size.w)   // mm por pixel
   const px = (n: number) => n * scale
 
@@ -141,6 +147,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         if (!sel) return
         e.preventDefault()
         if (sel.kind === 'vertex') s.commit((p) => removeVertex(p, sel.index))
+        else if (sel.kind === 'rack') s.commit((p) => removeItem(freezeRacks(p, layerRef.current?.racks ?? []), 'rack', sel.id))
         else if (sel.kind !== 'edge') s.commit((p) => removeItem(p, sel.kind, sel.id))
         s.select(null)
       }
@@ -255,6 +262,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         }),
       })); break
       case 'wall-end': live((pl) => ({ ...pl, walls: pl.walls.map((w) => (w.id === d.id ? { ...w, [d.end]: p } : w)) })); break
+      case 'rack': live((pl) => moveRack(freezeRacks(pl, layerRef.current?.racks ?? []), d.id, sn(raw.x - d.dx, e.altKey), sn(raw.y - d.dy, e.altKey))); break
       case 'door': live((pl) => ({
         ...pl, doors: pl.doors.map((dr) => {
           if (dr.id !== d.id) return dr
@@ -347,7 +355,9 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         </>}
 
         {/* racks ubicados */}
-        {rackLayer && <PlanRacks racks={rackLayer.racks} size={rackLayer.size} px={px} />}
+        {rackLayer && <PlanRacks racks={rackLayer.racks} size={rackLayer.size} px={px} issues={rackLayer.issues}
+          selectedId={selection?.kind === 'rack' ? selection.id : undefined}
+          onDown={tool === 'select' ? (e, r) => { select({ kind: 'rack', id: r.id }); const p = toPlan(e.clientX, e.clientY); startDrag(e, { type: 'rack', id: r.id, dx: p.x - r.x, dy: p.y - r.y, started: false }) } : undefined} />}
 
         {/* tabiques */}
         {plan.walls.map((w) => (

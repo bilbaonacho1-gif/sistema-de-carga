@@ -6,13 +6,18 @@ import { calculateRackStructure, sanitizeConfiguration } from '../rack/calculate
 import { DESIGN_RULES } from '../rack/technicalSpecs'
 import type { ComponentCounts, MaterialLine, RackConfiguration, RackStructure } from '../rack/types'
 import { planArea } from './geometry'
-import { autoLayout, type LayoutOptions, type LayoutResult, type RackModuleSize, type RackPlacement } from './layout'
-import type { Plan } from './types'
+import { autoLayout, type LayoutOptions, type LayoutResult, type RackModuleSize } from './layout'
+import { manualLayout, rackIssues } from './racks'
+import type { Plan, RackPlacement } from './types'
 
 export interface PlacedRack { placement: RackPlacement; structure: RackStructure }
 
 export interface Depot {
   layout: LayoutResult
+  /** Racks ubicados a mano (si no, los ubicó la distribución automática). */
+  manual: boolean
+  /** Racks con problemas: id → motivo (se pisa, choca con una columna, queda afuera…). */
+  issues: Record<string, string>
   racks: PlacedRack[]
   /** Un módulo de muestra del rack elegido (para medidas y perfiles). */
   sample: RackStructure
@@ -40,6 +45,20 @@ export function placementStructure(config: RackConfiguration, p: RackPlacement):
   })
 }
 
+/**
+ * Los racks iguales (mismos módulos, simple o doble) comparten la estructura: así, al mover un
+ * rack no se recalculan ni se vuelven a dibujar los demás.
+ */
+const structures = new WeakMap<RackConfiguration, Map<string, RackStructure>>()
+function cachedStructure(config: RackConfiguration, p: RackPlacement): RackStructure {
+  let byKey = structures.get(config)
+  if (!byKey) { byKey = new Map(); structures.set(config, byKey) }
+  const key = `${p.modules}|${p.pair}`
+  let s = byKey.get(key)
+  if (!s) { s = placementStructure(config, p); byKey.set(key, s) }
+  return s
+}
+
 /** Suma las listas de materiales de varios racks (misma pieza = mismo código). */
 export function mergeMaterials(lists: MaterialLine[][]): MaterialLine[] {
   const by = new Map<string, MaterialLine>()
@@ -59,11 +78,13 @@ function sumCounts(list: ComponentCounts[], zero: ComponentCounts): ComponentCou
 
 export function buildDepot(plan: Plan, config: RackConfiguration, options: LayoutOptions): Depot {
   const { size, sample } = moduleSize(config)
-  const layout = autoLayout(plan, size, options)
-  const racks = layout.placements.map((placement) => ({ placement, structure: placementStructure(config, placement) }))
+  const layout = plan.racks ? manualLayout(plan.racks, size) : autoLayout(plan, size, options)
+  const racks = layout.placements.map((placement) => ({ placement, structure: cachedStructure(config, placement) }))
   const positions = racks.reduce((n, r) => n + r.structure.positionsAvailable, 0)
   return {
     layout, racks, sample, positions,
+    manual: !!plan.racks,
+    issues: rackIssues(plan, layout.placements),
     capacity: positions * sample.config.palletWeight,
     materials: mergeMaterials(racks.map((r) => r.structure.materials)),
     counts: sumCounts(racks.map((r) => r.structure.counts), sample.counts),
@@ -82,7 +103,8 @@ export function depotSummaryText(plan: Plan, depot: Depot, options: LayoutOption
     '',
     'DISTRIBUCIÓN',
     `${n(depot.layout.rows)} filas de rack selectivo${options.backToBack ? ' (dobles espalda con espalda)' : ''} · ${n(depot.layout.modules)} módulos`,
-    `Pasillos de ${n(options.aisle)} mm · filas ${options.orientation === 'x' ? 'a lo largo' : 'a lo ancho'} del depósito`,
+    depot.manual ? 'Racks ubicados a mano sobre el plano' : `Pasillos de ${n(options.aisle)} mm · filas ${options.orientation === 'x' ? 'a lo largo' : 'a lo ancho'} del depósito`,
+    ...(Object.keys(depot.issues).length ? [`ATENCIÓN: ${n(Object.keys(depot.issues).length)} racks con interferencias (se pisan, chocan con columnas o quedan fuera)`] : []),
     `${n(depot.positions)} posiciones de pallet · capacidad estimada ${n(depot.capacity)} kg`,
     '',
     'RACK',
