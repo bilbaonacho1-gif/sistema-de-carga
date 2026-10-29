@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Presupuesto · Diseñador 3D de depósitos</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm 22mm; }
+  @page :first { margin: 0; }
+  :root { --red: #c8102e; --ink: #16202b; --muted: #5b6672; --line: #dde2e7; --soft: #f4f6f8; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; font-family: Inter, "DejaVu Sans", sans-serif; color: var(--ink); font-size: 10.5pt; line-height: 1.5; }
+
+  /* portada */
+  .cover { position: relative; width: 210mm; height: 297mm; overflow: hidden; background: #dfe3e8; page-break-after: always; }
+  .cover img { position: absolute; right: -14mm; top: 112mm; width: 196mm; -webkit-mask-image: radial-gradient(ellipse 70% 70% at 60% 55%, #000 55%, transparent 100%); mask-image: radial-gradient(ellipse 70% 70% at 60% 55%, #000 55%, transparent 100%); }
+  .cover .txt, .cover .meta { z-index: 2; }
+  .cover .band { position: absolute; left: 0; top: 0; bottom: 0; width: 9mm; background: var(--red); }
+  .cover .txt { position: absolute; left: 24mm; top: 34mm; right: 24mm; }
+  .cover .k { font-size: 10pt; letter-spacing: 3.5px; font-weight: 700; color: var(--red); }
+  .cover h1 { margin: 6mm 0 0; font-size: 40pt; line-height: 1.02; font-weight: 800; letter-spacing: -1px; }
+  .cover .sub { margin-top: 5mm; font-size: 14pt; color: var(--muted); max-width: 120mm; line-height: 1.4; }
+  .cover .meta { position: absolute; left: 24mm; bottom: 26mm; font-size: 10pt; color: var(--muted); }
+  .cover .meta b { display: block; color: var(--ink); font-size: 12pt; margin-bottom: 1mm; }
+
+  h2, h3 { break-after: avoid; page-break-after: avoid; }
+  h2 { font-size: 17pt; font-weight: 800; margin: 0 0 3mm; letter-spacing: -.3px; }
+  h2 .n { color: var(--red); margin-right: 2.5mm; }
+  h3 { font-size: 11.5pt; font-weight: 700; margin: 5mm 0 2mm; }
+  section { margin-bottom: 9mm; }
+  .break { page-break-before: always; }
+  p { margin: 0 0 3mm; }
+  .lead { font-size: 12pt; line-height: 1.5; }
+  ul, ol { margin: 0 0 3mm; padding-left: 5.5mm; }
+  li { margin: 1.2mm 0; }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0 4mm; font-size: 10pt; page-break-inside: avoid; }
+  th { text-align: left; font-size: 8.5pt; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); font-weight: 700; padding: 2.2mm 3mm; border-bottom: 1.5px solid var(--ink); }
+  td { padding: 2.6mm 3mm; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td.num { white-space: nowrap; font-weight: 700; color: var(--red); }
+  .tag { display: inline-block; font-size: 8pt; font-weight: 700; padding: .6mm 2.2mm; border-radius: 10px; white-space: nowrap; }
+  .tag.done { background: #e5f4e4; color: #1f6b2a; }
+  .tag.part { background: #f9eeda; color: #8a5a00; }
+  .tag.todo { background: #eef1f4; color: #4a5560; }
+
+  .steps { list-style: none; padding: 0; counter-reset: s; }
+  .steps li { position: relative; padding: 2.5mm 0 2.5mm 12mm; border-bottom: 1px solid var(--line); margin: 0; page-break-inside: avoid; }
+  .steps li::before { counter-increment: s; content: counter(s); position: absolute; left: 0; top: 2.4mm; width: 7.5mm; height: 7.5mm; border-radius: 50%; background: var(--red); color: #fff; font-weight: 800; font-size: 10pt; display: flex; align-items: center; justify-content: center; }
+  .steps b { display: block; font-size: 11pt; }
+  .steps .tag { margin-top: 1.2mm; }
+
+  figure { margin: 3mm 0 5mm; page-break-inside: avoid; }
+  figure img { width: 100%; border: 1px solid var(--line); border-radius: 2mm; display: block; }
+  figcaption { font-size: 8.5pt; color: var(--muted); margin-top: 1.5mm; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; align-items: start; }
+  .box { background: var(--soft); border-left: 3px solid var(--red); padding: 3.5mm 4.5mm; border-radius: 1.5mm; margin: 3mm 0 4mm; page-break-inside: avoid; }
+  .box b { display: block; margin-bottom: 1mm; }
+  .price td:last-child { width: 45mm; }
+  .keep { break-inside: avoid; page-break-inside: avoid; }
+  .tbd { color: #8a949e; font-style: italic; }
+  .blank { display: inline-block; min-width: 38mm; border-bottom: 1px solid #9aa4ae; height: 4.5mm; }
+  .cond td:first-child { width: 62mm; font-weight: 600; }
+  .muted { color: var(--muted); }
+  .small { font-size: 9pt; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="band"></div>
+  <div class="txt">
+    <div class="k">PRESUPUESTO</div>
+    <h1>Diseñador 3D<br>de depósitos</h1>
+    <div class="sub">Como AutoCAD, pero sencillo: dibujar el depósito, ubicar los racks y verlo todo en 3D con su lista de materiales.</div>
+  </div>
+  <img src="hero.jpg" alt="">
+  <div class="meta"><b>Para Sistemas de Carga S.A.</b>29 de octubre de 2026</div>
+</div>
+
+<section>
+  <h2>Resumen</h2>
+  <p class="lead">Un programa para diseñar depósitos con los productos de Sistemas de Carga, que lo entienda y lo use cualquiera. Se dibuja el depósito, se arman los racks y el resto de los sistemas, y se ve todo en 3D con su lista de materiales.</p>
+  <p>Funciona en PC y celular, sin instalar nada. El punto de partida es el cotizador 3D que ya existe: resuelve el rack selectivo, el 3D, la lista de materiales y el plano del depósito. El trabajo va por etapas y cada una se cotiza aparte.</p>
+</section>
+
+<section>
+  <h2>Lo que necesitan</h2>
+  <ol>
+    <li>Un programa para diseñar, como AutoCAD pero fácil, que entienda todo el mundo.</li>
+    <li>Que todo se maneje desde el panel de la izquierda, paso a paso, sin que sea un lío, y con instructivo.</li>
+    <li>Empezar por el rack selectivo y después sumar los otros productos.</li>
+    <li>Dibujar el depósito a mano, con paredes rectas o curvas, columnas y lo que haga falta.</li>
+    <li>Que diga cuántos racks entran en ese depósito, y dejar ubicarlos donde uno quiera.</li>
+    <li>Racks de distinto tamaño en el mismo depósito, editables parte por parte: largo, peso y altura de cada viga.</li>
+    <li>Pallet y carga editables por separado: la tarima y las cajas, con la medida de la caja y el apilado automático. Queda prevista la opción de sumar otros tipos de mercadería.</li>
+    <li>Usar todos los accesorios: protectores, conectores superiores, cruces, guardarraíles, carteles de capacidad, piso de madera o malla, travesaños de apoyo y distanciadores.</li>
+    <li>Que se vea mejor que el AutoCAD actual, para mostrárselo al cliente.</li>
+  </ol>
+</section>
+
+<section>
+  <h2>Etapas</h2>
+  <table>
+    <tr><th style="width:52mm">Etapa</th><th>Qué suma</th><th style="width:30mm">Estado</th></tr>
+    <tr><td><b>1. Depósito con rack selectivo</b></td><td>Dibujar el depósito, ver cuántos racks entran, ubicarlos donde quieras y editarlos parte por parte</td><td><span class="tag part">En parte hecha</span></td></tr>
+    <tr><td><b>2. Los otros productos</b></td><td>Los otros 7 productos de la página, combinables en el mismo depósito</td><td><span class="tag todo">A desarrollar</span></td></tr>
+    <tr><td><b>3. Pestaña Depto técnico</b></td><td>Verificar si es viable y cotizar modificaciones</td><td><span class="tag part">En parte hecha</span></td></tr>
+    <tr><td><b>4. Pestaña Producción</b></td><td>Despiece de cada pedido por sector productivo</td><td><span class="tag todo">A desarrollar</span></td></tr>
+  </table>
+  <div class="box"><b>En todas las etapas: simple y con instructivo</b>Todo se maneja desde el panel de la izquierda, paso a paso. Cada etapa nueva entra como pasos u opciones de ese panel, con una ayuda corta en cada paso, un recorrido guiado la primera vez y la animación de partes y armado del rack.</div>
+</section>
+
+<section>
+  <h2><span class="n">1</span>Depósito con rack selectivo</h2>
+  <p>Es lo primero: diseñar el depósito completo con rack selectivo. Cuando esto quede bien, se suman los otros productos con la misma lógica.</p>
+  <div class="two">
+    <figure><img src="autocad.png" alt=""><figcaption>Hoy: plano en AutoCAD. Funciona, pero es viejo y no es lindo para mostrarle al cliente.</figcaption></figure>
+    <figure><img src="hero.jpg" alt=""><figcaption>Con el diseñador: el mismo proyecto en 3D, con medidas y materiales.</figcaption></figure>
+  </div>
+  <h3>Cómo se usa</h3>
+  <ol class="steps">
+    <li><b>Dibujar el depósito</b>A mano, punto por punto: paredes rectas o curvas, medidas escritas, columnas, tabiques, portones y zonas libres.<br><span class="tag done">Ya está hecho</span></li>
+    <li><b>Ver cuántos racks entran</b>El programa propone una distribución con filas simples y dobles y sus pasillos, esquivando columnas y zonas libres, y muestra cuántos racks y posiciones entran.<br><span class="tag todo">A desarrollar</span></li>
+    <li><b>Ubicar los racks donde quieras</b>Agregar, mover, girar, duplicar y borrar. Cada rack puede tener otro largo. Avisa si un rack choca con una pared o columna, o si un pasillo queda angosto.<br><span class="tag todo">A desarrollar</span></li>
+    <li><b>Editar cada rack parte por parte</b>Dentro de un mismo rack, cada módulo con su largo, altura, niveles, altura de cada viga y peso por nivel. El programa recalcula parantes, vigas y avisos.<br><span class="tag part">En parte hecho: tramos con medidas distintas y perfiles elegibles</span></li>
+    <li><b>Pallet y carga</b>La tarima y la mercadería se editan por separado: con la medida de la caja, el programa apila las cajas solo sobre el pallet. Queda prevista la opción de sumar otros tipos de mercadería.<br><span class="tag part">En parte hecho: pallet a medida</span></li>
+    <li><b>Ver y entregar el proyecto</b>Plano con cotas, claro y lindo; 3D del depósito completo; lista de materiales de todo el depósito; guardar el proyecto y exportar a PDF y DXF.<br><span class="tag part">Hoy hay 3D y materiales de un rack</span></li>
+  </ol>
+  <h3>Lo que ya funciona y se reaprovecha</h3>
+  <ul>
+    <li>Panel paso a paso de la izquierda, con ayuda en cada paso.</li>
+    <li>Pallets estándar o a medida, con su peso.</li>
+    <li>Cálculo automático de parante y viga según la carga, con avisos de validación técnica.</li>
+    <li>Los accesorios: protectores, guardarraíles, conectores superiores, cruces, carteles de capacidad, piso de madera o malla, travesaños de apoyo y distanciadores entre filas.</li>
+    <li>Vista 3D del rack con cotas y vistas frontal, lateral, superior y 3D.</li>
+    <li>Lista de materiales por pieza, descargable en CSV, con precios cuando se carguen.</li>
+  </ul>
+  <div class="box"><b>A definir con ustedes</b>Si además de dibujar el depósito quieren cargar un plano que ya tienen (por ejemplo, un DXF de AutoCAD).</div>
+</section>
+
+<section class="break">
+  <h2><span class="n">2</span>Los otros productos</h2>
+  <p>Los 8 productos de la página, combinables en el mismo depósito. Cada uno con su configurador paso a paso, su 3D y su lista de materiales. Se pueden cotizar de a uno, en el orden que prefieran.</p>
+  <table>
+    <tr><th>Producto</th><th style="width:34mm">Estado</th></tr>
+    <tr><td>Rack selectivo</td><td><span class="tag done">Desarrollado</span></td></tr>
+    <tr><td>Selectivo con pasarela</td><td><span class="tag todo">A desarrollar</span></td></tr>
+    <tr><td>Rack penetrable (drive-in)</td><td><span class="tag todo">A desarrollar</span></td></tr>
+    <tr><td>Estantería metálica</td><td><span class="tag todo">A desarrollar</span></td></tr>
+    <tr><td>Estantería con entrepiso</td><td><span class="tag todo">A desarrollar</span></td></tr>
+    <tr><td>Entrepiso normalizado</td><td><span class="tag todo">A desarrollar</span></td></tr>
+    <tr><td>Carros móviles</td><td><span class="tag todo">A desarrollar</span></td></tr>
+    <tr><td>Lockers</td><td><span class="tag todo">A desarrollar</span></td></tr>
+  </table>
+</section>
+
+<section>
+  <h2><span class="n">3</span>Pestaña Depto técnico</h2>
+  <p>Una pestaña aparte con las opciones avanzadas, para verificar si un pedido es viable y cotizar modificaciones.</p>
+  <h3>Ya desarrollado</h3>
+  <ul>
+    <li>Elección manual del parante (3 perfiles) y la viga (4 perfiles), con aviso si no alcanzan para la carga.</li>
+    <li>Advertencias en 3 niveles: peso por pallet, carga por plano o altura por encima de lo publicado, pallet que no apoya, voladizo, altura libre escasa y rack más grande que el depósito.</li>
+    <li>Lista de materiales completa con código de pieza, descargable en CSV para Excel.</li>
+  </ul>
+  <h3>A desarrollar</h3>
+  <ul>
+    <li>Recibir el pedido del vendedor, marcarlo como viable o no y cotizar las modificaciones.</li>
+    <li>Cargar y editar desde la pantalla los datos técnicos (perfiles, capacidades, límites) y los precios, sin programar.</li>
+  </ul>
+</section>
+
+<section>
+  <h2><span class="n">4</span>Pestaña Producción</h2>
+  <p>Toma un pedido aprobado y lo despieza para la planta. La base ya existe: el programa calcula cada pieza con su medida y cantidad.</p>
+  <ul>
+    <li>Despiece completo del pedido: cada pieza con código, medida y cantidad, incluidas las del bastidor (parantes, diagonales, travesaños y placas base).</li>
+    <li>Despiece separado por sector productivo, con lo que tiene que hacer cada uno.</li>
+    <li>Hoja de trabajo imprimible por sector.</li>
+  </ul>
+  <p class="muted small">A definir con ustedes: los sectores de la planta (por ejemplo corte, perforado, plegado, soldadura, pintura y armado) y qué datos necesita cada uno.</p>
+</section>
+
+<section>
+  <h2>Entregables</h2>
+  <ul>
+    <li><b>Versión web</b>, publicable en cualquier hosting (Vercel, Netlify o el de la empresa).</li>
+    <li><b>Versión en un solo archivo HTML</b>, que se abre con doble clic sin servidor.</li>
+    <li><b>Datos técnicos en un solo archivo</b>: perfiles, vigas, capacidades, límites y precios. Se reemplazan por los de fábrica sin tocar el resto.</li>
+    <li>Código fuente con pruebas automáticas del cálculo de la estructura.</li>
+    <li>Adaptado a PC y celular, con el logo de Sistemas de Carga.</li>
+  </ul>
+  <p class="small"><b>Opcional:</b> integración con la app de gestión de la empresa (ya desarrollada), con presupuestos guardados y racks que pasan al mapa del almacén.</p>
+
+  <h2 style="margin-top:8mm">No incluido</h2>
+  <ul>
+    <li>Datos técnicos y precios reales: los actuales son ilustrativos y los tiene que pasar Sistemas de Carga.</li>
+    <li>Cálculo estructural certificado: el programa es una simulación de referencia y cada configuración la valida el departamento técnico.</li>
+  </ul>
+
+  <div class="keep"><h2 style="margin-top:8mm">Inversión</h2>
+  <p>La etapa 1 se cotiza primero; el resto se suma cuando la empresa lo pida.</p>
+  <table class="price">
+    <tr><th>Etapa</th><th>Precio (ARS)</th></tr>
+    <tr><td>1. Depósito con rack selectivo</td><td><span class="tbd">A completar</span></td></tr>
+    <tr><td>2. Los otros productos (cada uno)</td><td><span class="tbd">A completar</span></td></tr>
+    <tr><td>3. Pestaña Depto técnico</td><td><span class="tbd">A completar</span></td></tr>
+    <tr><td>4. Pestaña Producción</td><td><span class="tbd">A completar</span></td></tr>
+    <tr><td>Opcional: app de gestión</td><td><span class="tbd">A completar</span></td></tr>
+  </table>
+  <table class="cond">
+    <tr><td>Plazo de entrega</td><td><span class="tbd">A completar</span></td></tr>
+    <tr><td>Forma de pago</td><td><span class="tbd">A completar</span></td></tr>
+    <tr><td>Validez del presupuesto</td><td><span class="tbd">A completar</span></td></tr>
+    <tr><td>Soporte y mantenimiento</td><td><span class="tbd">A completar</span></td></tr>
+    <tr><td>Hosting y dominio</td><td><span class="tbd">A completar</span></td></tr>
+  </table></div>
+</section>
+
+</body>
+</html>
