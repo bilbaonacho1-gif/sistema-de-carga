@@ -55,10 +55,12 @@
   .box { background: var(--soft); border-left: 3px solid var(--red); padding: 3.5mm 4.5mm; border-radius: 1.5mm; margin: 3mm 0 4mm; page-break-inside: avoid; }
   .box b { display: block; margin-bottom: 1mm; }
   .price td:last-child { width: 45mm; }
+  .price2 td.usd { text-align: right; font-weight: 800; white-space: nowrap; }
+  .price2 td.usd.muted { font-weight: 600; }
   .keep { break-inside: avoid; page-break-inside: avoid; }
   .tbd { color: #8a949e; font-style: italic; }
   .blank { display: inline-block; min-width: 38mm; border-bottom: 1px solid #9aa4ae; height: 4.5mm; }
-  .cond td:first-child { width: 62mm; font-weight: 600; }
+  .cond td:first-child { width: 48mm; font-weight: 600; }
   .muted { color: var(--muted); }
   .small { font-size: 9pt; }
 </style>
@@ -197,23 +199,49 @@
     <li>Cálculo estructural certificado: el programa es una simulación de referencia y cada configuración la valida el departamento técnico.</li>
   </ul>
 
-  <div class="keep"><h2 style="margin-top:8mm">Inversión</h2>
-  <p>La etapa 1 se cotiza primero; el resto se suma cuando la empresa lo pida.</p>
-  <table class="price">
-    <tr><th>Etapa</th><th>Precio (ARS)</th></tr>
-    <tr><td>1. Depósito con rack selectivo</td><td><span class="tbd">A completar</span></td></tr>
-    <tr><td>2. Los otros productos (cada uno)</td><td><span class="tbd">A completar</span></td></tr>
-    <tr><td>3. Pestaña Depto técnico</td><td><span class="tbd">A completar</span></td></tr>
-    <tr><td>4. Pestaña Producción</td><td><span class="tbd">A completar</span></td></tr>
-    <tr><td>Opcional: app de gestión</td><td><span class="tbd">A completar</span></td></tr>
+</section>
+
+<section class="break">
+  <h2>Inversión</h2>
+  <p>Cada etapa se cotiza a precio cerrado. La etapa 1 es la base; el resto se suma cuando la empresa lo decida.</p>
+  <table class="price2">
+    <tr><th>Etapa</th><th style="width:38mm">Plazo</th><th style="width:34mm;text-align:right">Precio</th></tr>
+    <tr><td><b>1. Depósito con rack selectivo</b></td><td>8 a 10 semanas</td><td class="usd">USD 6.200</td></tr>
+    <tr><td><b>3. Pestaña Depto técnico</b></td><td>2 a 3 semanas</td><td class="usd">USD 1.400</td></tr>
+    <tr><td><b>4. Pestaña Producción</b> <span class="muted small">(según cantidad de sectores)</span></td><td>3 a 4 semanas</td><td class="usd">USD 1.750</td></tr>
+    <tr><td>Integración con la app de gestión</td><td>A definir</td><td class="usd muted">A convenir</td></tr>
   </table>
+
+  <h3>Etapa 2 · Otros productos (cada uno por separado)</h3>
+  <table class="price2">
+    <tr><th>Producto</th><th style="width:38mm">Plazo</th><th style="width:34mm;text-align:right">Precio</th></tr>
+    <tr><td>Selectivo con pasarela</td><td>2 semanas</td><td class="usd">USD 1.250</td></tr>
+    <tr><td>Rack penetrable (drive-in)</td><td>1 a 2 semanas</td><td class="usd">USD 1.050</td></tr>
+    <tr><td>Estantería metálica</td><td>1 semana</td><td class="usd">USD 650</td></tr>
+    <tr><td>Estantería con entrepiso</td><td>2 semanas</td><td class="usd">USD 1.100</td></tr>
+    <tr><td>Entrepiso normalizado</td><td>2 semanas</td><td class="usd">USD 1.250</td></tr>
+    <tr><td>Carros móviles</td><td>2 semanas</td><td class="usd">USD 1.250</td></tr>
+    <tr><td>Lockers</td><td>1 semana</td><td class="usd">USD 450</td></tr>
+    <tr><td>Tipos de mercadería (bolsas, tambores, bobinas)</td><td>1 semana</td><td class="usd">USD 550</td></tr>
+  </table>
+
+  <div class="keep">
+  <h3>Forma de pago</h3>
   <table class="cond">
-    <tr><td>Plazo de entrega</td><td><span class="tbd">A completar</span></td></tr>
-    <tr><td>Forma de pago</td><td><span class="tbd">A completar</span></td></tr>
-    <tr><td>Validez del presupuesto</td><td><span class="tbd">A completar</span></td></tr>
-    <tr><td>Soporte y mantenimiento</td><td><span class="tbd">A completar</span></td></tr>
-    <tr><td>Hosting y dominio</td><td><span class="tbd">A completar</span></td></tr>
-  </table></div>
+    <tr><td>Etapa 1</td><td>40% al inicio · 30% al entregar la distribución y ubicación de racks · 30% a la entrega final</td></tr>
+    <tr><td>Resto de las etapas</td><td>50% al inicio · 50% a la entrega</td></tr>
+    <tr><td>Moneda</td><td>Dólares, o pesos al tipo de cambio BNA vendedor del día de pago</td></tr>
+  </table>
+
+  <h3>Condiciones</h3>
+  <table class="cond">
+    <tr><td>Cambios incluidos</td><td>Dos rondas de ajustes por etapa. Los cambios de alcance adicionales se cotizan aparte.</td></tr>
+    <tr><td>Plazos</td><td>Corren desde el pago inicial y la entrega de los datos técnicos (fichas de parantes, vigas y capacidades).</td></tr>
+    <tr><td>Mantenimiento (opcional)</td><td>USD 150 por mes: actualizaciones menores, carga de precios y datos técnicos, y soporte.</td></tr>
+    <tr><td>Hosting y dominio</td><td>A cargo de Sistemas de Carga. El programa se publica en un hosting estático de bajo costo.</td></tr>
+    <tr><td>Validez</td><td>15 días desde la fecha del presupuesto.</td></tr>
+  </table>
+  </div>
 </section>
 
 </body>
