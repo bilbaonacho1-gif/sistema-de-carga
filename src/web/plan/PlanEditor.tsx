@@ -11,7 +11,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { itemsOutside, moveVertex, newId, removeItem, removeVertex, sagFromPoint, setOutline, splitEdge } from '../../shared/plan/edit'
 import { apex, arcOf, edgeLength, edges, nearestOnEdge, planBounds, pointOnEdge, tangentOnEdge, type Edge } from '../../shared/plan/geometry'
 import type { Plan, PlanPoint } from '../../shared/plan/types'
+import type { RackModuleSize, RackPlacement } from '../../shared/plan/layout'
 import { PlanCotas } from './PlanCotas'
+import { PlanRacks } from './PlanRacks'
 import { usePlan } from './planStore'
 
 type VB = { x: number; y: number; w: number; h: number }
@@ -52,7 +54,10 @@ function fitView(plan: Plan, aspect: number): VB {
   return { x: (b.minX + b.maxX) / 2 - w / 2, y: (b.minY + b.maxY) / 2 - h / 2, w, h }
 }
 
-export function PlanEditor({ fitRequest }: { fitRequest: number }) {
+/** Racks a dibujar sobre el plano (los calcula la distribución automática). */
+export interface PlanRackLayer { racks: RackPlacement[]; size: RackModuleSize }
+
+export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rackLayer?: PlanRackLayer }) {
   const { plan, tool, selection, draft, snap, showCotas, commit, begin, live, select, setDraft, setTool } = usePlan()
   const svgRef = useRef<SVGSVGElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -340,6 +345,9 @@ export function PlanEditor({ fitRequest }: { fitRequest: number }) {
             </g>
           ))}
         </>}
+
+        {/* racks ubicados */}
+        {rackLayer && <PlanRacks racks={rackLayer.racks} size={rackLayer.size} px={px} />}
 
         {/* tabiques */}
         {plan.walls.map((w) => (

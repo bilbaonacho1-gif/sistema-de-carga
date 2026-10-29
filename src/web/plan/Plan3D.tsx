@@ -7,7 +7,9 @@ import { Canvas } from '@react-three/fiber'
 import { useMemo } from 'react'
 import * as THREE from 'three'
 import { edges, outlinePolygon, planBounds, pointOnEdge, tangentOnEdge } from '../../shared/plan/geometry'
+import type { PlacedRack } from '../../shared/plan/depot'
 import type { Plan, PlanPoint } from '../../shared/plan/types'
+import { RackModel } from '../three/RackModel'
 
 const m = (mm: number) => mm / 1000
 
@@ -65,7 +67,19 @@ function Segment({ a, b, height, thickness, material }: { a: PlanPoint; b: PlanP
   )
 }
 
-export function Plan3D({ plan }: { plan: Plan }) {
+/**
+ * Un rack ubicado: el modelo del cotizador arma la fila a lo largo de +X con el frente en z = 0 y
+ * la profundidad hacia -z; se corre a su lugar y, si la fila va a lo largo del plano, se gira 90°.
+ */
+function PlacedRackModel({ rack, showLoads }: { rack: PlacedRack; showLoads: boolean }) {
+  const { placement: p, structure } = rack
+  const s = useMemo(() => (showLoads ? structure : { ...structure, pallets: [] }), [structure, showLoads])
+  return p.orientation === 'x'
+    ? <group position={[m(p.x), 0, m(p.y + p.depth)]}><RackModel structure={s} /></group>
+    : <group position={[m(p.x), 0, m(p.y)]} rotation-y={-Math.PI / 2}><RackModel structure={s} /></group>
+}
+
+export function Plan3D({ plan, racks = [], showLoads = true }: { plan: Plan; racks?: PlacedRack[]; showLoads?: boolean }) {
   const poly = useMemo(() => outlinePolygon(plan.outline, 300), [plan.outline])
   const b = planBounds(plan)
   const center = new THREE.Vector3(m((b.minX + b.maxX) / 2), 0, m((b.minY + b.maxY) / 2))
@@ -123,6 +137,8 @@ export function Plan3D({ plan }: { plan: Plan }) {
           <planeGeometry args={[m(z.w), m(z.d)]} />
         </mesh>
       ))}
+
+      {racks.map((r) => <PlacedRackModel key={r.placement.id} rack={r} showLoads={showLoads} />)}
 
       <OrbitControls makeDefault target={center} enableDamping maxPolarAngle={Math.PI / 2 - 0.02} minDistance={2} maxDistance={span * 6} />
     </Canvas>

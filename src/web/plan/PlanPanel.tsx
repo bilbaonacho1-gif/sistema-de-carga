@@ -21,12 +21,18 @@ const TOOLS: { id: PlanTool; label: string; icon: LucideIcon; help: string }[] =
   { id: 'zone', label: 'Zona libre', icon: Box, help: 'Clic para marcar un área donde no van racks (oficinas, carga y descarga). Después ajustá su medida y su nombre.' },
 ]
 
+/** El panel del depósito completo (con su marco). */
 export function PlanPanel() {
+  return <section className="designer__panel plan-panel" aria-label="Plano del depósito"><PlanTools /></section>
+}
+
+/** Herramientas, instructivo, lo seleccionado y los datos del depósito (sin el marco). */
+export function PlanTools() {
   const { tool, setTool, plan, commit, undo, redo, past, future, snap, setSnap, showCotas, setShowCotas } = usePlan()
   const current = TOOLS.find((t) => t.id === tool)!
   const outside = itemsOutside(plan).size
   return (
-    <section className="designer__panel plan-panel" aria-label="Plano del depósito">
+    <>
       <div className="plan-tools" role="toolbar" aria-label="Herramientas">
         {TOOLS.map((t) => (
           <button key={t.id} type="button" className={`plan-tool${tool === t.id ? ' is-active' : ''}`} aria-pressed={tool === t.id} onClick={() => setTool(t.id)} title={t.label}>
@@ -66,7 +72,7 @@ export function PlanPanel() {
 
       <QuickStart />
       <ColumnGrid />
-    </section>
+    </>
   )
 }
 

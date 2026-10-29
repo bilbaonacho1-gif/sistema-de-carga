@@ -106,7 +106,7 @@ export const DESIGN_RULES = {
     aisleWidth: { min: 1500, max: 5000 },
     /** Tramos por fila y módulos por tramo. */
     sections: { min: 1, max: 12 },
-    sectionModules: { min: 1, max: 40 },
+    sectionModules: { min: 1, max: 120 },
     /** Pallet a medida. */
     palletFront: { min: 400, max: 2000 },
     palletDeep: { min: 400, max: 2000 },

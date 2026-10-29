@@ -9,7 +9,7 @@ import { PRODUCT_TYPES, type ProductGroup } from '../../../shared/catalog'
 import { materialsTotal } from '../../../shared/rack/bom'
 import { beamCapacityForSpan } from '../../../shared/rack/rules'
 import { BEAM_PROFILES, DESIGN_RULES, OFFICIAL_REFERENCE, PALLET_TYPES, UPRIGHT_PROFILES } from '../../../shared/rack/technicalSpecs'
-import type { AccessoryConfig, MaterialLine, RackStructure } from '../../../shared/rack/types'
+import type { AccessoryConfig, ComponentCounts, MaterialLine, RackStructure } from '../../../shared/rack/types'
 
 import { NumberStepper, Switch } from '../../components/fields'
 import { Badge, Button, Field, KeyValue, Segmented, Select } from '../../components/ui'
@@ -187,7 +187,7 @@ function Sections({ s }: { s: RackStructure }) {
 
 /* ------------------------------ 3. Pallet y carga ------------------------------ */
 
-function LoadStep({ s }: { s: RackStructure }) {
+export function LoadStep({ s }: { s: RackStructure }) {
   const { config, update } = useDesigner()
   const custom = config.palletTypeId === 'custom'
   const cp = config.customPallet ?? { front: 1000, deep: 1200, height: 144 }
@@ -253,10 +253,11 @@ function StructureStep({ s }: { s: RackStructure }) {
 
 /* ------------------------------ 5. Accesorios ------------------------------ */
 
-function AccessoriesStep({ s }: { s: RackStructure }) {
+/** Accesorios. En el depósito, `counts` trae las cantidades de todos los racks juntos. */
+export function AccessoriesStep({ s, counts, multiRow }: { s: RackStructure; counts?: ComponentCounts; multiRow?: boolean }) {
   const { updateAccessories, config } = useDesigner()
   const a = s.accessories
-  const c = s.counts
+  const c = counts ?? s.counts
   const set = (patch: Partial<AccessoryConfig>) => updateAccessories(patch)
   const qty = (n: number) => (n ? ` · ${plural(n, 'pieza', 'piezas')}` : '')
   return (
@@ -268,7 +269,7 @@ function AccessoriesStep({ s }: { s: RackStructure }) {
       <Switch label="Guardarraíles de cabecera" checked={a.guardrails} onChange={(guardrails) => set({ guardrails })}
         hint={`Barrera en los extremos de cada fila${qty(c.guardrails)}.`} />
       <Switch label="Conectores superiores" checked={a.topTies} onChange={(topTies) => set({ topTies })}
-        hint={config.layout.rows > 1 ? `Unen las filas por arriba y les dan rigidez${qty(c.topTies)}.` : 'Unen filas entre sí: sirven con dos filas o más.'} />
+        hint={(multiRow ?? config.layout.rows > 1) ? `Unen las filas por arriba y les dan rigidez${qty(c.topTies)}.` : 'Unen filas entre sí: sirven con dos filas o más.'} />
       <Switch label="Cruces de arriostramiento" checked={a.crossBracing} onChange={(crossBracing) => set({ crossBracing })}
         hint={`Cruz en la cara posterior, una cada ${DESIGN_RULES.modulesPerCrossBrace} módulos${qty(c.crossBraces)}.`} />
       <Switch label="Carteles de capacidad" checked={a.capacitySigns} onChange={(capacitySigns) => set({ capacitySigns })}
@@ -291,7 +292,7 @@ function SummaryStep({ s, actions }: { s: RackStructure; actions: PanelActions }
   return (
     <div className="cot-fields">
       <MaterialsList lines={s.materials} />
-      <Button icon={Download} onClick={() => downloadMaterials(s)} block>Descargar lista (CSV)</Button>
+      <Button icon={Download} onClick={() => downloadMaterials(s.materials, `materiales-rack-${s.positionsAvailable}-posiciones`)} block>Descargar lista (CSV)</Button>
       <Button variant="primary" icon={Calculator} onClick={actions.onQuote} block>{actions.quoteLabel ?? 'Solicitar presupuesto'}</Button>
       {actions.onWarehouse && (
         <Button icon={Warehouse} onClick={actions.onWarehouse} block disabled={multi}
@@ -334,13 +335,13 @@ export function MaterialsList({ lines }: { lines: MaterialLine[] }) {
 }
 
 /** Descarga la lista de materiales como CSV (se abre en Excel). */
-export function downloadMaterials(s: RackStructure) {
-  const rows = [['Grupo', 'Código', 'Pieza', 'Detalle', 'Cantidad'], ...s.materials.map((l) => [l.group, l.code, l.name, l.detail ?? '', String(l.qty)])]
+export function downloadMaterials(lines: MaterialLine[], name: string) {
+  const rows = [['Grupo', 'Código', 'Pieza', 'Detalle', 'Cantidad'], ...lines.map((l) => [l.group, l.code, l.name, l.detail ?? '', String(l.qty)])]
   const csv = '﻿' + rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(';')).join('\r\n')
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
   const a = document.createElement('a')
   a.href = url
-  a.download = `materiales-rack-${s.positionsAvailable}-posiciones.csv`
+  a.download = `${name}.csv`
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
