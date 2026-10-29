@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Diseñador 3D de depósitos · Presupuesto Etapa 1</title>
+<style>
+  @page { size: A4; margin: 14mm 17mm 18mm; }
+  :root { --red: #c8102e; --ink: #16202b; --muted: #5b6672; --line: #dde2e7; --soft: #f4f6f8; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; font-family: Inter, "DejaVu Sans", sans-serif; color: var(--ink); font-size: 9.6pt; line-height: 1.5; }
+  .top { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid var(--ink); padding-bottom: 4mm; }
+  .top .k { font-size: 8.5pt; letter-spacing: 3px; font-weight: 700; color: var(--red); }
+  .top h1 { margin: 1.5mm 0 0; font-size: 24pt; line-height: 1.1; font-weight: 800; letter-spacing: -.5px; }
+  .top .doc { text-align: right; font-size: 8.5pt; color: var(--muted); line-height: 1.6; }
+  .top .doc b { color: var(--ink); font-weight: 700; }
+  .meta { display: grid; grid-template-columns: 22mm 1fr; gap: .6mm 4mm; font-size: 9.2pt; margin: 4mm 0 4mm; padding: 3.5mm 4.5mm; background: var(--soft); border-radius: 1.5mm; }
+  .meta dt { color: var(--muted); font-weight: 600; }
+  .meta dd { margin: 0; }
+  h2 { font-size: 12pt; font-weight: 800; margin: 5mm 0 2mm; padding-bottom: 1.5mm; border-bottom: 1px solid var(--line); break-after: avoid; page-break-after: avoid; }
+  h2 .n { color: var(--red); margin-right: 2.5mm; }
+  p { margin: 0 0 3mm; text-align: justify; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin: 1mm 0 3mm; }
+  th { text-align: left; font-size: 7.5pt; letter-spacing: .9px; text-transform: uppercase; color: var(--muted); font-weight: 700; padding: 1.8mm 2.5mm; border-bottom: 1.5px solid var(--ink); }
+  td { padding: 1.7mm 2.5mm; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+  td.id { width: 10mm; font-weight: 800; color: var(--red); }
+  td.f { width: 46mm; font-weight: 700; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin: 3mm 0 2mm; break-inside: avoid; }
+  figure { margin: 0; }
+  figure img { width: 100%; height: 40mm; object-fit: cover; border: 1px solid var(--line); border-radius: 1.5mm; display: block; background: #fff; }
+  figure img.plan { object-fit: contain; }
+  figure img.hero { object-fit: contain; background: #dfe3e8; }
+  figcaption { font-size: 8pt; color: var(--muted); margin-top: 1.5mm; }
+  figcaption b { color: var(--ink); }
+  .note { border-left: 3px solid var(--red); background: var(--soft); padding: 3mm 4.5mm; border-radius: 1.5mm; font-size: 9.5pt; margin: 3mm 0; break-inside: avoid; }
+  .steps { display: flex; gap: 2mm; margin: 2mm 0 0; break-inside: avoid; }
+  .steps div { flex: 1; border: 1px solid var(--line); border-radius: 1.5mm; padding: 2.5mm 3mm; font-size: 8.5pt; color: var(--muted); }
+  .steps div b { display: block; color: var(--ink); font-size: 9.5pt; margin-bottom: .5mm; }
+  .steps div.on { border-color: var(--red); }
+  .steps div.on b { color: var(--red); }
+  .lead { font-size: 10.5pt; }
+  .cols { display: grid; grid-template-columns: 1.15fr 1fr; gap: 6mm; margin-top: 1mm; }
+  .col h3 { font-size: 10.5pt; margin: 0 0 2mm; padding: 2mm 3mm; border-radius: 1.5mm; }
+  .col.yes h3 { background: #e5f4e4; color: #1f6b2a; }
+  .col.no h3 { background: #eef1f4; color: #4a5560; }
+  .col ul { margin: 0; padding-left: 5mm; font-size: 9.4pt; }
+  .col li { margin: 1.4mm 0; }
+  .col.yes li::marker { color: #1f6b2a; }
+  .col.no li { color: #4a5560; }
+  .price { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; margin: 2mm 0 3mm; break-inside: avoid; }
+  .card { border-radius: 2mm; padding: 4.5mm 5mm; }
+  .card.total { background: var(--ink); color: #fff; }
+  .card.total .k { font-size: 8pt; letter-spacing: 2px; color: #ff8f8f; font-weight: 700; }
+  .card.total b { display: block; font-size: 24pt; font-weight: 800; margin-top: 1mm; letter-spacing: -.5px; }
+  .card.total span { font-size: 9pt; color: #c9d1da; }
+  .card.cuotas { background: #fbebeb; border: 1.5px solid var(--red); }
+  .card.cuotas .k { font-size: 8pt; letter-spacing: 2px; color: var(--red); font-weight: 700; }
+  .card.cuotas b { display: block; font-size: 24pt; font-weight: 800; color: var(--red); margin-top: 1mm; letter-spacing: -.5px; }
+  .card.cuotas span { font-size: 9pt; color: #5b2a2f; }
+  .cond td:first-child { width: 40mm; font-weight: 700; }
+  td.amt { text-align: right; font-weight: 800; white-space: nowrap; width: 34mm; }
+  .note { margin-top: 4mm; }
+</style>
+</head><body>
+<div class="top">
+  <div><div class="k">PRESUPUESTO · ETAPA 1</div><h1>Diseñador 3D de depósitos</h1></div>
+  <div class="doc">29 de octubre de 2026</div>
+</div>
+<dl class="meta">
+  <dt>Para</dt><dd>Sistemas de Carga S.A.</dd>
+  <dt>Referencia</dt><dd>Resumen de requerimientos y alcance aprobado</dd>
+  <dt>Validez</dt><dd>15 días desde la fecha de este presupuesto</dd>
+</dl>
+
+<p class="lead">La primera etapa construye el programa base: el depósito con rack selectivo, completo y funcionando. Incluye todo el código fuente, que queda en manos de Sistemas de Carga para seguir desarrollándolo con quien prefiera.</p>
+
+<h2><span class="n">1</span>Qué incluye la Etapa 1</h2>
+<div class="cols">
+  <div class="col yes"><h3>Incluye</h3><ul>
+    <li><b>Plano del depósito</b> dibujado a mano: paredes rectas o curvas, medidas, columnas, portones y zonas libres.</li>
+    <li><b>Cuántos racks entran:</b> cálculo de filas y posiciones según el pasillo elegido.</li>
+    <li><b>Racks ubicados donde se quiera:</b> agregar, mover, girar y duplicar, con distinto largo cada uno.</li>
+    <li><b>Rack editable:</b> largo, alto, niveles, altura de cada viga y carga por nivel.</li>
+    <li><b>Pallet y carga:</b> tarima y cajas por separado; con la medida de la caja, el pallet se completa solo.</li>
+    <li><b>Accesorios:</b> protectores, guardarraíles, conectores, cruces, carteles y pisos.</li>
+    <li><b>Vista 3D</b> del depósito completo.</li>
+    <li><b>Lista de materiales</b> de todo el depósito, exportable a Excel.</li>
+    <li><b>Panel paso a paso</b> con ayuda en cada paso.</li>
+    <li><b>Código fuente completo</b> y versión web publicable.</li>
+  </ul></div>
+  <div class="col no"><h3>No incluye (próximas etapas)</h3><ul>
+    <li>Exportación del proyecto a PDF y DXF (AutoCAD).</li>
+    <li>Distribución automática que esquiva columnas.</li>
+    <li>Edición tocando cada pieza en el 3D.</li>
+    <li>Recorrido guiado y animaciones de armado.</li>
+    <li>Otros productos del catálogo.</li>
+    <li>Otros tipos de mercadería (bolsas, tambores).</li>
+    <li>Módulo técnico y módulo de producción.</li>
+  </ul></div>
+</div>
+
+<h2><span class="n">2</span>Inversión</h2>
+<div class="price">
+  <div class="card total"><div class="k">ETAPA 1 · PRECIO CERRADO</div><b>$ 4.800.000</b><span>Pesos argentinos, IVA no incluido</span></div>
+  <div class="card cuotas"><div class="k">EN CUOTAS SIN INTERÉS</div><b>6 × $ 800.000</b><span>Una al inicio y cinco mensuales consecutivas</span></div>
+</div>
+<p style="font-size:9.4pt;color:#5b6672;margin-top:-1mm">Primera cuota al iniciar el desarrollo; las otras cinco, del 1 al 10 de cada mes. Cuotas fijas en pesos.</p>
+
+<div style="break-inside:avoid">
+<h2><span class="n">3</span>Plazo y condiciones</h2>
+<table class="cond">
+  <tr><td>Plazo de entrega</td><td>6 a 8 semanas desde el inicio y la entrega de los datos técnicos (fichas de parantes, vigas y capacidades).</td></tr>
+  <tr><td>Avances</td><td>Revisión con Sistemas de Carga cada dos semanas. Incluye dos rondas de ajustes.</td></tr>
+  <tr><td>Próximas etapas</td><td>Parten del programa base, por eso tienen un valor menor. Se cotizan cuando la empresa las solicite.</td></tr>
+  <tr><td>Hosting y dominio</td><td>A cargo de Sistemas de Carga (hosting estático de bajo costo).</td></tr>
+  <tr><td>Alcance técnico</td><td>Herramienta de diseño y simulación. El cálculo estructural sigue a cargo del departamento técnico de Sistemas de Carga.</td></tr>
+</table>
+</div>
+</body></html>
