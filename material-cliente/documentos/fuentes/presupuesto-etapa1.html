@@ -56,6 +56,12 @@
   .card.cuotas b { display: block; font-size: 24pt; font-weight: 800; color: var(--red); margin-top: 1mm; letter-spacing: -.5px; }
   .card.cuotas span { font-size: 9pt; color: #5b2a2f; }
   .cond td:first-child { width: 40mm; font-weight: 700; }
+  .price3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4mm; margin: 2mm 0 3mm; break-inside: avoid; }
+  .price3 .card b { font-size: 17pt; }
+  .card.cuotas6 { background: var(--soft); border: 1.5px solid #c9d1da; }
+  .card.cuotas6 .k { font-size: 8pt; letter-spacing: 2px; color: var(--muted); font-weight: 700; }
+  .card.cuotas6 b { display: block; font-weight: 800; color: var(--ink); margin-top: 1mm; letter-spacing: -.5px; }
+  .card.cuotas6 span { font-size: 9pt; color: var(--muted); }
   td.amt { text-align: right; font-weight: 800; white-space: nowrap; width: 34mm; }
   .note { margin-top: 4mm; }
 </style>
@@ -98,11 +104,12 @@
 </div>
 
 <h2><span class="n">2</span>Inversión</h2>
-<div class="price">
-  <div class="card total"><div class="k">ETAPA 1 · PRECIO CERRADO</div><b>$ 4.800.000</b><span>Pesos argentinos, IVA no incluido</span></div>
-  <div class="card cuotas"><div class="k">EN CUOTAS SIN INTERÉS</div><b>6 × $ 800.000</b><span>Una al inicio y cinco mensuales consecutivas</span></div>
+<div class="price3">
+  <div class="card total"><div class="k">PRECIO CERRADO</div><b>$ 4.800.000</b><span>Pesos argentinos, IVA no incluido</span></div>
+  <div class="card cuotas"><div class="k">3 CUOTAS SIN INTERÉS</div><b>3 × $ 1.600.000</b><span>Total $ 4.800.000</span></div>
+  <div class="card cuotas6"><div class="k">6 CUOTAS</div><b>6 × $ 920.000</b><span>Total $ 5.520.000</span></div>
 </div>
-<p style="font-size:9.4pt;color:#5b6672;margin-top:-1mm">Primera cuota al iniciar el desarrollo; las otras cinco, del 1 al 10 de cada mes. Cuotas fijas en pesos.</p>
+<p style="font-size:9.4pt;color:#5b6672;margin-top:-1mm">Primera cuota al iniciar el desarrollo; las siguientes, del 1 al 10 de cada mes. Cuotas fijas en pesos.</p>
 
 <div style="break-inside:avoid">
 <h2><span class="n">3</span>Plazo y condiciones</h2>

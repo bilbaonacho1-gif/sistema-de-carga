@@ -4,7 +4,7 @@
 | Archivo | Qué es |
 |---|---|
 | `Disenador-3D-de-depositos_Alcance-para-aprobacion_v2.pdf` | Resumen de requerimientos y alcance de la primera etapa, para que el cliente lo apruebe o corrija. Incluye el pedido de Gabriel: pallet y carga editables por separado (R6). |
-| `Disenador-3D-de-depositos_Presupuesto-Etapa-1.pdf` | Presupuesto solo de la Etapa 1 (base), en pesos y en 6 cuotas, con qué incluye y qué no. Versión recomendada para enviar. |
+| `Disenador-3D-de-depositos_Presupuesto-Etapa-1.pdf` | Presupuesto solo de la Etapa 1 (base), en pesos: 3 cuotas sin interés o 6 con interés, con qué incluye y qué no. Versión recomendada para enviar. |
 | `Disenador-3D-de-depositos_Presupuesto.pdf` | Presupuesto solo (2 páginas) para enviar después del alcance aprobado: precios, plazos, pagos y condiciones. |
 | `presupuesto-disenador-3d.pdf` | Presupuesto por etapas con precios en USD, plazos, forma de pago y condiciones (propuesta inicial). |
 
