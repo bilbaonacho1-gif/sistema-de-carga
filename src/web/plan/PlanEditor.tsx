@@ -11,6 +11,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { itemsOutside, moveVertex, newId, removeItem, removeVertex, sagFromPoint, setOutline, splitEdge } from '../../shared/plan/edit'
 import { apex, arcOf, edgeLength, edges, nearestOnEdge, planBounds, pointOnEdge, tangentOnEdge, type Edge } from '../../shared/plan/geometry'
 import type { Plan, PlanPoint } from '../../shared/plan/types'
+import { PlanCotas } from './PlanCotas'
 import { usePlan } from './planStore'
 
 type VB = { x: number; y: number; w: number; h: number }
@@ -42,7 +43,8 @@ export function outlineD(plan: Plan): string {
 
 function fitView(plan: Plan, aspect: number): VB {
   const b = planBounds(plan)
-  const pad = Math.max(b.maxX - b.minX, b.maxY - b.minY) * 0.12 + 1000
+  // margen para las cotas, que van por afuera del depósito
+  const pad = Math.max(b.maxX - b.minX, b.maxY - b.minY) * 0.2 + 1500
   let w = b.maxX - b.minX + pad * 2
   let h = b.maxY - b.minY + pad * 2
   if (w / h > aspect) h = w / aspect
@@ -51,7 +53,7 @@ function fitView(plan: Plan, aspect: number): VB {
 }
 
 export function PlanEditor({ fitRequest }: { fitRequest: number }) {
-  const { plan, tool, selection, draft, snap, commit, begin, live, select, setDraft, setTool } = usePlan()
+  const { plan, tool, selection, draft, snap, showCotas, commit, begin, live, select, setDraft, setTool } = usePlan()
   const svgRef = useRef<SVGSVGElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 800, h: 600 })
@@ -382,8 +384,11 @@ export function PlanEditor({ fitRequest }: { fitRequest: number }) {
             : <rect key={c.id} x={c.x - Math.max(c.w / 2, minR)} y={c.y - Math.max(c.d / 2, minR)} width={Math.max(c.w, minR * 2)} height={Math.max(c.d, minR * 2)} {...props} />
         })}
 
-        {/* medidas de cada pared */}
-        {tool !== 'outline' && es.map((e) => {
+        {/* cotas (o, si están apagadas, el largo de cada pared) */}
+        {showCotas && tool !== 'outline' && (
+          <PlanCotas plan={plan} px={px} column={selection?.kind === 'column' ? plan.columns.find((c) => c.id === selection.id) : null} />
+        )}
+        {!showCotas && tool !== 'outline' && es.map((e) => {
           const m = apex(e)
           const dir = { x: m.x - centroid.x, y: m.y - centroid.y }
           const L = Math.hypot(dir.x, dir.y) || 1

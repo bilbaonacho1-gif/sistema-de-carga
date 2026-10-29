@@ -100,9 +100,9 @@ export const DESIGN_RULES = {
     depth: { min: 600, max: 1500 },
     height: { min: 1500, max: 12_000 },
     levels: { min: 1, max: 8 },
-    positions: { min: 1, max: 600 },
+    positions: { min: 1, max: 10_000 },
     palletWeight: { min: 50, max: 4_000 },
-    rows: { min: 1, max: 8 },
+    rows: { min: 1, max: 30 },
     aisleWidth: { min: 1500, max: 5000 },
     /** Tramos por fila y módulos por tramo. */
     sections: { min: 1, max: 12 },

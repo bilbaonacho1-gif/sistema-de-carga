@@ -24,6 +24,8 @@ interface PlanState {
   /** Puntos del contorno o de la pared que se está dibujando. */
   draft: PlanPoint[]
   snap: boolean
+  /** Cotas del plano (como en AutoCAD) a la vista. */
+  showCotas: boolean
   view3d: boolean
   /** Qué se está editando en el cotizador: el rack o el plano del depósito. */
   workspace: 'rack' | 'deposito'
@@ -39,6 +41,7 @@ interface PlanState {
   select(s: PlanSelection): void
   setDraft(d: PlanPoint[]): void
   setSnap(v: boolean): void
+  setShowCotas(v: boolean): void
   setView3d(v: boolean): void
   setWorkspace(w: 'rack' | 'deposito'): void
 }
@@ -53,6 +56,7 @@ export const usePlan = create<PlanState>()(
       selection: null,
       draft: [],
       snap: true,
+      showCotas: true,
       view3d: false,
       workspace: 'rack',
       commit: (fn) => set((s) => ({ plan: fn(s.plan), past: [...s.past, s.plan].slice(-HISTORY), future: [] })),
@@ -70,6 +74,7 @@ export const usePlan = create<PlanState>()(
       select: (selection) => set({ selection }),
       setDraft: (draft) => set({ draft }),
       setSnap: (snap) => set({ snap }),
+      setShowCotas: (showCotas) => set({ showCotas }),
       setView3d: (view3d) => set({ view3d }),
       setWorkspace: (workspace) => set({ workspace }),
     }),
@@ -77,7 +82,7 @@ export const usePlan = create<PlanState>()(
       name: 'sdc-plan',
       version: 1,
       storage: createJSONStorage(() => safeStorage),
-      partialize: (s) => ({ plan: s.plan, snap: s.snap, workspace: s.workspace, view3d: s.view3d }),
+      partialize: (s) => ({ plan: s.plan, snap: s.snap, showCotas: s.showCotas, workspace: s.workspace, view3d: s.view3d }),
     },
   ),
 )

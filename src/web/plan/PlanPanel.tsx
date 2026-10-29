@@ -22,7 +22,7 @@ const TOOLS: { id: PlanTool; label: string; icon: LucideIcon; help: string }[] =
 ]
 
 export function PlanPanel() {
-  const { tool, setTool, plan, commit, undo, redo, past, future, snap, setSnap } = usePlan()
+  const { tool, setTool, plan, commit, undo, redo, past, future, snap, setSnap, showCotas, setShowCotas } = usePlan()
   const current = TOOLS.find((t) => t.id === tool)!
   const outside = itemsOutside(plan).size
   return (
@@ -38,7 +38,10 @@ export function PlanPanel() {
       <div className="plan-history">
         <Button size="sm" variant="ghost" icon={Undo2} onClick={undo} disabled={!past.length}>Deshacer</Button>
         <Button size="sm" variant="ghost" icon={Redo2} onClick={redo} disabled={!future.length}>Rehacer</Button>
-        <label className="plan-snap"><input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} /> Imán 10 cm</label>
+        <span className="plan-toggles">
+          <label className="plan-snap"><input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} /> Imán 10 cm</label>
+          <label className="plan-snap"><input type="checkbox" checked={showCotas} onChange={(e) => setShowCotas(e.target.checked)} /> Cotas</label>
+        </span>
       </div>
 
       <Selection />

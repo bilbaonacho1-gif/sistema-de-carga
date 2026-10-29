@@ -157,6 +157,32 @@ export function nearestOnEdge(e: Edge, p: PlanPoint): { t: number; distance: num
   return best
 }
 
+/** Normal unitaria de la pared que apunta hacia AFUERA del depósito. */
+export function outwardNormal(e: Edge, poly: PlanPoint[]): PlanPoint {
+  const n = leftNormal(e.a, e.b)
+  const m = apex(e)
+  const probe = { x: m.x + n.x * 50, y: m.y + n.y * 50 }
+  return pointInPolygon(probe, poly) ? { x: -n.x, y: -n.y } : n
+}
+
+/**
+ * Distancia desde `p` hasta el contorno siguiendo la dirección `dir` (unitaria).
+ * Devuelve null si el rayo no toca ninguna pared.
+ */
+export function rayToPolygon(p: PlanPoint, dir: PlanPoint, poly: PlanPoint[]): number | null {
+  let best: number | null = null
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length]
+    const sx = b.x - a.x, sy = b.y - a.y
+    const den = dir.x * sy - dir.y * sx
+    if (Math.abs(den) < 1e-9) continue
+    const t = ((a.x - p.x) * sy - (a.y - p.y) * sx) / den   // a lo largo del rayo
+    const u = ((a.x - p.x) * dir.y - (a.y - p.y) * dir.x) / den  // a lo largo de la pared
+    if (t > 1e-6 && u >= 0 && u <= 1 && (best === null || t < best)) best = t
+  }
+  return best
+}
+
 /** La "bulge" de DXF para una pared: tan(ángulo/4) con signo. */
 export function dxfBulge(e: Edge): number {
   const c = dist(e.a, e.b)
