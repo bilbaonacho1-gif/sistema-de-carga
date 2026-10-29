@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Diseñador 3D de depósitos · Presupuesto</title>
+<style>
+  @page { size: A4; margin: 14mm 17mm 18mm; }
+  :root { --red: #c8102e; --ink: #16202b; --muted: #5b6672; --line: #dde2e7; --soft: #f4f6f8; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; font-family: Inter, "DejaVu Sans", sans-serif; color: var(--ink); font-size: 9.6pt; line-height: 1.5; }
+  .top { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid var(--ink); padding-bottom: 4mm; }
+  .top .k { font-size: 8.5pt; letter-spacing: 3px; font-weight: 700; color: var(--red); }
+  .top h1 { margin: 1.5mm 0 0; font-size: 24pt; line-height: 1.1; font-weight: 800; letter-spacing: -.5px; }
+  .top .doc { text-align: right; font-size: 8.5pt; color: var(--muted); line-height: 1.6; }
+  .top .doc b { color: var(--ink); font-weight: 700; }
+  .meta { display: grid; grid-template-columns: 22mm 1fr; gap: .6mm 4mm; font-size: 9.2pt; margin: 4mm 0 4mm; padding: 3.5mm 4.5mm; background: var(--soft); border-radius: 1.5mm; }
+  .meta dt { color: var(--muted); font-weight: 600; }
+  .meta dd { margin: 0; }
+  h2 { font-size: 12pt; font-weight: 800; margin: 5mm 0 2mm; padding-bottom: 1.5mm; border-bottom: 1px solid var(--line); break-after: avoid; page-break-after: avoid; }
+  h2 .n { color: var(--red); margin-right: 2.5mm; }
+  p { margin: 0 0 3mm; text-align: justify; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin: 1mm 0 3mm; }
+  th { text-align: left; font-size: 7.5pt; letter-spacing: .9px; text-transform: uppercase; color: var(--muted); font-weight: 700; padding: 1.8mm 2.5mm; border-bottom: 1.5px solid var(--ink); }
+  td { padding: 1.7mm 2.5mm; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+  td.id { width: 10mm; font-weight: 800; color: var(--red); }
+  td.f { width: 46mm; font-weight: 700; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin: 3mm 0 2mm; break-inside: avoid; }
+  figure { margin: 0; }
+  figure img { width: 100%; height: 40mm; object-fit: cover; border: 1px solid var(--line); border-radius: 1.5mm; display: block; background: #fff; }
+  figure img.plan { object-fit: contain; }
+  figure img.hero { object-fit: contain; background: #dfe3e8; }
+  figcaption { font-size: 8pt; color: var(--muted); margin-top: 1.5mm; }
+  figcaption b { color: var(--ink); }
+  .note { border-left: 3px solid var(--red); background: var(--soft); padding: 3mm 4.5mm; border-radius: 1.5mm; font-size: 9.5pt; margin: 3mm 0; break-inside: avoid; }
+  .steps { display: flex; gap: 2mm; margin: 2mm 0 0; break-inside: avoid; }
+  .steps div { flex: 1; border: 1px solid var(--line); border-radius: 1.5mm; padding: 2.5mm 3mm; font-size: 8.5pt; color: var(--muted); }
+  .steps div b { display: block; color: var(--ink); font-size: 9.5pt; margin-bottom: .5mm; }
+  .steps div.on { border-color: var(--red); }
+  .steps div.on b { color: var(--red); }
+  td.usd { text-align: right; font-weight: 800; white-space: nowrap; width: 32mm; }
+  td.usd.muted { font-weight: 600; color: var(--muted); }
+  td.pl { width: 34mm; white-space: nowrap; }
+  .cond td:first-child { width: 44mm; font-weight: 700; }
+  .lead { font-size: 10.5pt; }
+  .tot { display: flex; justify-content: space-between; align-items: baseline; background: var(--ink); color: #fff; border-radius: 1.5mm; padding: 3.5mm 4.5mm; margin: 1mm 0 4mm; }
+  .tot b { font-size: 15pt; }
+  .tot span { font-size: 9.5pt; color: #c9d1da; }
+</style>
+</head><body>
+<div class="top">
+  <div><div class="k">PRESUPUESTO</div><h1>Diseñador 3D de depósitos</h1></div>
+  <div class="doc">29 de octubre de 2026</div>
+</div>
+<dl class="meta">
+  <dt>Para</dt><dd>Sistemas de Carga S.A.</dd>
+  <dt>Referencia</dt><dd>Resumen de requerimientos y alcance aprobado (R1 a R8)</dd>
+  <dt>Validez</dt><dd>15 días desde la fecha de este presupuesto</dd>
+</dl>
+
+<p class="lead">Presupuesto por etapas, a precio cerrado, según el alcance aprobado. La primera etapa es la base de la herramienta; las siguientes se suman cuando la empresa lo decida.</p>
+
+<h2><span class="n">1</span>Primera etapa · Depósito con rack selectivo</h2>
+<table>
+  <tr><th>Incluye</th><th>Plazo</th><th style="text-align:right">Precio</th></tr>
+  <tr><td>Plano del depósito, distribución automática, ubicación libre de racks, edición por componente, pallet y carga editables, visualización 2D y 3D del depósito completo, lista de materiales, guardado de proyectos y exportación a PDF y DXF.</td><td class="pl">8 a 10 semanas</td><td class="usd">USD 6.200</td></tr>
+</table>
+
+<h2><span class="n">2</span>Etapas posteriores</h2>
+<table>
+  <tr><th>Etapa</th><th>Plazo</th><th style="text-align:right">Precio</th></tr>
+  <tr><td><b>Módulo técnico</b> · viabilidad y cotización de modificaciones, edición de datos técnicos y precios</td><td class="pl">2 a 3 semanas</td><td class="usd">USD 1.400</td></tr>
+  <tr><td><b>Módulo de producción</b> · despiece por sector productivo (según cantidad de sectores)</td><td class="pl">3 a 4 semanas</td><td class="usd">USD 1.750</td></tr>
+  <tr><td><b>Tipos de mercadería</b> · bolsas, tambores, bobinas</td><td class="pl">1 semana</td><td class="usd">USD 550</td></tr>
+  <tr><td><b>Integración con la app de gestión</b></td><td class="pl">A definir</td><td class="usd muted">A convenir</td></tr>
+</table>
+
+<h3 style="font-size:10.5pt;margin:4mm 0 1.5mm">Resto del catálogo (cada producto por separado)</h3>
+<table>
+  <tr><th>Producto</th><th>Plazo</th><th style="text-align:right">Precio</th></tr>
+  <tr><td>Selectivo con pasarela</td><td class="pl">2 semanas</td><td class="usd">USD 1.250</td></tr>
+  <tr><td>Rack penetrable (drive-in)</td><td class="pl">1 a 2 semanas</td><td class="usd">USD 1.050</td></tr>
+  <tr><td>Estantería metálica</td><td class="pl">1 semana</td><td class="usd">USD 650</td></tr>
+  <tr><td>Estantería con entrepiso</td><td class="pl">2 semanas</td><td class="usd">USD 1.100</td></tr>
+  <tr><td>Entrepiso normalizado</td><td class="pl">2 semanas</td><td class="usd">USD 1.250</td></tr>
+  <tr><td>Carros móviles</td><td class="pl">2 semanas</td><td class="usd">USD 1.250</td></tr>
+  <tr><td>Lockers</td><td class="pl">1 semana</td><td class="usd">USD 450</td></tr>
+</table>
+
+<div style="break-inside:avoid">
+<h2><span class="n">3</span>Forma de pago</h2>
+<table class="cond">
+  <tr><td>Primera etapa</td><td>40% al inicio · 30% al entregar la distribución y ubicación de racks · 30% a la entrega final</td></tr>
+  <tr><td>Etapas posteriores</td><td>50% al inicio · 50% a la entrega</td></tr>
+  <tr><td>Moneda</td><td>Dólares, o pesos al tipo de cambio BNA vendedor del día de pago</td></tr>
+</table>
+</div>
+
+<div style="break-inside:avoid">
+<h2><span class="n">4</span>Condiciones</h2>
+<table class="cond">
+  <tr><td>Cambios incluidos</td><td>Dos rondas de ajustes por etapa. Los cambios de alcance adicionales se cotizan aparte.</td></tr>
+  <tr><td>Plazos</td><td>Corren desde el pago inicial y la entrega de los datos técnicos (fichas de parantes, vigas y capacidades).</td></tr>
+  <tr><td>Entregables</td><td>Versión web publicable, versión en un solo archivo y código fuente.</td></tr>
+  <tr><td>Mantenimiento (opcional)</td><td>USD 150 por mes: actualizaciones menores, carga de precios y datos técnicos, y soporte.</td></tr>
+  <tr><td>Hosting y dominio</td><td>A cargo de Sistemas de Carga. El programa se publica en un hosting estático de bajo costo.</td></tr>
+  <tr><td>Alcance técnico</td><td>Herramienta de diseño y simulación. El cálculo estructural de cada proyecto sigue a cargo del departamento técnico de Sistemas de Carga.</td></tr>
+</table>
+</div>
+</body></html>

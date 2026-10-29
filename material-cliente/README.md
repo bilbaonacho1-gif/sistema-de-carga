@@ -4,6 +4,7 @@
 | Archivo | Qué es |
 |---|---|
 | `Disenador-3D-de-depositos_Alcance-para-aprobacion_v2.pdf` | Resumen de requerimientos y alcance de la primera etapa, para que el cliente lo apruebe o corrija. Incluye el pedido de Gabriel: pallet y carga editables por separado (R6). |
+| `Disenador-3D-de-depositos_Presupuesto.pdf` | Presupuesto solo (2 páginas) para enviar después del alcance aprobado: precios, plazos, pagos y condiciones. |
 | `presupuesto-disenador-3d.pdf` | Presupuesto por etapas con precios en USD, plazos, forma de pago y condiciones (propuesta inicial). |
 
 Fuentes en `documentos/fuentes/` (HTML + imágenes). Para regenerar un PDF:
