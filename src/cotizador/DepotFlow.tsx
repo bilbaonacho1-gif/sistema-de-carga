@@ -21,7 +21,7 @@ import { fmt, plural } from '../web/lib/format'
 import { AccessoriesStep, LoadStep, MaterialsList, downloadMaterials } from '../web/pages/designer/CotizadorPanel'
 import { Viewport, Warnings } from '../web/pages/designer/CotizadorView'
 import { useDesigner } from '../web/pages/designer/designerStore'
-import { PlanTools } from '../web/plan/PlanPanel'
+import { MarkTools, PlanTools } from '../web/plan/PlanPanel'
 import { FLOW, usePlan, type FlowStep } from '../web/plan/planStore'
 import { PlanStage } from '../web/plan/PlanWorkspace'
 import { metros, metrosNum } from '../shared/units'
@@ -31,10 +31,10 @@ const mm = metros
 const kg = (n: number) => `${fmt(n)} kg`
 
 const META: Record<FlowStep, { title: string; short: string; help: string }> = {
-  deposito: { title: 'Tu depósito', short: 'Depósito', help: 'Dibujá el lugar: contorno, columnas, portones y las zonas donde no van racks. Todo lo demás se calcula a partir de este plano.' },
+  deposito: { title: 'Tu depósito', short: 'Depósito', help: 'Dibujá el lugar: contorno, columnas, portones y las zonas donde no van racks. Si ya sabés dónde van los racks y los pasillos, marcalos con "Zona de racks" y "Pasillo". Todo lo demás se calcula a partir de este plano.' },
   rack: { title: 'Cómo es el rack', short: 'Rack', help: 'Elegí el módulo que se va a repetir en el depósito: largo de viga, profundidad, altura y niveles.' },
   carga: { title: 'Pallet y carga', short: 'Carga', help: 'El pallet define cuántos entran por módulo. Si el cliente usa uno especial, elegí "A medida".' },
-  distribucion: { title: 'Cuántos racks entran', short: 'Distribución', help: 'El cotizador arma las filas dentro de tu depósito, esquivando columnas y zonas libres. Después podés tocar cualquier rack (en el plano o en 3D) y arrastrarlo, girarlo, duplicarlo o borrarlo.' },
+  distribucion: { title: 'Cuántos racks entran', short: 'Distribución', help: 'El cotizador arma las filas dentro de tu depósito (o sólo en las zonas de racks que marques), respetando los pasillos y esquivando columnas y zonas libres. Después podés tocar cualquier rack (en el plano o en 3D) y arrastrarlo, girarlo, duplicarlo o borrarlo.' },
   accesorios: { title: 'Accesorios', short: 'Accesorios', help: 'Protección, seguridad y piso de los niveles, para todos los racks del depósito.' },
   resumen: { title: 'Resumen y materiales', short: 'Resumen', help: 'El depósito completo: racks, posiciones y todas las piezas. Desde acá se pide el presupuesto.' },
 }
@@ -219,6 +219,7 @@ function LayoutStep({ depot }: { depot: Depot }) {
     <div className="cot-fields">
       <p className="note note--blue">
         Racks ubicados a mano: tocá uno en el plano o en el 3D para moverlo, girarlo, cambiarle los módulos, duplicarlo o borrarlo.
+        {(plan.rackAreas?.length || plan.aisles?.length) ? ' Las zonas de racks y los pasillos marcados se aplican al volver a la distribución automática.' : ''}
       </p>
       {results}
       <Button variant="ghost" icon={RotateCcw} block onClick={() => { commit((p) => ({ ...p, racks: undefined })); select(null) }}>
@@ -229,7 +230,8 @@ function LayoutStep({ depot }: { depot: Depot }) {
 
   return (
     <div className="cot-fields">
-      <Field label="Filas">{() => (
+      <MarkTools />
+      <Field label={plan.rackAreas?.length ? 'Filas (de las zonas sin orientación propia)' : 'Filas'}>{() => (
         <Segmented label="Orientación de las filas" value={layout.orientation} onChange={(orientation) => setLayout({ orientation })}
           options={[{ value: 'x', label: 'Horizontales' }, { value: 'y', label: 'Verticales' }]} />
       )}</Field>

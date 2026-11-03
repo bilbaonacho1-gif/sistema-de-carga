@@ -1,6 +1,6 @@
 /**
  * El depósito en 3D: piso, paredes (las curvas se arman con tramos cortos), columnas,
- * tabiques, portones, zonas libres y los racks. No es sólo para mirar: tocando cualquier cosa
+ * tabiques, portones, zonas libres, zonas de racks, pasillos marcados y los racks. No es sólo para mirar: tocando cualquier cosa
  * se selecciona y arrastrándola se mueve sobre el piso (columnas, tabiques, zonas, portones a lo
  * largo de su pared, esquinas del contorno y racks). Arrastrar el fondo gira la cámara.
  */
@@ -10,7 +10,7 @@ import { memo, useEffect, useMemo, useState } from 'react'
 import * as THREE from 'three'
 import { edges, nearestOnEdge, outlinePolygon, planBounds, pointOnEdge, tangentOnEdge } from '../../shared/plan/geometry'
 import type { PlacedRack } from '../../shared/plan/depot'
-import { moveVertex } from '../../shared/plan/edit'
+import { moveVertex, updateRect } from '../../shared/plan/edit'
 import { placementRect } from '../../shared/plan/layout'
 import { freezeRacks, moveRack } from '../../shared/plan/racks'
 import type { Plan, PlanPoint, PlanSelection, RackPlacement } from '../../shared/plan/types'
@@ -32,6 +32,10 @@ const MAT = {
   selected: new THREE.MeshStandardMaterial({ color: RED, roughness: 0.6, emissive: RED, emissiveIntensity: 0.25 }),
   zoneSelected: new THREE.MeshStandardMaterial({ color: RED, transparent: true, opacity: 0.4 }),
   handle: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.5 }),
+  area: new THREE.MeshBasicMaterial({ color: '#2f6fb8', transparent: true, opacity: 0.08, depthWrite: false }),
+  areaSelected: new THREE.MeshBasicMaterial({ color: '#2f6fb8', transparent: true, opacity: 0.2, depthWrite: false }),
+  aisle: new THREE.MeshBasicMaterial({ color: '#f2c230', transparent: true, opacity: 0.6, depthWrite: false }),
+  aisleSelected: new THREE.MeshBasicMaterial({ color: '#e0a100', transparent: true, opacity: 0.85, depthWrite: false }),
   /** Caja invisible para tocar un rack (más liviana que tocar cada pieza). */
   rackHit: new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
   rackSelected: new THREE.MeshBasicMaterial({ color: RED, transparent: true, opacity: 0.14, depthWrite: false }),
@@ -265,6 +269,20 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, span, onStats 
             ...pl, zones: pl.zones.map((x) => (x.id === z.id ? { ...x, x: snapTo(z.x + dx, free), y: snapTo(z.y + dy, free) } : x)),
           })))}>
           <planeGeometry args={[m(z.w), m(z.d)]} />
+        </mesh>
+      ))}
+
+      {/* zonas de racks (tinte azul) y pasillos marcados (amarillo) sobre el piso */}
+      {(plan.rackAreas ?? []).map((a) => (
+        <mesh key={a.id} material={isSel('area', a.id) ? MAT.areaSelected : MAT.area} rotation-x={-Math.PI / 2} position={[m(a.x + a.w / 2), 0.004, m(a.y + a.d / 2)]}
+          {...drag({ kind: 'area', id: a.id }, (dx, dy, free) => live((pl) => updateRect(pl, 'area', a.id, () => ({ x: snapTo(a.x + dx, free), y: snapTo(a.y + dy, free) }))))}>
+          <planeGeometry args={[m(a.w), m(a.d)]} />
+        </mesh>
+      ))}
+      {(plan.aisles ?? []).map((a) => (
+        <mesh key={a.id} renderOrder={2} material={isSel('aisle', a.id) ? MAT.aisleSelected : MAT.aisle} rotation-x={-Math.PI / 2} position={[m(a.x + a.w / 2), 0.007, m(a.y + a.d / 2)]}
+          {...drag({ kind: 'aisle', id: a.id }, (dx, dy, free) => live((pl) => updateRect(pl, 'aisle', a.id, () => ({ x: snapTo(a.x + dx, free), y: snapTo(a.y + dy, free) }))))}>
+          <planeGeometry args={[m(a.w), m(a.d)]} />
         </mesh>
       ))}
 

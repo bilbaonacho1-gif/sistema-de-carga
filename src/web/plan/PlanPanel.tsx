@@ -2,9 +2,9 @@
  * Panel izquierdo del depósito: herramientas con su instructivo, arranque rápido,
  * grilla de columnas y las medidas de lo que esté seleccionado.
  */
-import { Box, Circle, DoorOpen, Grid3x3, MousePointer2, PenLine, Redo2, Square, Trash2, Undo2, Minus as WallIcon, type LucideIcon } from 'lucide-react'
+import { Box, Circle, DoorOpen, Footprints, Grid3x3, LayoutGrid, MousePointer2, PenLine, Redo2, RotateCcw, RotateCw, Square, Trash2, Undo2, Minus as WallIcon, type LucideIcon } from 'lucide-react'
 import { useState } from 'react'
-import { columnGrid, itemsOutside, removeItem, removeOutside, removeVertex, setEdgeLength, setSag, splitEdge } from '../../shared/plan/edit'
+import { columnGrid, itemsOutside, removeItem, removeOutside, removeVertex, rotateAisle, setEdgeLength, setSag, splitEdge, updateRect } from '../../shared/plan/edit'
 import { arcOf, edgeLength, edges, planArea, planPerimeter, rectanglePlan } from '../../shared/plan/geometry'
 import type { Plan } from '../../shared/plan/types'
 import { NumberStepper } from '../components/fields'
@@ -13,13 +13,15 @@ import { fmt } from '../lib/format'
 import { usePlan, type PlanTool } from './planStore'
 import { metros } from '../../shared/units'
 
-const TOOLS: { id: PlanTool; label: string; icon: LucideIcon; help: string }[] = [
+export const TOOLS: { id: PlanTool; label: string; icon: LucideIcon; help: string }[] = [
   { id: 'select', label: 'Seleccionar', icon: MousePointer2, help: 'Arrastrá los puntos rojos para mover las esquinas. Tocá una pared para escribir su largo o curvarla (arrastrando su manija del medio). Doble clic en una pared agrega un punto. Arrastrá el fondo para moverte y usá la rueda para acercar.' },
   { id: 'outline', label: 'Dibujar contorno', icon: PenLine, help: 'Hacé clic en cada esquina del depósito. Para cerrar, tocá el primer punto o apretá Enter. Las paredes se alinean solas a 90° cuando están casi derechas. Esc cancela.' },
   { id: 'column', label: 'Columna', icon: Square, help: 'Clic donde va cada columna. Después la podés arrastrar o escribir su medida. Para muchas columnas iguales usá "Grilla de columnas".' },
   { id: 'wall', label: 'Tabique', icon: WallIcon, help: 'Clic en el comienzo y en el final de la pared interna. Sigue encadenando la siguiente desde donde terminó; Esc termina.' },
   { id: 'door', label: 'Portón', icon: DoorOpen, help: 'Clic sobre una pared del contorno para poner un portón. Arrastralo para correrlo a lo largo de la pared.' },
   { id: 'zone', label: 'Zona libre', icon: Box, help: 'Clic para marcar un área donde no van racks (oficinas, carga y descarga). Después ajustá su medida y su nombre.' },
+  { id: 'area', label: 'Zona de racks', icon: LayoutGrid, help: 'Arrastrá un rectángulo donde querés los racks: se llenan solos con filas y pasillos. Podés marcar varias zonas, cada una con filas horizontales o verticales. Si no marcás ninguna, se usa todo el depósito.' },
+  { id: 'aisle', label: 'Pasillo', icon: Footprints, help: 'Arrastrá de punta a punta por donde pasa el pasillo (sale con el ancho de pasillo elegido) o marcá un rectángulo. Un clic solo hace un pasillo de lado a lado. Ahí no van racks: las filas se acomodan a cada lado o se cortan.' },
 ]
 
 /** El panel del depósito completo (con su marco). */
@@ -32,6 +34,7 @@ export function PlanTools() {
   const { tool, setTool, plan, commit, undo, redo, past, future, snap, setSnap, showCotas, setShowCotas } = usePlan()
   const current = TOOLS.find((t) => t.id === tool)!
   const outside = itemsOutside(plan).size
+  const hasMarks = !!(plan.rackAreas?.length || plan.aisles?.length)
   return (
     <>
       <div className="plan-tools" role="toolbar" aria-label="Herramientas">
@@ -52,6 +55,7 @@ export function PlanTools() {
       </div>
 
       <Selection />
+      {hasMarks && plan.racks && <ManualRacksNote />}
 
       <h2 className="section-label">Depósito</h2>
       <KeyValue items={[
@@ -59,6 +63,8 @@ export function PlanTools() {
         ['Perímetro', `${(planPerimeter(plan.outline) / 1000).toLocaleString('es-AR', { maximumFractionDigits: 2 })} m`],
         ['Paredes', fmt(plan.outline.points.length)],
         ['Columnas', fmt(plan.columns.length)],
+        ...(plan.rackAreas?.length ? [['Zonas de racks', fmt(plan.rackAreas.length)] as [string, string]] : []),
+        ...(plan.aisles?.length ? [['Pasillos marcados', fmt(plan.aisles.length)] as [string, string]] : []),
       ]} />
       {outside > 0 && (
         <div className="note note--amber plan-outside">
@@ -80,8 +86,8 @@ export function PlanTools() {
 /* ------------------------------ Lo seleccionado ------------------------------ */
 
 function Selection() {
-  const { plan, selection, commit, select } = usePlan()
-  if (!selection) return <p className="muted small">Tocá una pared, una esquina o una columna para ver y escribir sus medidas.</p>
+  const { plan, selection, commit, select, layout } = usePlan()
+  if (!selection) return <p className="muted small">Tocá una pared, una esquina, una columna, una zona o un pasillo para ver y escribir sus medidas.</p>
   const del = (fn: (p: Plan) => Plan) => { commit(fn); select(null) }
 
   if (selection.kind === 'vertex') {
@@ -183,6 +189,55 @@ function Selection() {
     )
   }
 
+  if (selection.kind === 'area') {
+    const a = plan.rackAreas?.find((x) => x.id === selection.id)
+    if (!a) return null
+    const upd = (patch: Partial<typeof a>) => commit((pl) => updateRect(pl, 'area', a.id, () => patch))
+    return (
+      <div className="plan-sel">
+        <h2 className="section-label">Zona de racks</h2>
+        <Field label="Nombre">{(id) => <Input id={id} value={a.name} onChange={(e) => upd({ name: e.target.value })} />}</Field>
+        <Field label="Filas">{() => (
+          <Segmented label="Filas" value={a.orientation ?? layout.orientation} onChange={(orientation) => upd({ orientation })}
+            options={[{ value: 'x', label: 'Horizontales' }, { value: 'y', label: 'Verticales' }]} />
+        )}</Field>
+        <div className="plan-xy">
+          <NumberStepper label="Ancho" meters value={a.w} min={1000} max={500_000} step={500} onChange={(w) => upd({ w })} />
+          <NumberStepper label="Fondo" meters value={a.d} min={1000} max={500_000} step={500} onChange={(d) => upd({ d })} />
+        </div>
+        <div className="plan-xy">
+          <NumberStepper label="X" meters value={a.x} min={-500_000} max={500_000} step={100} onChange={(x) => upd({ x })} />
+          <NumberStepper label="Y" meters value={a.y} min={-500_000} max={500_000} step={100} onChange={(y) => upd({ y })} />
+        </div>
+        <p className="muted small">Arrastrá el borde o el nombre para moverla y la manija de la esquina para cambiar el tamaño.</p>
+        <Button size="sm" variant="ghost" icon={Trash2} onClick={() => del((pl) => removeItem(pl, 'area', a.id))}>Quitar zona de racks</Button>
+      </div>
+    )
+  }
+
+  if (selection.kind === 'aisle') {
+    const a = plan.aisles?.find((x) => x.id === selection.id)
+    if (!a) return null
+    const vertical = a.d > a.w
+    const width = vertical ? a.w : a.d, length = vertical ? a.d : a.w
+    const upd = (patch: Partial<typeof a>) => commit((pl) => updateRect(pl, 'aisle', a.id, () => patch))
+    return (
+      <div className="plan-sel">
+        <h2 className="section-label">Pasillo {vertical ? 'vertical' : 'horizontal'}</h2>
+        <NumberStepper label="Ancho del pasillo" meters value={width} min={800} max={20_000} step={100}
+          onChange={(v) => upd(vertical ? { w: v, x: Math.round(a.x + (a.w - v) / 2) } : { d: v, y: Math.round(a.y + (a.d - v) / 2) })}
+          hint="Para autoelevador contrapesado, unos 3,5 m; para retráctil, unos 2,8 m." />
+        <NumberStepper label="Largo" meters value={length} min={1000} max={500_000} step={500} onChange={(v) => upd(vertical ? { d: v } : { w: v })} />
+        <div className="plan-xy">
+          <NumberStepper label="X" meters value={a.x} min={-500_000} max={500_000} step={100} onChange={(x) => upd({ x })} />
+          <NumberStepper label="Y" meters value={a.y} min={-500_000} max={500_000} step={100} onChange={(y) => upd({ y })} />
+        </div>
+        <Button size="sm" variant="ghost" icon={vertical ? RotateCcw : RotateCw} onClick={() => commit((pl) => rotateAisle(pl, a.id))}>Girar 90°</Button>
+        <Button size="sm" variant="ghost" icon={Trash2} onClick={() => del((pl) => removeItem(pl, 'aisle', a.id))}>Quitar pasillo</Button>
+      </div>
+    )
+  }
+
   const z = plan.zones.find((x) => x.id === selection.id)
   if (!z) return null
   const upd = (patch: Partial<typeof z>) => commit((pl) => ({ ...pl, zones: pl.zones.map((x) => (x.id === z.id ? { ...x, ...patch } : x)) }))
@@ -228,5 +283,45 @@ function ColumnGrid() {
       <NumberStepper label="Medida de la columna" meters value={size} min={150} max={1500} step={50} onChange={setSize} />
       <Button size="sm" onClick={() => commit((p) => columnGrid(p, dx, dy, size))} block>Generar columnas (reemplaza las actuales)</Button>
     </details>
+  )
+}
+
+/** Con racks movidos a mano, las zonas de racks y los pasillos no reubican nada hasta volver a lo automático. */
+export function ManualRacksNote() {
+  const { commit, select } = usePlan()
+  return (
+    <div className="note note--amber plan-outside">
+      <span>Moviste racks a mano: las zonas de racks y los pasillos se aplican al volver a la distribución automática.</span>
+      <Button size="sm" icon={RotateCcw} onClick={() => { commit((p) => ({ ...p, racks: undefined })); select(null) }}>Volver a la distribución automática</Button>
+    </div>
+  )
+}
+
+/**
+ * Las herramientas para marcar dónde van los racks (zonas de racks y pasillos), sueltas: para usar
+ * en el paso de la distribución sin volver al plano del depósito.
+ */
+export function MarkTools() {
+  const { tool, setTool, plan, selection } = usePlan()
+  const ids: PlanTool[] = ['select', 'area', 'aisle']
+  const current = TOOLS.find((t) => t.id === tool && ids.includes(t.id))
+  const n = (plan.rackAreas?.length ?? 0), k = (plan.aisles?.length ?? 0)
+  return (
+    <div className="mark-tools">
+      <h2 className="section-label">Dónde van los racks</h2>
+      <div className="plan-tools" role="toolbar" aria-label="Marcar zonas de racks y pasillos">
+        {TOOLS.filter((t) => ids.includes(t.id)).map((t) => (
+          <button key={t.id} type="button" className={`plan-tool${tool === t.id ? ' is-active' : ''}`} aria-pressed={tool === t.id} onClick={() => setTool(t.id)} title={t.label}>
+            <t.icon size={18} aria-hidden /><span>{t.label}</span>
+          </button>
+        ))}
+      </div>
+      <p className="muted small">
+        {current && current.id !== 'select' ? current.help
+          : n || k ? `${n ? `${n} ${n === 1 ? 'zona de racks' : 'zonas de racks'}` : 'Todo el depósito'}${k ? ` · ${k} ${k === 1 ? 'pasillo marcado' : 'pasillos marcados'}` : ''}. Tocá una zona o un pasillo en el plano para cambiarlo.`
+            : 'Marcá en el plano las zonas donde van los racks y los pasillos que necesitás: las filas se acomodan solas.'}
+      </p>
+      {(selection?.kind === 'area' || selection?.kind === 'aisle') && <Selection />}
+    </div>
   )
 }

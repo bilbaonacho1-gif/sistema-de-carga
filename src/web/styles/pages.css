@@ -529,7 +529,7 @@
 /* ------------------------------ Plano del depósito ------------------------------ */
 .plan-layout { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; }
 .plan-panel { gap: 12px; }
-.plan-tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.plan-tools { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .plan-tool { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 9px 4px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink-2); font: 600 11.5px var(--f-body); cursor: pointer; }
 .plan-tool:hover { border-color: var(--red); color: var(--ink); }
 .plan-tool.is-active { border-color: var(--red); background: var(--red-tint); color: var(--red); box-shadow: inset 0 0 0 1px var(--red); }
@@ -549,7 +549,7 @@
 .plan-stage__body { position: relative; flex: 1; min-height: 0; }
 .plan-editor { position: absolute; inset: 0; touch-action: none; user-select: none; }
 .plan-editor svg { display: block; }
-.plan-editor--outline svg, .plan-editor--column svg, .plan-editor--wall svg, .plan-editor--zone svg, .plan-editor--door svg { cursor: crosshair; }
+.plan-editor--outline svg, .plan-editor--column svg, .plan-editor--wall svg, .plan-editor--zone svg, .plan-editor--door svg, .plan-editor--area svg, .plan-editor--aisle svg { cursor: crosshair; }
 .plan-editor__coords { position: absolute; left: 10px; bottom: 8px; padding: 3px 8px; border-radius: 6px; background: rgba(255, 255, 255, .85); font: 600 12px var(--f-mono); color: var(--ink-2); pointer-events: none; }
 @media (max-width: 980px) {
   .plan-layout { grid-template-columns: minmax(0, 1fr); }
@@ -582,3 +582,7 @@
 /* ---- depósito en 3D ---- */
 .plan3d { position: relative; width: 100%; height: 100%; }
 .plan3d__stats { position: absolute; left: 12px; bottom: 12px; padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,.88); font: 600 12px/1.3 var(--f-mono); color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,.12); pointer-events: none; }
+.mark-tools { display: flex; flex-direction: column; gap: 8px; }
+.mark-tools .section-label { margin: 0; }
+.mark-tools .muted { margin: 0; }
+.mark-tools .plan-tools { grid-template-columns: repeat(3, minmax(0, 1fr)); }

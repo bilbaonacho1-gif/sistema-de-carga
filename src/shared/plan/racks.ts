@@ -1,6 +1,6 @@
 /**
  * UBICACIÓN LIBRE DE RACKS: mover, girar, duplicar, cambiar módulos y avisar cuando un rack
- * se pisa con otro, con una columna, un tabique o una zona libre, o queda fuera del depósito.
+ * se pisa con otro, con una columna, un tabique, una zona libre o un pasillo, o queda fuera del depósito.
  * La primera edición copia la distribución automática al plano (`plan.racks`).
  */
 import { newId } from './edit'
@@ -150,6 +150,7 @@ export function rackIssues(plan: Plan, racks: RackPlacement[]): Record<string, s
     })
     if (hitsWall) { out[r.id] = 'Choca con un tabique'; return }
     if (plan.zones.some((z) => overlap(b, { x: z.x, y: z.y, w: z.w, h: z.d }))) { out[r.id] = 'Pisa una zona libre'; return }
+    if ((plan.aisles ?? []).some((a) => overlap(b, { x: a.x, y: a.y, w: a.w, h: a.d }))) { out[r.id] = 'Pisa un pasillo'; return }
     for (const j of neighbours(b, i)) if (overlap(b, rects[j])) { out[r.id] = 'Se pisa con otro rack'; break }
   })
   return out

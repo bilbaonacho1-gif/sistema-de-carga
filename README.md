@@ -33,6 +33,14 @@ flecha, como la "bulge" de AutoCAD), medidas escritas a mano, columnas (sueltas 
 tabiques, portones y zonas libres, con imán a 10 cm, deshacer/rehacer y vista 3D. El plano se guarda
 en el navegador.
 
+**Zonas de racks y pasillos** (herramientas "Zona de racks" y "Pasillo", en el plano del depósito y en
+el paso Distribución): se arrastra un rectángulo donde van los racks y la distribución automática
+(`autoLayout` en `src/shared/plan/layout.ts`) llena sólo esas zonas, cada una con filas horizontales o
+verticales. Los pasillos dibujados se respetan: uno a lo largo de las filas parte la zona en dos tramos
+(pegado al pasillo arranca un par espalda con espalda), uno que las cruza las corta. Un pasillo
+arrastrado sale con el ancho de pasillo elegido; un clic solo hace uno de lado a lado. Un rack que pisa
+un pasillo se marca en rojo. Si no hay zonas, se usa todo el depósito como antes.
+
 **Todo en metros:** por dentro las medidas se guardan en mm (enteros), pero se muestran y se escriben en
 metros (`src/shared/units.ts`, `NumberStepper` con `meters`).
 

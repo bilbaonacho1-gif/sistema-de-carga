@@ -76,7 +76,7 @@ function useKeys3d(active: boolean, layer?: PlanRackLayer) {
   }, [active, layer])
 }
 
-const NAMES: Record<string, string> = { column: 'Columna', wall: 'Tabique', door: 'Portón', zone: 'Zona libre', vertex: 'Esquina' }
+const NAMES: Record<string, string> = { column: 'Columna', wall: 'Tabique', door: 'Portón', zone: 'Zona libre', vertex: 'Esquina', area: 'Zona de racks', aisle: 'Pasillo' }
 
 /** Barra flotante con lo que se puede hacer con lo seleccionado. */
 function SelectionBar({ rackLayer }: { rackLayer?: PlanRackLayer }) {

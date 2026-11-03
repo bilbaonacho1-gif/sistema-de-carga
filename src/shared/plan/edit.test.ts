@@ -38,4 +38,19 @@ describe('edición del contorno', () => {
     expect(p.columns).toHaveLength(2)
     expect(p.columns.every((c) => pointInPlan(c, p.outline))).toBe(true)
   })
+
+  it('zonas de racks y pasillos dibujados a mano', async () => {
+    const { drawnRect, rotateAisle } = await import('./edit')
+    const { rectanglePlan } = await import('./geometry')
+    const plan = rectanglePlan(30_000, 20_000)
+    // un pasillo arrastrado a lo largo sale con el ancho elegido y no atraviesa la pared
+    expect(drawnRect('aisle', { x: 5000, y: 10_000 }, { x: 40_000, y: 10_300 }, plan, 3000)).toEqual({ x: 5000, y: 8500, w: 25_000, d: 3000 })
+    // un clic: de lado a lado
+    expect(drawnRect('aisle', { x: 12_000, y: 6000 }, { x: 12_000, y: 6000 }, plan, 3000)).toEqual({ x: 0, y: 4500, w: 30_000, d: 3000 })
+    // una zona arrastrada es el rectángulo marcado
+    expect(drawnRect('area', { x: 8000, y: 9000 }, { x: 2000, y: 3000 }, plan, 3000)).toEqual({ x: 2000, y: 3000, w: 6000, d: 6000 })
+    const girado = rotateAisle({ ...plan, aisles: [{ id: 'p', x: 0, y: 4500, w: 30_000, d: 3000 }] }, 'p').aisles![0]
+    expect(girado).toEqual({ id: 'p', x: 13_500, y: 0, w: 3000, d: 20_000 })
+  })
 })
+

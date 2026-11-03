@@ -6,6 +6,10 @@
  * (sin "espalda con espalda": fila · pasillo · fila · pasillo …).
  * En cada franja se buscan los tramos libres: adentro del contorno y sin columnas, tabiques ni
  * zonas libres. En cada tramo entran todos los módulos posibles; una columna parte la fila en dos.
+ *
+ * Zonas de racks y pasillos dibujados: si hay zonas, se llena cada una por separado (con su
+ * orientación). Un pasillo dibujado a lo largo de las filas parte la zona en dos tramos (pegado al
+ * pasillo arranca un par, porque ya tiene acceso); uno que cruza las filas las corta.
  */
 import { outlinePolygon } from './geometry'
 import type { Plan, PlanPoint, RackPlacement } from './types'
@@ -110,53 +114,101 @@ function obstacleBoxes(plan: Plan, gap: number): Box[] {
 const swap = (p: PlanPoint): PlanPoint => ({ x: p.y, y: p.x })
 const swapBox = (b: Box): Box => ({ x0: b.y0, y0: b.x0, x1: b.y1, y1: b.x1 })
 
-/** Calcula la distribución de racks en el depósito. */
+const EMPTY: LayoutResult = { placements: [], rows: 0, modules: 0 }
+
+/**
+ * Calcula la distribución de racks en el depósito. Si el plano tiene zonas de racks, llena sólo
+ * esas zonas; los pasillos marcados a mano se respetan siempre.
+ */
 export function autoLayout(plan: Plan, size: RackModuleSize, opt: LayoutOptions): LayoutResult {
-  if (plan.outline.points.length < 3 || size.width <= 0 || size.depth <= 0) return { placements: [], rows: 0, modules: 0 }
+  if (plan.outline.points.length < 3 || size.width <= 0 || size.depth <= 0) return EMPTY
+  const areas = plan.rackAreas ?? []
+  const placements = areas.length
+    ? areas.flatMap((a, i) => layoutRegion(plan, size, { ...opt, orientation: a.orientation ?? opt.orientation },
+      { x0: a.x, y0: a.y, x1: a.x + a.w, y1: a.y + a.d }, `z${i + 1}-`))
+    : layoutRegion(plan, size, opt, null, '')
+  return {
+    placements,
+    rows: placements.reduce((n, p) => n + (p.pair ? 2 : 1), 0),
+    modules: placements.reduce((n, p) => n + p.modules * (p.pair ? 2 : 1), 0),
+  }
+}
+
+/** Racks de una región (una zona de racks, o todo el depósito si `area` es null). */
+function layoutRegion(plan: Plan, size: RackModuleSize, opt: LayoutOptions, area: Box | null, prefix: string): RackPlacement[] {
   // se trabaja siempre con filas a lo largo de X; para filas en Y se espeja el plano
   const flip = opt.orientation === 'y'
   let poly = outlinePolygon(plan.outline, 100)
   let obstacles = obstacleBoxes(plan, opt.obstacleGap)
-  if (flip) { poly = poly.map(swap); obstacles = obstacles.map(swapBox) }
+  let aisles: Box[] = (plan.aisles ?? []).map((a) => ({ x0: a.x, y0: a.y, x1: a.x + a.w, y1: a.y + a.d }))
+  if (flip) { poly = poly.map(swap); obstacles = obstacles.map(swapBox); aisles = aisles.map(swapBox); if (area) area = swapBox(area) }
 
   const halfWall = plan.wallThickness / 2
   const ys = poly.map((p) => p.y)
-  const top = Math.min(...ys) + halfWall + opt.wallGap
-  const bottom = Math.max(...ys) - halfWall - opt.wallGap
-  const D = size.depth
-  const pairDepth = 2 * D + size.backToBackGap
+  let top = Math.min(...ys) + halfWall + opt.wallGap
+  let bottom = Math.max(...ys) - halfWall - opt.wallGap
+  let x0 = -Infinity, x1 = Infinity
+  if (area) { top = Math.max(top, area.y0); bottom = Math.min(bottom, area.y1); x0 = area.x0; x1 = area.x1 }
+  if (bottom <= top || x1 <= x0) return []
+
+  // pasillos a lo largo de las filas: parten la región en tramos, cada uno con sus filas;
+  // los que cruzan las filas son obstáculos (cortan la fila, como una columna)
+  const g = opt.obstacleGap
+  const along: Box[] = []
+  for (const a of aisles) {
+    if (a.x1 <= x0 || a.x0 >= x1 || a.y1 <= top || a.y0 >= bottom) continue
+    if (a.x1 - a.x0 >= a.y1 - a.y0) along.push(a)
+    else obstacles.push({ x0: a.x0 - g, y0: a.y0 - g, x1: a.x1 + g, y1: a.y1 + g })
+  }
+  along.sort((a, b) => a.y0 - b.y0)
+  const segments: { y0: number; y1: number; afterAisle: boolean }[] = []
+  let from = top, afterAisle = false
+  for (const a of along) {
+    if (a.y0 - g > from) segments.push({ y0: from, y1: a.y0 - g, afterAisle })
+    from = Math.max(from, a.y1 + g)
+    afterAisle = true
+  }
+  if (bottom > from) segments.push({ y0: from, y1: bottom, afterAisle })
 
   // franjas: profundidad de cada una (fila simple o par) separadas por pasillos
+  const D = size.depth
+  const pairDepth = 2 * D + size.backToBackGap
   const bands: { y: number; depth: number; pair: boolean }[] = []
-  let y = top
-  const push = (depth: number, pair: boolean) => { bands.push({ y, depth, pair }); y += depth }
-  if (y + D <= bottom) push(D, false)                       // contra la primera pared
-  while (opt.backToBack && y + opt.aisle + pairDepth <= bottom) { y += opt.aisle; push(pairDepth, true) }
-  while (!opt.backToBack && y + opt.aisle + D <= bottom) { y += opt.aisle; push(D, false) }
-  if (opt.backToBack && y + opt.aisle + D <= bottom) { y += opt.aisle; push(D, false) }   // contra la última pared
+  for (const seg of segments) {
+    let y = seg.y0
+    const push = (depth: number, pair: boolean) => { bands.push({ y, depth, pair }); y += depth }
+    if (opt.backToBack) {
+      // contra una pared o el borde de la zona va una fila simple; pegado a un pasillo, un par
+      // (el pasillo ya le da acceso)
+      if (seg.afterAisle && y + pairDepth <= seg.y1) push(pairDepth, true)
+      else if (y + D <= seg.y1) push(D, false)
+      while (y + opt.aisle + pairDepth <= seg.y1) { y += opt.aisle; push(pairDepth, true) }
+      if (y + opt.aisle + D <= seg.y1) { y += opt.aisle; push(D, false) }   // contra la última pared
+    } else {
+      if (y + D <= seg.y1) push(D, false)
+      while (y + opt.aisle + D <= seg.y1) { y += opt.aisle; push(D, false) }
+    }
+  }
 
   const placements: RackPlacement[] = []
   const uw = size.upright
   bands.forEach((band, bi) => {
     freeIntervals(poly, obstacles, band.y, band.y + band.depth).forEach((iv, ii) => {
-      const a = iv.a + (iv.wallA ? halfWall + opt.endGap : 0)
-      const b = iv.b - (iv.wallB ? halfWall + opt.endGap : 0)
+      // contra la pared queda el pasillo de cabecera; en el borde de la zona, la fila llega justo
+      const a = Math.max(iv.a + (iv.wallA ? halfWall + opt.endGap : 0), x0)
+      const b = Math.min(iv.b - (iv.wallB ? halfWall + opt.endGap : 0), x1)
       const modules = Math.floor((b - a - uw) / (size.width + uw))
       if (modules < 1) return
       const length = modules * size.width + (modules + 1) * uw
       const corner = { x: Math.round(a), y: Math.round(band.y) }
       const pos = flip ? swap(corner) : corner
       placements.push({
-        id: `r${bi + 1}-${ii + 1}`, x: pos.x, y: pos.y, orientation: opt.orientation,
+        id: `${prefix}r${bi + 1}-${ii + 1}`, x: pos.x, y: pos.y, orientation: opt.orientation,
         modules, length, depth: band.depth, pair: band.pair,
       })
     })
   })
-  return {
-    placements,
-    rows: placements.reduce((n, p) => n + (p.pair ? 2 : 1), 0),
-    modules: placements.reduce((n, p) => n + p.modules * (p.pair ? 2 : 1), 0),
-  }
+  return placements
 }
 
 /** Rectángulo que ocupa un rack en el plano. */

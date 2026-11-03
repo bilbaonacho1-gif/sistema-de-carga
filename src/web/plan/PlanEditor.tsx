@@ -5,11 +5,12 @@
  *  - Contorno: clic punto por punto; se cierra tocando el primero (o Enter).
  *  - Tabique: clic en cada extremo (encadena el siguiente; Esc termina).
  *  - Columna / Portón / Zona: clic donde va.
+ *  - Zona de racks / Pasillo: arrastrar de punta a punta (un clic solo pone una de medida estándar).
  *  - Racks (si están a la vista): se arrastran igual; Supr los borra.
  * Rueda o pellizco: zoom. Arrastrar el fondo: mover. Ctrl+Z / Ctrl+Y: deshacer / rehacer.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { itemsOutside, moveVertex, newId, removeItem, removeVertex, sagFromPoint, setOutline, splitEdge } from '../../shared/plan/edit'
+import { drawnRect, itemsOutside, moveVertex, newId, removeItem, removeVertex, sagFromPoint, setOutline, splitEdge, updateRect } from '../../shared/plan/edit'
 import { apex, arcOf, edgeLength, edges, nearestOnEdge, planBounds, pointOnEdge, tangentOnEdge, type Edge } from '../../shared/plan/geometry'
 import type { Plan, PlanPoint } from '../../shared/plan/types'
 import type { RackModuleSize, RackPlacement } from '../../shared/plan/layout'
@@ -28,8 +29,12 @@ type Drag =
   | { type: 'wall-end'; id: string; end: 'a' | 'b'; started: boolean }
   | { type: 'door'; id: string; started: boolean }
   | { type: 'rack'; id: string; dx: number; dy: number; started: boolean }
+  | { type: 'area' | 'aisle'; id: string; dx: number; dy: number; started: boolean }
+  | { type: 'resize'; kind: 'area' | 'aisle'; id: string; started: boolean }
+  | { type: 'draw'; kind: 'area' | 'aisle'; a: PlanPoint }
 
 const RED = '#be1e30'
+const BLUE = '#2f6fb8'
 const meters = (mm: number) => `${(Math.round(mm / 10) / 100 + 0).toLocaleString('es-AR', { maximumFractionDigits: 2 })} m`
 
 /** Recorrido SVG de una pared (recta o arco). */
@@ -67,6 +72,8 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
   const [size, setSize] = useState({ w: 800, h: 600 })
   const [vb, setVb] = useState<VB>(() => fitView(plan, 4 / 3))
   const [cursor, setCursor] = useState<PlanPoint | null>(null)
+  /** Zona de racks o pasillo que se está dibujando (de a hasta b). */
+  const [rectDraft, setRectDraft] = useState<{ kind: 'area' | 'aisle'; a: PlanPoint; b: PlanPoint } | null>(null)
   const drag = useRef<Drag | null>(null)
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const pinch = useRef<{ d: number; vb: VB; mid: PlanPoint } | null>(null)
@@ -207,6 +214,11 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         select({ kind: 'zone', id })
         break
       }
+      case 'area':
+      case 'aisle':
+        drag.current = { type: 'draw', kind: tool, a: p }
+        setRectDraft({ kind: tool, a: p, b: p })
+        break
       case 'door': {
         const near = edges(plan.outline).map((ed) => ({ ed, ...nearestOnEdge(ed, raw) })).sort((a, b) => a.distance - b.distance)[0]
         if (near && near.distance < Math.max(1500, px(30))) {
@@ -246,6 +258,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
       setVb({ ...d.vb, x: d.vb.x - dx, y: d.vb.y - dy })
       return
     }
+    if (d.type === 'draw') { setRectDraft({ kind: d.kind, a: d.a, b: snapPt(raw, e.altKey) }); return }
     if (!d.started) { begin(); d.started = true }
     const p = snapPt(raw, e.altKey)
     switch (d.type) {
@@ -262,6 +275,16 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         }),
       })); break
       case 'wall-end': live((pl) => ({ ...pl, walls: pl.walls.map((w) => (w.id === d.id ? { ...w, [d.end]: p } : w)) })); break
+      case 'area': case 'aisle': {
+        const id = d.id, kind = d.type, dx = d.dx, dy = d.dy
+        live((pl) => updateRect(pl, kind, id, () => ({ x: sn(raw.x - dx, e.altKey), y: sn(raw.y - dy, e.altKey) })))
+        break
+      }
+      case 'resize': {
+        const id = d.id, kind = d.kind
+        live((pl) => updateRect(pl, kind, id, (r) => ({ w: Math.max(500, p.x - r.x), d: Math.max(500, p.y - r.y) })))
+        break
+      }
       case 'rack': live((pl) => moveRack(freezeRacks(pl, layerRef.current?.racks ?? []), d.id, sn(raw.x - d.dx, e.altKey), sn(raw.y - d.dy, e.altKey))); break
       case 'door': live((pl) => ({
         ...pl, doors: pl.doors.map((dr) => {
@@ -277,6 +300,16 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
     if (pointers.current.size < 2) pinch.current = null
     const d = drag.current
     if (d?.type === 'pan' && !d.moved && tool === 'select') select(null)
+    if (d?.type === 'draw') {
+      const s = usePlan.getState()
+      const r = drawnRect(d.kind, d.a, snapPt(toPlan(e.clientX, e.clientY), e.altKey), s.plan, s.layout.aisle)
+      const id = newId(d.kind === 'area' ? 'a' : 'p')
+      if (d.kind === 'area') commit((pl) => ({ ...pl, rackAreas: [...(pl.rackAreas ?? []), { id, ...r, name: `Zona ${String.fromCharCode(65 + Math.min(25, (pl.rackAreas ?? []).length))}` }] }))
+      else commit((pl) => ({ ...pl, aisles: [...(pl.aisles ?? []), { id, ...r }] }))
+      setRectDraft(null)
+      setTool('select')
+      select({ kind: d.kind, id })
+    }
     drag.current = null
   }
 
@@ -331,6 +364,10 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
           <pattern id="plan-hatch" width={px(10)} height={px(10)} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
             <line x1="0" y1="0" x2="0" y2={px(10)} stroke={RED} strokeWidth={px(1.5)} strokeOpacity="0.45" />
           </pattern>
+          <pattern id="plan-aisle" width={px(12)} height={px(12)} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <rect width={px(12)} height={px(12)} fill="#fff6cc" />
+            <line x1="0" y1="0" x2="0" y2={px(12)} stroke="#e8b400" strokeWidth={px(3)} strokeOpacity="0.55" />
+          </pattern>
         </defs>
 
         {/* grilla */}
@@ -353,6 +390,36 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
             </g>
           ))}
         </>}
+
+        {/* zonas de racks: sólo el borde y el nombre se agarran (adentro se puede seguir moviendo el plano) */}
+        {(plan.rackAreas ?? []).map((z) => {
+          const sel = isSel('area', z.id)
+          const grab = (e: React.PointerEvent) => { select({ kind: 'area', id: z.id }); const p = toPlan(e.clientX, e.clientY); startDrag(e, { type: 'area', id: z.id, dx: p.x - z.x, dy: p.y - z.y, started: false }) }
+          return (
+            <g key={z.id}>
+              <rect x={z.x} y={z.y} width={z.w} height={z.d} fill={BLUE} fillOpacity={sel ? 0.1 : 0.05} stroke={BLUE} strokeWidth={px(sel ? 2.5 : 1.5)}
+                strokeDasharray={`${px(10)} ${px(5)}`} pointerEvents="none" />
+              {tool === 'select' && <rect x={z.x} y={z.y} width={z.w} height={z.d} fill="none" stroke="transparent" strokeWidth={px(12)} pointerEvents="stroke" style={{ cursor: 'move' }} onPointerDown={grab} />}
+              <text x={z.x + px(2)} y={z.y - px(7)} fontSize={px(12)} fill={BLUE} stroke="#fff" strokeWidth={px(4)}
+                style={{ paintOrder: 'stroke', fontFamily: 'var(--f-mono)', fontWeight: 700, cursor: tool === 'select' ? 'move' : undefined }}
+                onPointerDown={grab}>{`${z.name.toUpperCase()} · ${meters(z.w)} × ${meters(z.d)}`}</text>
+            </g>
+          )
+        })}
+        {/* pasillos marcados */}
+        {(plan.aisles ?? []).map((a) => {
+          const sel = isSel('aisle', a.id)
+          const vertical = a.d > a.w
+          return (
+            <g key={a.id} style={{ cursor: tool === 'select' ? 'move' : undefined }}
+              onPointerDown={(e) => { select({ kind: 'aisle', id: a.id }); const p = toPlan(e.clientX, e.clientY); startDrag(e, { type: 'aisle', id: a.id, dx: p.x - a.x, dy: p.y - a.y, started: false }) }}>
+              <rect x={a.x} y={a.y} width={a.w} height={a.d} fill="url(#plan-aisle)" stroke={sel ? '#8a6500' : '#d9a400'} strokeWidth={px(sel ? 2.5 : 1.2)} />
+              <text x={a.x + a.w / 2} y={a.y + a.d / 2} fontSize={px(11)} textAnchor="middle" dominantBaseline="middle" fill="#6f4800"
+                stroke="#fff6cc" strokeWidth={px(4)} transform={vertical ? `rotate(-90 ${a.x + a.w / 2} ${a.y + a.d / 2})` : undefined}
+                style={{ paintOrder: 'stroke', fontFamily: 'var(--f-mono)', fontWeight: 700, pointerEvents: 'none' }}>{`PASILLO ${meters(Math.min(a.w, a.d))}`}</text>
+            </g>
+          )
+        })}
 
         {/* racks ubicados */}
         {rackLayer && <PlanRacks racks={rackLayer.racks} size={rackLayer.size} px={px} issues={rackLayer.issues}
@@ -414,6 +481,17 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
           return label(at, meters(edgeLength(e)), `el${e.index}`)
         })}
 
+        {/* manija para cambiar el tamaño de la zona de racks o el pasillo elegido */}
+        {tool === 'select' && (selection?.kind === 'area' || selection?.kind === 'aisle') && (() => {
+          const kind = selection.kind
+          const r = kind === 'area' ? plan.rackAreas?.find((x) => x.id === selection.id) : plan.aisles?.find((x) => x.id === selection.id)
+          if (!r) return null
+          return (
+            <rect x={r.x + r.w - px(7)} y={r.y + r.d - px(7)} width={px(14)} height={px(14)} rx={px(3)} fill="#fff" stroke={kind === 'area' ? BLUE : '#8a6500'} strokeWidth={px(2.5)}
+              style={{ cursor: 'nwse-resize' }} onPointerDown={(e) => startDrag(e, { type: 'resize', kind, id: r.id, started: false })} />
+          )
+        })()}
+
         {/* manijas (sólo con Seleccionar) */}
         {tool === 'select' && selection?.kind === 'edge' && es[selection.index] && (() => {
           const e = es[selection.index]
@@ -438,6 +516,17 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
           {draft.map((p, i) => <circle key={`d${i}`} cx={p.x} cy={p.y} r={px(i === 0 && tool === 'outline' ? 8 : 5)} fill={i === 0 && tool === 'outline' ? RED : '#fff'} stroke={RED} strokeWidth={px(2)} />)}
           {preview && label({ x: (last.x + preview.x) / 2, y: (last.y + preview.y) / 2 - px(14) }, meters(Math.hypot(preview.x - last.x, preview.y - last.y)), 'draft-len', RED)}
         </>}
+        {rectDraft && (Math.abs(rectDraft.b.x - rectDraft.a.x) > 0 || Math.abs(rectDraft.b.y - rectDraft.a.y) > 0) && (() => {
+          const r = drawnRect(rectDraft.kind, rectDraft.a, rectDraft.b, plan, usePlan.getState().layout.aisle)
+          const color = rectDraft.kind === 'area' ? BLUE : '#8a6500'
+          return (
+            <g pointerEvents="none">
+              <rect x={r.x} y={r.y} width={r.w} height={r.d} fill={rectDraft.kind === 'area' ? BLUE : 'url(#plan-aisle)'} fillOpacity={rectDraft.kind === 'area' ? 0.08 : 0.9}
+                stroke={color} strokeWidth={px(2)} strokeDasharray={`${px(8)} ${px(5)}`} />
+              {label({ x: r.x + r.w / 2, y: r.y - px(14) }, `${meters(r.w)} × ${meters(r.d)}`, 'rect-draft', color)}
+            </g>
+          )
+        })()}
         {cursor && tool !== 'select' && <circle cx={snapPt(cursor).x} cy={snapPt(cursor).y} r={px(3)} fill={RED} pointerEvents="none" />}
       </svg>
       <div className="plan-editor__coords" aria-hidden>{cursor ? `x ${meters(cursor.x)} · y ${meters(cursor.y)}` : 'Grilla con imán de 10 cm · Alt para mover libre'}</div>

@@ -52,6 +52,33 @@ export interface PlanZone {
   name: string
 }
 
+/**
+ * Zona de racks: rectángulo donde van los racks. Si el plano tiene alguna, la distribución
+ * automática llena sólo esas zonas (cada una con su propia orientación de filas).
+ */
+export interface PlanRackArea {
+  id: string
+  x: number
+  y: number
+  w: number
+  d: number
+  name: string
+  /** Hacia dónde corren las filas en esta zona (si no está, la orientación general). */
+  orientation?: 'x' | 'y'
+}
+
+/**
+ * Pasillo marcado a mano (para autoelevadores, circulación…): ahí no van racks. Si corre en el
+ * mismo sentido que las filas, las filas se reparten a cada lado; si las cruza, las corta.
+ */
+export interface PlanAisle {
+  id: string
+  x: number
+  y: number
+  w: number
+  d: number
+}
+
 /** Un rack ubicado en el plano: una fila (o un par de filas espalda con espalda) de módulos. */
 export interface RackPlacement {
   id: string
@@ -75,6 +102,10 @@ export interface Plan {
   walls: PlanWall[]
   doors: PlanDoor[]
   zones: PlanZone[]
+  /** Zonas de racks (opcional: si no hay, se usa todo el depósito). */
+  rackAreas?: PlanRackArea[]
+  /** Pasillos marcados a mano. */
+  aisles?: PlanAisle[]
   /**
    * Racks ubicados a mano. Si no hay, los ubica la distribución automática; al mover, girar o
    * borrar uno, la distribución se copia acá y desde ahí se edita libremente.
@@ -90,5 +121,7 @@ export type PlanSelection =
   | { kind: 'wall'; id: string }
   | { kind: 'door'; id: string }
   | { kind: 'zone'; id: string }
+  | { kind: 'area'; id: string }
+  | { kind: 'aisle'; id: string }
   | { kind: 'rack'; id: string }
   | null
