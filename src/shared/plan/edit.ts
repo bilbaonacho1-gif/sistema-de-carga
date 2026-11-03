@@ -97,13 +97,14 @@ export function columnGrid(plan: Plan, dx: number, dy: number, size: number): Pl
   return { ...plan, columns }
 }
 
-/** Columnas, tabiques y zonas que quedaron fuera del contorno (por ejemplo, después de redibujarlo). */
+/** Columnas, tabiques, zonas y pasillos que quedaron fuera del contorno (por ejemplo, después de redibujarlo). */
 export function itemsOutside(plan: Plan): Set<string> {
   const poly = outlinePolygon(plan.outline, 100)
   const out = new Set<string>()
   for (const c of plan.columns) if (!pointInPolygon(c, poly)) out.add(c.id)
   for (const w of plan.walls) if (!pointInPolygon(midpoint(w.a, w.b), poly)) out.add(w.id)
-  for (const z of plan.zones) if (!pointInPolygon({ x: z.x + z.w / 2, y: z.y + z.d / 2 }, poly)) out.add(z.id)
+  for (const z of [...plan.zones, ...(plan.rackAreas ?? []), ...(plan.aisles ?? [])])
+    if (!pointInPolygon({ x: z.x + z.w / 2, y: z.y + z.d / 2 }, poly)) out.add(z.id)
   return out
 }
 
@@ -114,16 +115,68 @@ export function removeOutside(plan: Plan): Plan {
     columns: plan.columns.filter((x) => !out.has(x.id)),
     walls: plan.walls.filter((x) => !out.has(x.id)),
     zones: plan.zones.filter((x) => !out.has(x.id)),
+    rackAreas: plan.rackAreas?.filter((x) => !out.has(x.id)),
+    aisles: plan.aisles?.filter((x) => !out.has(x.id)),
   }
 }
 
 /** Borra lo seleccionado. */
-export function removeItem(plan: Plan, kind: 'column' | 'wall' | 'door' | 'zone' | 'rack', id: string): Plan {
+export function removeItem(plan: Plan, kind: 'column' | 'wall' | 'door' | 'zone' | 'area' | 'aisle' | 'rack', id: string): Plan {
   switch (kind) {
     case 'column': return { ...plan, columns: plan.columns.filter((x) => x.id !== id) }
     case 'wall': return { ...plan, walls: plan.walls.filter((x) => x.id !== id) }
     case 'door': return { ...plan, doors: plan.doors.filter((x) => x.id !== id) }
     case 'zone': return { ...plan, zones: plan.zones.filter((x) => x.id !== id) }
+    case 'area': return { ...plan, rackAreas: (plan.rackAreas ?? []).filter((x) => x.id !== id) }
+    case 'aisle': return { ...plan, aisles: (plan.aisles ?? []).filter((x) => x.id !== id) }
     case 'rack': return { ...plan, racks: (plan.racks ?? []).filter((x) => x.id !== id) }
   }
+}
+
+/* ------------------------------ Zonas de racks y pasillos ------------------------------ */
+
+type RectKind = 'area' | 'aisle'
+type RectLike = { x: number; y: number; w: number; d: number }
+
+/** Cambia una zona de racks o un pasillo. */
+export function updateRect(plan: Plan, kind: RectKind, id: string, patch: (r: RectLike) => Partial<RectLike> & { name?: string; orientation?: 'x' | 'y' }): Plan {
+  if (kind === 'area') return { ...plan, rackAreas: (plan.rackAreas ?? []).map((a) => (a.id === id ? { ...a, ...patch(a) } : a)) }
+  return { ...plan, aisles: (plan.aisles ?? []).map((a) => (a.id === id ? { ...a, ...patch(a) } : a)) }
+}
+
+/** Gira un pasillo 90° sobre su centro (sin salirse del depósito). */
+export function rotateAisle(plan: Plan, id: string): Plan {
+  return updateRect(plan, 'aisle', id, (a) => clipToDepot(plan, { x: Math.round(a.x + a.w / 2 - a.d / 2), y: Math.round(a.y + a.d / 2 - a.w / 2), w: a.d, d: a.w }))
+}
+
+/** Recorta un rectángulo al depósito (si casi no queda nada, lo deja como está). */
+function clipToDepot(plan: Plan, r: RectLike): RectLike {
+  const pts = plan.outline.points
+  if (pts.length < 3) return r
+  const x0 = Math.max(r.x, Math.min(...pts.map((p) => p.x))), y0 = Math.max(r.y, Math.min(...pts.map((p) => p.y)))
+  const x1 = Math.min(r.x + r.w, Math.max(...pts.map((p) => p.x))), y1 = Math.min(r.y + r.d, Math.max(...pts.map((p) => p.y)))
+  return x1 - x0 >= 500 && y1 - y0 >= 500 ? { x: x0, y: y0, w: x1 - x0, d: y1 - y0 } : r
+}
+
+/**
+ * Rectángulo de una zona de racks o de un pasillo a partir de lo que se arrastró en el plano (de a
+ * hasta b). Un clic sin arrastrar: zona de 20 × 12 m, o pasillo de lado a lado del depósito.
+ * Un pasillo arrastrado a lo largo sale con el ancho de pasillo elegido (`aisle`), salvo que se
+ * marque un rectángulo de más de 2 m de cada lado.
+ */
+export function drawnRect(kind: RectKind, a: PlanPoint, b: PlanPoint, plan: Plan, aisle: number): RectLike {
+  const xs = plan.outline.points.map((p) => p.x)
+  const bounds = xs.length >= 3 ? { x0: Math.min(...xs), x1: Math.max(...xs) } : null
+  // lo que se dibuja se recorta al depósito (un pasillo arrastrado hasta la pared no la atraviesa)
+  const clip = (r: RectLike) => clipToDepot(plan, r)
+  const dx = Math.abs(b.x - a.x), dy = Math.abs(b.y - a.y)
+  const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y)
+  const r = (v: number) => Math.round(v)
+  if (kind === 'area') return clip(dx < 1000 || dy < 1000 ? { x: r(a.x - 10_000), y: r(a.y - 6000), w: 20_000, d: 12_000 } : { x, y, w: dx, d: dy })
+  if (dx < 1000 && dy < 1000) {
+    const x0 = bounds ? bounds.x0 : a.x - 10_000, x1 = bounds ? bounds.x1 : a.x + 10_000
+    return { x: r(x0), y: r(a.y - aisle / 2), w: r(x1 - x0), d: aisle }
+  }
+  if (Math.min(dx, dy) >= 2000) return clip({ x, y, w: dx, d: dy })
+  return clip(dx >= dy ? { x, y: r(a.y - aisle / 2), w: dx, d: aisle } : { x: r(a.x - aisle / 2), y, w: aisle, d: dy })
 }

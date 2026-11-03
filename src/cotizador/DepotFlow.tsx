@@ -21,19 +21,20 @@ import { fmt, plural } from '../web/lib/format'
 import { AccessoriesStep, LoadStep, MaterialsList, downloadMaterials } from '../web/pages/designer/CotizadorPanel'
 import { Viewport, Warnings } from '../web/pages/designer/CotizadorView'
 import { useDesigner } from '../web/pages/designer/designerStore'
-import { PlanTools } from '../web/plan/PlanPanel'
+import { MarkTools, PlanTools } from '../web/plan/PlanPanel'
 import { FLOW, usePlan, type FlowStep } from '../web/plan/planStore'
 import { PlanStage } from '../web/plan/PlanWorkspace'
+import { metros, metrosNum } from '../shared/units'
 
 const L = DESIGN_RULES.limits
-const mm = (n: number) => `${fmt(n)} mm`
+const mm = metros
 const kg = (n: number) => `${fmt(n)} kg`
 
 const META: Record<FlowStep, { title: string; short: string; help: string }> = {
-  deposito: { title: 'Tu depósito', short: 'Depósito', help: 'Dibujá el lugar: contorno, columnas, portones y las zonas donde no van racks. Todo lo demás se calcula a partir de este plano.' },
+  deposito: { title: 'Tu depósito', short: 'Depósito', help: 'Dibujá el lugar: contorno, columnas, portones y las zonas donde no van racks. Si ya sabés dónde van los racks y los pasillos, marcalos con "Zona de racks" y "Pasillo". Todo lo demás se calcula a partir de este plano.' },
   rack: { title: 'Cómo es el rack', short: 'Rack', help: 'Elegí el módulo que se va a repetir en el depósito: largo de viga, profundidad, altura y niveles.' },
   carga: { title: 'Pallet y carga', short: 'Carga', help: 'El pallet define cuántos entran por módulo. Si el cliente usa uno especial, elegí "A medida".' },
-  distribucion: { title: 'Cuántos racks entran', short: 'Distribución', help: 'El cotizador arma las filas dentro de tu depósito, esquivando columnas y zonas libres. Después podés tocar cualquier rack (en el plano o en 3D) y arrastrarlo, girarlo, duplicarlo o borrarlo.' },
+  distribucion: { title: 'Cuántos racks entran', short: 'Distribución', help: 'El cotizador arma las filas dentro de tu depósito (o sólo en las zonas de racks que marques), respetando los pasillos y esquivando columnas y zonas libres. Después podés tocar cualquier rack (en el plano o en 3D) y arrastrarlo, girarlo, duplicarlo o borrarlo.' },
   accesorios: { title: 'Accesorios', short: 'Accesorios', help: 'Protección, seguridad y piso de los niveles, para todos los racks del depósito.' },
   resumen: { title: 'Resumen y materiales', short: 'Resumen', help: 'El depósito completo: racks, posiciones y todas las piezas. Desde acá se pide el presupuesto.' },
 }
@@ -147,10 +148,10 @@ function RackStep({ s }: { s: RackStructure }) {
   const autoBeam = !config.beamId || config.beamId === 'auto'
   return (
     <div className="cot-fields">
-      <NumberStepper label="Largo de viga (ancho del módulo)" unit="mm" value={config.width} min={L.width.min} max={L.width.max} step={50} slider onChange={(width) => update({ width })}
+      <NumberStepper label="Largo de viga (ancho del módulo)" meters value={config.width} min={L.width.min} max={L.width.max} step={50} slider onChange={(width) => update({ width })}
         hint={`${plural(s.palletsPerModule, 'pallet', 'pallets')} por nivel en cada módulo`} />
-      <NumberStepper label="Profundidad del bastidor" unit="mm" value={config.depth} min={L.depth.min} max={L.depth.max} step={50} slider onChange={(depth) => update({ depth })} />
-      <NumberStepper label="Altura" unit="mm" value={config.height} min={L.height.min} max={L.height.max} step={100} slider onChange={(height) => update({ height })}
+      <NumberStepper label="Profundidad del bastidor" meters value={config.depth} min={L.depth.min} max={L.depth.max} step={50} slider onChange={(depth) => update({ depth })} />
+      <NumberStepper label="Altura" meters value={config.height} min={L.height.min} max={L.height.max} step={100} slider onChange={(height) => update({ height })}
         hint={config.height > OFFICIAL_REFERENCE.maxHeight ? <span className="late">Supera los {mm(OFFICIAL_REFERENCE.maxHeight)} publicados.</span> : undefined} />
       <Field label="Niveles de almacenamiento">{() => (
         <Segmented label="Niveles" value={String(config.levels)} onChange={(v) => update({ levels: Number(v) })}
@@ -218,6 +219,7 @@ function LayoutStep({ depot }: { depot: Depot }) {
     <div className="cot-fields">
       <p className="note note--blue">
         Racks ubicados a mano: tocá uno en el plano o en el 3D para moverlo, girarlo, cambiarle los módulos, duplicarlo o borrarlo.
+        {(plan.rackAreas?.length || plan.aisles?.length) ? ' Las zonas de racks y los pasillos marcados se aplican al volver a la distribución automática.' : ''}
       </p>
       {results}
       <Button variant="ghost" icon={RotateCcw} block onClick={() => { commit((p) => ({ ...p, racks: undefined })); select(null) }}>
@@ -228,7 +230,8 @@ function LayoutStep({ depot }: { depot: Depot }) {
 
   return (
     <div className="cot-fields">
-      <Field label="Filas">{() => (
+      <MarkTools />
+      <Field label={plan.rackAreas?.length ? 'Filas (de las zonas sin orientación propia)' : 'Filas'}>{() => (
         <Segmented label="Orientación de las filas" value={layout.orientation} onChange={(orientation) => setLayout({ orientation })}
           options={[{ value: 'x', label: 'Horizontales' }, { value: 'y', label: 'Verticales' }]} />
       )}</Field>
@@ -237,15 +240,15 @@ function LayoutStep({ depot }: { depot: Depot }) {
           Con filas {layout.orientation === 'x' ? 'verticales' : 'horizontales'} entran <strong>{fmt(other.positions)} posiciones</strong> ({fmt(other.positions - depot.positions)} más). Tocá para cambiar.
         </button>
       )}
-      <NumberStepper label="Ancho de pasillo" unit="mm" value={layout.aisle} min={1200} max={6000} step={100} onChange={(aisle) => setLayout({ aisle })}
-        hint="Para autoelevador común se usan unos 3.000 mm; para equipos de pasillo angosto, menos." />
+      <NumberStepper label="Ancho de pasillo" meters value={layout.aisle} min={1200} max={6000} step={100} onChange={(aisle) => setLayout({ aisle })}
+        hint="Para autoelevador común se usan unos 3 m; para equipos de pasillo angosto, menos." />
       <Switch label="Filas espalda con espalda" checked={layout.backToBack} onChange={(backToBack) => setLayout({ backToBack })}
         hint="Dos filas unidas por la espalda comparten un pasillo: entran más racks." />
       <details className="plan-more">
         <summary>Separaciones</summary>
-        <NumberStepper label="Pasillo de cabecera (contra las paredes)" unit="mm" value={layout.endGap} min={0} max={8000} step={100} onChange={(endGap) => setLayout({ endGap })} />
-        <NumberStepper label="Separación de la pared" unit="mm" value={layout.wallGap} min={0} max={2000} step={50} onChange={(wallGap) => setLayout({ wallGap })} />
-        <NumberStepper label="Separación de columnas y zonas" unit="mm" value={layout.obstacleGap} min={0} max={2000} step={50} onChange={(obstacleGap) => setLayout({ obstacleGap })} />
+        <NumberStepper label="Pasillo de cabecera (contra las paredes)" meters value={layout.endGap} min={0} max={8000} step={100} onChange={(endGap) => setLayout({ endGap })} />
+        <NumberStepper label="Separación de la pared" meters value={layout.wallGap} min={0} max={2000} step={50} onChange={(wallGap) => setLayout({ wallGap })} />
+        <NumberStepper label="Separación de columnas y zonas" meters value={layout.obstacleGap} min={0} max={2000} step={50} onChange={(obstacleGap) => setLayout({ obstacleGap })} />
       </details>
       {results}
       <p className="muted small">Tocá cualquier rack en el plano o en el 3D para moverlo a mano.</p>
@@ -289,7 +292,7 @@ export function DepotPlate({ depot, area, compact }: { depot: Depot; area: numbe
       </div>
       <dl className="plate__rows">
         <div className="plate__row"><dt>Superficie</dt><dd>{fmt(Math.round(area))} m²</dd></div>
-        <div className="plate__row"><dt>Rack</dt><dd>{fmt(s.config.width)} × {fmt(s.config.depth)} × {fmt(s.config.height)}</dd></div>
+        <div className="plate__row"><dt>Rack</dt><dd>{metrosNum(s.config.width)} × {metrosNum(s.config.depth)} × {metros(s.config.height)}</dd></div>
         <div className="plate__row"><dt>Carga por pallet</dt><dd>{kg(s.config.palletWeight)}</dd></div>
         <div className="plate__row plate__row--strong"><dt>Capacidad total estimada</dt><dd>{kg(depot.capacity)}</dd></div>
       </dl>

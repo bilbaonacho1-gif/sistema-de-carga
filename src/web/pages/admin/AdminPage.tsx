@@ -17,6 +17,7 @@ import {
 import { fmt, fmtDate, fmtDateTime } from '../../lib/format'
 import { useDesigner } from '../designer/designerStore'
 import { ProductDialog } from '../inventory/StockDialogs'
+import { metros } from '../../../shared/units'
 
 type Tab = 'usuarios' | 'permisos' | 'productos' | 'racks' | 'empresas' | 'presupuestos'
 
@@ -242,7 +243,7 @@ function RacksTab() {
                   <td>{r.modules} módulos × {r.levels} niveles × {r.slotsPerModule} por módulo</td>
                   <td className="num">{fmt(r.positions)}</td>
                   <td className="num">{fmt(r.occupied)}</td>
-                  <td className="mono small">{fmt(r.lengthMm)} × {fmt(r.depthMm)} × {fmt(r.heightMm)} mm</td>
+                  <td className="mono small">{metros(r.lengthMm)} × {metros(r.depthMm)} × {metros(r.heightMm)}</td>
                   <td className="actions-cell">
                     <Button size="sm" variant="ghost" icon={Trash2} disabled={r.occupied > 0} title={r.occupied ? 'Tiene stock: mové la mercadería primero' : undefined} onClick={() => setDeleting({ id: r.id, code: r.code })}>Quitar</Button>
                   </td>

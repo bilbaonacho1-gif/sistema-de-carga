@@ -1,20 +1,22 @@
 /**
  * El depósito en 3D: piso, paredes (las curvas se arman con tramos cortos), columnas,
- * tabiques, portones, zonas libres y los racks. No es sólo para mirar: tocando cualquier cosa
+ * tabiques, portones, zonas libres, zonas de racks, pasillos marcados y los racks. No es sólo para mirar: tocando cualquier cosa
  * se selecciona y arrastrándola se mueve sobre el piso (columnas, tabiques, zonas, portones a lo
  * largo de su pared, esquinas del contorno y racks). Arrastrar el fondo gira la cámara.
  */
 import { Grid, OrbitControls } from '@react-three/drei'
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
-import { memo, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import * as THREE from 'three'
 import { edges, nearestOnEdge, outlinePolygon, planBounds, pointOnEdge, tangentOnEdge } from '../../shared/plan/geometry'
 import type { PlacedRack } from '../../shared/plan/depot'
-import { moveVertex } from '../../shared/plan/edit'
+import { moveVertex, updateRect } from '../../shared/plan/edit'
 import { placementRect } from '../../shared/plan/layout'
 import { freezeRacks, moveRack } from '../../shared/plan/racks'
 import type { Plan, PlanPoint, PlanSelection, RackPlacement } from '../../shared/plan/types'
+import { fmt } from '../lib/format'
 import { RackModel } from '../three/RackModel'
+import { RackInstances, type InstanceStats } from './RackInstances'
 import { usePlan } from './planStore'
 
 const m = (mm: number) => mm / 1000
@@ -30,6 +32,10 @@ const MAT = {
   selected: new THREE.MeshStandardMaterial({ color: RED, roughness: 0.6, emissive: RED, emissiveIntensity: 0.25 }),
   zoneSelected: new THREE.MeshStandardMaterial({ color: RED, transparent: true, opacity: 0.4 }),
   handle: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.5 }),
+  area: new THREE.MeshBasicMaterial({ color: '#2f6fb8', transparent: true, opacity: 0.08, depthWrite: false }),
+  areaSelected: new THREE.MeshBasicMaterial({ color: '#2f6fb8', transparent: true, opacity: 0.2, depthWrite: false }),
+  aisle: new THREE.MeshBasicMaterial({ color: '#f2c230', transparent: true, opacity: 0.6, depthWrite: false }),
+  aisleSelected: new THREE.MeshBasicMaterial({ color: '#e0a100', transparent: true, opacity: 0.85, depthWrite: false }),
   /** Caja invisible para tocar un rack (más liviana que tocar cada pieza). */
   rackHit: new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
   rackSelected: new THREE.MeshBasicMaterial({ color: RED, transparent: true, opacity: 0.14, depthWrite: false }),
@@ -140,6 +146,9 @@ const PlacedRackModel = memo(function PlacedRackModel({ rack, showLoads }: { rac
 
 interface Props { plan: Plan; racks?: PlacedRack[]; showLoads?: boolean; issues?: Record<string, string> }
 
+/** A partir de esta cantidad de racks se dibujan en lote (InstancedMesh) en vez de pieza por pieza. */
+const MANY_RACKS = 30
+
 export function Plan3D(props: Props) {
   const { plan } = props
   // la cámara se ubica una sola vez: después la maneja el usuario (y no salta al mover cosas)
@@ -149,21 +158,32 @@ export function Plan3D(props: Props) {
     return { center, span: Math.max(m(b.maxX - b.minX), m(b.maxY - b.minY), 5) }
   })
   const { center, span } = view
+  const [stats, setStats] = useState<InstanceStats | null>(null)
+  const many = (props.racks?.length ?? 0) > MANY_RACKS
+  useEffect(() => { if (!many) setStats(null) }, [many])
   return (
-    <Canvas shadows dpr={[1, 2]} camera={{ fov: 40, near: 0.1, far: 2000, position: [center.x + span * 0.7, span * 0.75, center.z + span * 1.05] }}
+    <div className="plan3d">
+    {/* frameloop "demand": se dibuja sólo cuando algo cambia o se mueve la cámara (depósitos grandes) */}
+    <Canvas shadows frameloop="demand" dpr={[1, many ? 1.25 : 2]} camera={{ fov: 40, near: 0.1, far: Math.max(2000, span * 10), position: [center.x + span * 0.7, span * 0.75, center.z + span * 1.05] }}
       onPointerMissed={() => usePlan.getState().select(null)}>
       <color attach="background" args={['#eef0f2']} />
       <hemisphereLight args={['#ffffff', '#cfd3d8', 1]} />
       <directionalLight position={[center.x + span, span * 1.5, center.z + span * 0.6]} intensity={1.4} castShadow shadow-bias={-0.0005} shadow-normalBias={0.05}
         shadow-mapSize={[2048, 2048]} shadow-camera-left={-span} shadow-camera-right={span} shadow-camera-top={span} shadow-camera-bottom={-span} />
       <Grid position={[0, -0.002, 0]} infiniteGrid cellSize={1} sectionSize={5} cellColor="#dfe2e6" sectionColor="#c9cdd2" fadeDistance={span * 4} />
-      <Scene {...props} span={span} />
+      <Scene {...props} span={span} onStats={setStats} />
       <OrbitControls makeDefault target={center} enableDamping maxPolarAngle={Math.PI / 2 - 0.02} minDistance={2} maxDistance={span * 6} />
     </Canvas>
+    {stats && (
+      <div className="plan3d__stats" aria-live="polite">
+        {fmt(stats.racks)} racks · {fmt(stats.pieces)} piezas{stats.detail !== 'completo' && <> · vista {stats.detail === 'medio' ? 'simplificada' : 'sólo estructura'} para que no se trabe</>}
+      </div>
+    )}
+    </div>
   )
 }
 
-function Scene({ plan, racks = [], showLoads = true, issues = {}, span }: Props & { span: number }) {
+function Scene({ plan, racks = [], showLoads = true, issues = {}, span, onStats }: Props & { span: number; onStats(s: InstanceStats): void }) {
   const selection = usePlan((s) => s.selection)
   const drag = useDrag()
   const live = usePlan((s) => s.live)
@@ -252,9 +272,39 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, span }: Props 
         </mesh>
       ))}
 
-      {/* racks: el modelo y, encima, una caja invisible para tocarlo y arrastrarlo */}
-      {racks.map((r) => <PlacedRackModel key={r.placement.id} rack={r} showLoads={showLoads} />)}
-      {racks.map(({ placement: p, structure }) => {
+      {/* zonas de racks (tinte azul) y pasillos marcados (amarillo) sobre el piso */}
+      {(plan.rackAreas ?? []).map((a) => (
+        <mesh key={a.id} material={isSel('area', a.id) ? MAT.areaSelected : MAT.area} rotation-x={-Math.PI / 2} position={[m(a.x + a.w / 2), 0.004, m(a.y + a.d / 2)]}
+          {...drag({ kind: 'area', id: a.id }, (dx, dy, free) => live((pl) => updateRect(pl, 'area', a.id, () => ({ x: snapTo(a.x + dx, free), y: snapTo(a.y + dy, free) }))))}>
+          <planeGeometry args={[m(a.w), m(a.d)]} />
+        </mesh>
+      ))}
+      {(plan.aisles ?? []).map((a) => (
+        <mesh key={a.id} renderOrder={2} material={isSel('aisle', a.id) ? MAT.aisleSelected : MAT.aisle} rotation-x={-Math.PI / 2} position={[m(a.x + a.w / 2), 0.007, m(a.y + a.d / 2)]}
+          {...drag({ kind: 'aisle', id: a.id }, (dx, dy, free) => live((pl) => updateRect(pl, 'aisle', a.id, () => ({ x: snapTo(a.x + dx, free), y: snapTo(a.y + dy, free) }))))}>
+          <planeGeometry args={[m(a.w), m(a.d)]} />
+        </mesh>
+      ))}
+
+      {/* muchos racks: en lote, con una sola malla invisible para tocarlos y arrastrarlos */}
+      {racks.length > MANY_RACKS && <>
+        <RackInstances racks={racks} showLoads={showLoads} onStats={onStats} />
+        <RackHitInstances racks={racks} placements={placements}
+          onDown={(e, p) => drag({ kind: 'rack', id: p.id }, (dx, dy, free) => live((pl) => moveRack(freezeRacks(pl, placements), p.id, snapTo(p.x + dx, free), snapTo(p.y + dy, free)))).onPointerDown(e)} />
+        {racks.filter(({ placement: p }) => isSel('rack', p.id) || issues[p.id]).map(({ placement: p, structure }) => {
+          const b = placementRect(p)
+          const H = m(structure.config.height) + 0.02
+          return (
+            <mesh key={`mark-${p.id}`} material={isSel('rack', p.id) ? MAT.rackSelected : MAT.rackIssue} position={[m(b.x + b.w / 2), H / 2, m(b.y + b.h / 2)]} raycast={() => null}>
+              <boxGeometry args={[m(b.w) + 0.04, H, m(b.h) + 0.04]} />
+            </mesh>
+          )
+        })}
+      </>}
+
+      {/* pocos racks: el modelo con todo el detalle y, encima, una caja invisible para tocarlo y arrastrarlo */}
+      {racks.length <= MANY_RACKS && racks.map((r) => <PlacedRackModel key={r.placement.id} rack={r} showLoads={showLoads} />)}
+      {racks.length <= MANY_RACKS && racks.map(({ placement: p, structure }) => {
         const b = placementRect(p)
         const H = m(structure.config.height) + 0.02
         const mat = isSel('rack', p.id) ? MAT.rackSelected : issues[p.id] ? MAT.rackIssue : MAT.rackHit
@@ -266,5 +316,32 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, span }: Props 
         )
       })}
     </>
+  )
+}
+
+/** Cajas invisibles de todos los racks en una sola malla: el toque dice qué rack es (instanceId). */
+function RackHitInstances({ racks, placements, onDown }: {
+  racks: PlacedRack[]; placements: RackPlacement[]; onDown(e: ThreeEvent<PointerEvent>, p: RackPlacement): void
+}) {
+  const gl = useThree((s) => s.gl)
+  const mesh = useMemo(() => {
+    const g = new THREE.BoxGeometry(1, 1, 1)
+    const im = new THREE.InstancedMesh(g, MAT.rackHit, racks.length)
+    const mtx = new THREE.Matrix4()
+    racks.forEach(({ placement: p, structure }, i) => {
+      const b = placementRect(p)
+      const H = m(structure.config.height) + 0.02
+      im.setMatrixAt(i, mtx.compose(new THREE.Vector3(m(b.x + b.w / 2), H / 2, m(b.y + b.h / 2)), new THREE.Quaternion(), new THREE.Vector3(m(b.w) + 0.04, H, m(b.h) + 0.04)))
+    })
+    im.instanceMatrix.needsUpdate = true
+    im.computeBoundingSphere()
+    return im
+  }, [racks])
+  useEffect(() => () => { mesh.geometry.dispose(); mesh.dispose() }, [mesh])
+  return (
+    <primitive object={mesh}
+      onPointerDown={(e: ThreeEvent<PointerEvent>) => { const p = e.instanceId !== undefined ? placements[e.instanceId] : undefined; if (p) onDown(e, p) }}
+      onPointerOver={(e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); gl.domElement.style.cursor = 'grab' }}
+      onPointerOut={() => { gl.domElement.style.cursor = '' }} />
   )
 }

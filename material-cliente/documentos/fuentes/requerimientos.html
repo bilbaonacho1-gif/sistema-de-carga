@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Diseñador 3D de depósitos · Resumen de requerimientos</title>
+<style>
+  @page { size: A4; margin: 14mm 17mm 18mm; }
+  :root { --red: #c8102e; --ink: #16202b; --muted: #5b6672; --line: #dde2e7; --soft: #f4f6f8; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; font-family: Inter, "DejaVu Sans", sans-serif; color: var(--ink); font-size: 9.6pt; line-height: 1.5; }
+  .top { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid var(--ink); padding-bottom: 4mm; }
+  .top .k { font-size: 8.5pt; letter-spacing: 3px; font-weight: 700; color: var(--red); }
+  .top h1 { margin: 1.5mm 0 0; font-size: 24pt; line-height: 1.1; font-weight: 800; letter-spacing: -.5px; }
+  .top .doc { text-align: right; font-size: 8.5pt; color: var(--muted); line-height: 1.6; }
+  .top .doc b { color: var(--ink); font-weight: 700; }
+  .meta { display: grid; grid-template-columns: 22mm 1fr; gap: .6mm 4mm; font-size: 9.2pt; margin: 4mm 0 4mm; padding: 3.5mm 4.5mm; background: var(--soft); border-radius: 1.5mm; }
+  .meta dt { color: var(--muted); font-weight: 600; }
+  .meta dd { margin: 0; }
+  h2 { font-size: 12pt; font-weight: 800; margin: 5mm 0 2mm; padding-bottom: 1.5mm; border-bottom: 1px solid var(--line); break-after: avoid; page-break-after: avoid; }
+  h2 .n { color: var(--red); margin-right: 2.5mm; }
+  p { margin: 0 0 3mm; text-align: justify; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin: 1mm 0 3mm; }
+  th { text-align: left; font-size: 7.5pt; letter-spacing: .9px; text-transform: uppercase; color: var(--muted); font-weight: 700; padding: 1.8mm 2.5mm; border-bottom: 1.5px solid var(--ink); }
+  td { padding: 1.7mm 2.5mm; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+  td.id { width: 10mm; font-weight: 800; color: var(--red); }
+  td.f { width: 46mm; font-weight: 700; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin: 3mm 0 2mm; break-inside: avoid; }
+  figure { margin: 0; }
+  figure img { width: 100%; height: 40mm; object-fit: cover; border: 1px solid var(--line); border-radius: 1.5mm; display: block; background: #fff; }
+  figure img.plan { object-fit: contain; }
+  figure img.hero { object-fit: contain; background: #dfe3e8; }
+  figcaption { font-size: 8pt; color: var(--muted); margin-top: 1.5mm; }
+  figcaption b { color: var(--ink); }
+  .note { border-left: 3px solid var(--red); background: var(--soft); padding: 3mm 4.5mm; border-radius: 1.5mm; font-size: 9.5pt; margin: 3mm 0; break-inside: avoid; }
+  .steps { display: flex; gap: 2mm; margin: 2mm 0 0; break-inside: avoid; }
+  .steps div { flex: 1; border: 1px solid var(--line); border-radius: 1.5mm; padding: 2.5mm 3mm; font-size: 8.5pt; color: var(--muted); }
+  .steps div b { display: block; color: var(--ink); font-size: 9.5pt; margin-bottom: .5mm; }
+  .steps div.on { border-color: var(--red); }
+  .steps div.on b { color: var(--red); }
+</style>
+</head>
+<body>
+<div class="top">
+  <div><div class="k">RESUMEN DE REQUERIMIENTOS</div><h1>Diseñador 3D de depósitos</h1></div>
+  <div class="doc">29 de octubre de 2026</div>
+</div>
+<dl class="meta">
+  <dt>Para</dt><dd>Sistemas de Carga S.A.</dd>
+  <dt>Asunto</dt><dd>Requerimientos relevados en la reunión y alcance propuesto</dd>
+  <dt>Estado</dt><dd>Para validación del cliente, previo al presupuesto</dd>
+</dl>
+
+<h2><span class="n">1</span>Objetivo</h2>
+<p>Desarrollar una herramienta de diseño de depósitos basada en los productos de Sistemas de Carga, para diseñar y presentar proyectos de forma simple y visual. La herramienta debe ser simple de operar por cualquier usuario, con una interfaz guiada paso a paso y una visualización en 3D apta para mostrar al cliente final.</p>
+
+<h2><span class="n">2</span>Requerimientos</h2>
+<table>
+  <tr><th>N.º</th><th>Requerimiento</th></tr>
+  <tr><td class="id">R1</td><td>Operación completa desde un panel lateral guiado, paso a paso, con instructivo integrado.</td></tr>
+  <tr><td class="id">R2</td><td>Desarrollo del rack selectivo como primer producto de la herramienta.</td></tr>
+  <tr><td class="id">R3</td><td>Dibujo del depósito a medida: contorno con paredes rectas o curvas, columnas y demás elementos del lugar.</td></tr>
+  <tr><td class="id">R4</td><td>Cálculo de la cantidad de racks que admite el depósito, con libertad para ubicarlos.</td></tr>
+  <tr><td class="id">R5</td><td>Racks de distintas dimensiones en un mismo depósito, editables por componente: largo, carga y altura de cada viga.</td></tr>
+  <tr><td class="id">R6</td><td>Pallet y carga editables por separado: la tarima de madera y la mercadería. Se cargan las medidas de la caja y el programa completa el pallet automáticamente, para representar desde cargas grandes hasta cajas chicas. Queda prevista la opción de sumar otros tipos de mercadería.</td></tr>
+  <tr><td class="id">R7</td><td>Accesorios: protectores, conectores superiores, cruces de arriostramiento, guardarraíles, carteles de capacidad, piso de madera o malla, travesaños de apoyo y distanciadores.</td></tr>
+  <tr><td class="id">R8</td><td>Presentación visual superior a la actual, apta para mostrar al cliente.</td></tr>
+</table>
+
+<div class="two">
+  <figure><img class="plan" src="autocad.png" alt=""><figcaption><b>Situación actual.</b> Plano de depósito en AutoCAD.</figcaption></figure>
+  <figure><img class="hero" src="hero.jpg" alt=""><figcaption><b>Propuesta.</b> Visualización 3D del proyecto con medidas y materiales.</figcaption></figure>
+</div>
+
+<h2><span class="n">3</span>Alcance de la primera etapa: depósito con rack selectivo</h2>
+<table>
+  <tr><th>Funcionalidad</th><th>Descripción</th></tr>
+  <tr><td class="f">Plano del depósito</td><td>Dibujo punto por punto con paredes rectas o curvas, cotas, columnas, tabiques, portones y zonas libres.</td></tr>
+  <tr><td class="f">Distribución automática</td><td>Propuesta de filas y pasillos que respeta columnas y zonas libres, con la cantidad de racks y posiciones resultantes.</td></tr>
+  <tr><td class="f">Ubicación libre</td><td>Agregar, mover, girar, duplicar y eliminar racks de distinto largo, con aviso de interferencias y pasillos insuficientes.</td></tr>
+  <tr><td class="f">Edición por componente</td><td>Por módulo: largo, altura, niveles, altura de cada viga y carga por nivel, con recálculo automático de parantes y vigas.</td></tr>
+  <tr><td class="f">Pallet y carga</td><td>Tarima con medidas estándar o a mano y carga por separado: con la medida de la caja, el programa apila las cajas solo sobre el pallet.</td></tr>
+  <tr><td class="f">Visualización</td><td>Plano acotado y vista 3D del depósito completo, con vistas frontal, lateral, superior y en perspectiva.</td></tr>
+  <tr><td class="f">Lista de materiales</td><td>Despiece del depósito completo por pieza y medida, exportable a Excel, con total cuando se carguen los precios.</td></tr>
+  <tr><td class="f">Exportación</td><td>Guardado de proyectos y exportación a PDF y DXF.</td></tr>
+</table>
+
+<h2><span class="n">4</span>Etapas posteriores</h2>
+<table>
+  <tr><th>Etapa</th><th>Descripción</th></tr>
+  <tr><td class="f">Resto del catálogo</td><td>Selectivo con pasarela, penetrable, estanterías, entrepisos, carros móviles y lockers, combinables en un mismo depósito.</td></tr>
+  <tr><td class="f">Módulo técnico</td><td>Verificación de viabilidad y cotización de modificaciones por parte del departamento técnico.</td></tr>
+  <tr><td class="f">Módulo de producción</td><td>Despiece de cada pedido por sector productivo de la planta.</td></tr>
+  <tr><td class="f">Tipos de mercadería</td><td>Otras cargas además de cajas (por ejemplo bolsas, tambores o bobinas), sobre la base de la carga editable de la primera etapa.</td></tr>
+</table>
+
+<div class="note">La herramienta es de diseño y simulación. El cálculo estructural de cada proyecto sigue a cargo del departamento técnico de Sistemas de Carga.</div>
+
+<h2><span class="n">5</span>Próximos pasos</h2>
+<p>Les pedimos revisar este documento e indicar cualquier corrección o requerimiento faltante. Una vez validado, se presentará el presupuesto por etapas.</p>
+<div class="steps">
+  <div class="on"><b>1. Validación</b>Revisión de este documento</div>
+  <div><b>2. Presupuesto</b>Costos y plazos por etapa</div>
+  <div><b>3. Desarrollo</b>Inicio de la primera etapa</div>
+</div>
+</body>
+</html>

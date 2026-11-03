@@ -1,4 +1,12 @@
-/** Racks ubicados en el plano (vista de arriba): cada fila con sus bastidores, como en un plano de AutoCAD. */
+/**
+ * Racks ubicados en el plano (vista de arriba): cada fila con sus bastidores, como en un plano de AutoCAD.
+ *
+ * Pensado para depósitos grandes: todos los racks se dibujan en pocos trazos (uno para los normales,
+ * otro para los que tienen problemas y otro para los bastidores), así con miles de racks el navegador
+ * dibuja un puñado de elementos en vez de miles. Los trazos no cambian de grosor con el zoom
+ * (vector-effect), y los bastidores aparecen recién al acercarse. El rack elegido va aparte, encima.
+ */
+import { memo, useMemo } from 'react'
 import { placementRect, type RackModuleSize, type RackPlacement } from '../../shared/plan/layout'
 
 interface Props {
@@ -12,41 +20,62 @@ interface Props {
   onDown?: (e: React.PointerEvent, rack: RackPlacement) => void
 }
 
-export function PlanRacks({ racks, size, px, selectedId, issues = {}, onDown }: Props) {
+const ORANGE = '#e07b1f', RED = '#be1e30'
+
+/** Rectángulos de las filas de un rack y las líneas de sus bastidores (en coordenadas del plano). */
+function rackShapes(r: RackPlacement, size: RackModuleSize, withFrames: boolean): { rows: string; frames: string } {
+  const b = placementRect(r)
+  const horizontal = r.orientation === 'x'
+  const offsets = r.pair ? [0, size.depth + size.backToBackGap] : [0]
+  let rows = '', frames = ''
+  for (const off of offsets) {
+    const x = Math.round(horizontal ? b.x : b.x + off), y = Math.round(horizontal ? b.y + off : b.y)
+    const w = Math.round(horizontal ? r.length : size.depth), h = Math.round(horizontal ? size.depth : r.length)
+    rows += `M${x} ${y}h${w}v${h}h${-w}Z`
+    if (withFrames)
+      for (let k = 0; k <= r.modules; k++) {
+        const f = Math.round(size.upright / 2 + k * (size.width + size.upright))
+        frames += horizontal ? `M${x + f} ${y}v${h}` : `M${x} ${y + f}h${w}`
+      }
+  }
+  return { rows, frames }
+}
+
+export const PlanRacks = memo(function PlanRacks({ racks, size, px, selectedId, issues = {}, onDown }: Props) {
+  // con más de ~60 mm por pixel los bastidores serían una mancha: se muestran al acercarse
+  const detail = px(1) < 60
+  const paths = useMemo(() => {
+    let ok = '', bad = '', okFrames = '', badFrames = ''
+    for (const r of racks) {
+      if (r.id === selectedId) continue
+      const s = rackShapes(r, size, detail)
+      if (issues[r.id]) { bad += s.rows; badFrames += s.frames } else { ok += s.rows; okFrames += s.frames }
+    }
+    return { ok, bad, okFrames, badFrames }
+  }, [racks, size, detail, selectedId, issues])
+  const selected = racks.find((r) => r.id === selectedId)
+  const sel = selected && rackShapes(selected, size, true)
+  const selBad = selected && !!issues[selected.id]
+  const selBox = selected && placementRect(selected)
+
   return (
-    <g pointerEvents={onDown ? undefined : 'none'}>
-      {racks.map((r) => {
+    <g>
+      <g pointerEvents="none">
+        {paths.ok && <path d={paths.ok} fill="#fdebd3" stroke={ORANGE} strokeWidth={1.2} vectorEffect="non-scaling-stroke" />}
+        {paths.okFrames && <path d={paths.okFrames} stroke="#c2651a" strokeWidth={1.4} vectorEffect="non-scaling-stroke" />}
+        {paths.bad && <path d={paths.bad} fill="#f8d4d8" stroke={RED} strokeWidth={1.4} vectorEffect="non-scaling-stroke" />}
+        {paths.badFrames && <path d={paths.badFrames} stroke="#a3192a" strokeWidth={1.4} vectorEffect="non-scaling-stroke" />}
+        {sel && <>
+          <path d={sel.rows} fill={selBad ? '#f8d4d8' : '#ffe2c4'} stroke={RED} strokeWidth={2.5} vectorEffect="non-scaling-stroke" />
+          <path d={sel.frames} stroke={selBad ? '#a3192a' : '#c2651a'} strokeWidth={Math.max(1.4, size.upright / px(1))} vectorEffect="non-scaling-stroke" />
+          <rect x={selBox!.x - px(4)} y={selBox!.y - px(4)} width={selBox!.w + px(8)} height={selBox!.h + px(8)} fill="none" stroke={RED} strokeWidth={px(1.5)} strokeDasharray={`${px(6)} ${px(4)}`} />
+        </>}
+      </g>
+      {/* zonas de toque: un rectángulo transparente por rack (incluye el hueco entre filas del par) */}
+      {onDown && racks.map((r) => {
         const b = placementRect(r)
-        const horizontal = r.orientation === 'x'
-        const sel = r.id === selectedId
-        const bad = !!issues[r.id]
-        const stroke = sel || bad ? '#be1e30' : '#e07b1f'
-        // filas de este rack: una, o dos (el par espalda con espalda) separadas por su distanciador
-        const rows = r.pair ? [0, size.depth + size.backToBackGap] : [0]
-        // bastidores a lo largo de la fila
-        const frames = Array.from({ length: r.modules + 1 }, (_, k) => size.upright / 2 + k * (size.width + size.upright))
-        return (
-          <g key={r.id} onPointerDown={onDown && ((e) => onDown(e, r))} style={onDown ? { cursor: 'move' } : undefined}>
-            {rows.map((off) => {
-              const x = horizontal ? b.x : b.x + off
-              const y = horizontal ? b.y + off : b.y
-              const w = horizontal ? r.length : size.depth
-              const h = horizontal ? size.depth : r.length
-              return (
-                <g key={off}>
-                  <rect x={x} y={y} width={w} height={h} fill={bad ? '#f8d4d8' : sel ? '#ffe2c4' : '#fdebd3'} stroke={stroke} strokeWidth={px(sel ? 2.5 : 1.2)} />
-                  {frames.map((f) => horizontal
-                    ? <line key={f} x1={x + f} y1={y} x2={x + f} y2={y + h} stroke={bad ? '#a3192a' : '#c2651a'} strokeWidth={Math.max(size.upright, px(1))} />
-                    : <line key={f} x1={x} y1={y + f} x2={x + w} y2={y + f} stroke={bad ? '#a3192a' : '#c2651a'} strokeWidth={Math.max(size.upright, px(1))} />)}
-                </g>
-              )
-            })}
-            {/* el par tiene un hueco entre filas: un rectángulo transparente lo hace tocable entero */}
-            {onDown && <rect x={b.x} y={b.y} width={b.w} height={b.h} fill="transparent" />}
-            {sel && <rect x={b.x - px(4)} y={b.y - px(4)} width={b.w + px(8)} height={b.h + px(8)} fill="none" stroke="#be1e30" strokeWidth={px(1.5)} strokeDasharray={`${px(6)} ${px(4)}`} />}
-          </g>
-        )
+        return <rect key={r.id} x={b.x} y={b.y} width={b.w} height={b.h} fill="transparent" style={{ cursor: 'move' }} onPointerDown={(e) => onDown(e, r)} />
       })}
     </g>
   )
-}
+})

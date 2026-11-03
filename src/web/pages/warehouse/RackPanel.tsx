@@ -10,6 +10,7 @@ import { LocationLabel } from '../../components/LocationLabel'
 import { Badge, Button, EmptyState, Loadable, StatusPill } from '../../components/ui'
 import { fmt } from '../../lib/format'
 import { MoveDialog, StockInDialog } from '../inventory/StockDialogs'
+import { metros } from '../../../shared/units'
 
 export function RackPanel({ rackId, positionCode, onPosition }: { rackId: number; positionCode: string | null; onPosition(code: string | null): void }) {
   const q = useRack(rackId)
@@ -35,7 +36,7 @@ function RackSummary({ rack }: { rack: RackDetail }) {
         <li><span className="legend__sw legend__sw--free" />{fmt(free)} libres</li>
         {rack.reserved > 0 && <li><span className="legend__sw" style={{ background: POSITION_META.reservado.fill }} />{fmt(rack.reserved)} con reservas</li>}
       </ul>
-      <p className="muted small mono">{fmt(rack.lengthMm)} × {fmt(rack.depthMm)} × {fmt(rack.heightMm)} mm · {fmt(rack.units)} unidades guardadas</p>
+      <p className="muted small mono">{metros(rack.lengthMm)} × {metros(rack.depthMm)} × {metros(rack.heightMm)} · {fmt(rack.units)} unidades guardadas</p>
     </div>
   )
 }

@@ -5,13 +5,21 @@ import { rectanglePlan } from '../../shared/plan/geometry'
 import { DEFAULT_LAYOUT, type LayoutOptions } from '../../shared/plan/layout'
 import type { Plan, PlanPoint, PlanSelection } from '../../shared/plan/types'
 
+/**
+ * Guardado en el navegador. Mientras se arrastra algo el plano cambia en cada movimiento: se guarda
+ * recién cuando se deja de mover (300 ms), así un depósito grande no traba el arrastre.
+ */
+const pending = new Map<string, ReturnType<typeof setTimeout>>()
 const safeStorage = {
   getItem: (k: string) => { try { return localStorage.getItem(k) } catch { return null } },
-  setItem: (k: string, v: string) => { try { localStorage.setItem(k, v) } catch { /* sin memoria */ } },
+  setItem: (k: string, v: string) => {
+    clearTimeout(pending.get(k))
+    pending.set(k, setTimeout(() => { try { localStorage.setItem(k, v) } catch { /* sin memoria */ } }, 300))
+  },
   removeItem: (k: string) => { try { localStorage.removeItem(k) } catch { /* sin memoria */ } },
 }
 
-export type PlanTool = 'select' | 'outline' | 'column' | 'wall' | 'door' | 'zone'
+export type PlanTool = 'select' | 'outline' | 'column' | 'wall' | 'door' | 'zone' | 'area' | 'aisle'
 
 /** Pasos del cotizador de depósitos: primero el lugar, después el rack y su distribución. */
 export const FLOW = ['deposito', 'rack', 'carga', 'distribucion', 'accesorios', 'resumen'] as const

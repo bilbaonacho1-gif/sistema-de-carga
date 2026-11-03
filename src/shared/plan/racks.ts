@@ -1,6 +1,6 @@
 /**
  * UBICACIÓN LIBRE DE RACKS: mover, girar, duplicar, cambiar módulos y avisar cuando un rack
- * se pisa con otro, con una columna, un tabique o una zona libre, o queda fuera del depósito.
+ * se pisa con otro, con una columna, un tabique, una zona libre o un pasillo, o queda fuera del depósito.
  * La primera edición copia la distribución automática al plano (`plan.racks`).
  */
 import { newId } from './edit'
@@ -91,16 +91,30 @@ function strictlyInside(p: PlanPoint, b: Rect): boolean {
   return p.x > b.x + TOL && p.x < b.x + b.w - TOL && p.y > b.y + TOL && p.y < b.y + b.h - TOL
 }
 
-/** Puntos sobre el borde del rectángulo, cada ~500 mm. */
-function perimeter(b: Rect): PlanPoint[] {
-  // un poco hacia adentro, para que un rack apoyado justo sobre la línea de la pared no cuente
+/**
+ * ¿El rectángulo queda dentro del contorno? Exacto y rápido (no depende del largo del rack): las 4
+ * esquinas adentro, ninguna pared que cruce sus bordes y ningún vértice del contorno metido en él.
+ * Se mira un poco hacia adentro, para que un rack apoyado justo sobre la línea de la pared no cuente.
+ */
+function rectInside(b: Rect, poly: PlanPoint[]): boolean {
   const x0 = b.x + TOL, x1 = b.x + b.w - TOL, y0 = b.y + TOL, y1 = b.y + b.h - TOL
-  const out: PlanPoint[] = []
-  const nx = Math.max(1, Math.ceil(b.w / 500)), ny = Math.max(1, Math.ceil(b.h / 500))
-  for (let i = 0; i <= nx; i++) { const x = x0 + ((x1 - x0) * i) / nx; out.push({ x, y: y0 }, { x, y: y1 }) }
-  for (let j = 0; j <= ny; j++) { const y = y0 + ((y1 - y0) * j) / ny; out.push({ x: x0, y }, { x: x1, y }) }
-  return out
+  const corners = [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }]
+  if (corners.some((p) => !pointInPolygon(p, poly))) return false
+  if (poly.some((v) => strictlyInside(v, b))) return false
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], c = poly[(i + 1) % poly.length]
+    if (Math.max(a.x, c.x) < x0 || Math.min(a.x, c.x) > x1 || Math.max(a.y, c.y) < y0 || Math.min(a.y, c.y) > y1) continue
+    for (let k = 0; k < 4; k++) if (segmentsCross(a, c, corners[k], corners[(k + 1) % 4])) return false
+  }
+  return true
 }
+
+function segmentsCross(p1: PlanPoint, p2: PlanPoint, q1: PlanPoint, q2: PlanPoint): boolean {
+  const o = (a: PlanPoint, b: PlanPoint, c: PlanPoint) => Math.sign((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x))
+  const d1 = o(p1, p2, q1), d2 = o(p1, p2, q2), d3 = o(q1, q2, p1), d4 = o(q1, q2, p2)
+  return d1 !== 0 && d2 !== 0 && d3 !== 0 && d4 !== 0 && d1 !== d2 && d3 !== d4
+}
+
 
 /** Problemas de cada rack (id → motivo). Los que no tienen problemas no aparecen. */
 export function rackIssues(plan: Plan, racks: RackPlacement[]): Record<string, string> {
@@ -108,9 +122,24 @@ export function rackIssues(plan: Plan, racks: RackPlacement[]): Record<string, s
   if (plan.outline.points.length < 3) return out
   const poly = outlinePolygon(plan.outline, 200)
   const rects = racks.map(placementRect)
+  // grilla de 10 m: cada rack se compara sólo con los que caen en sus mismas celdas (miles de racks al instante)
+  const CELL = 10_000
+  const grid = new Map<string, number[]>()
+  const cells = (b: Rect) => {
+    const out: string[] = []
+    for (let i = Math.floor(b.x / CELL); i <= Math.floor((b.x + b.w) / CELL); i++)
+      for (let j = Math.floor(b.y / CELL); j <= Math.floor((b.y + b.h) / CELL); j++) out.push(`${i},${j}`)
+    return out
+  }
+  rects.forEach((b, i) => { for (const c of cells(b)) (grid.get(c) ?? grid.set(c, []).get(c)!).push(i) })
+  const neighbours = (b: Rect, i: number) => {
+    const found = new Set<number>()
+    for (const c of cells(b)) for (const j of grid.get(c) ?? []) if (j !== i) found.add(j)
+    return found
+  }
   racks.forEach((r, i) => {
     const b = rects[i]
-    if (perimeter(b).some((p) => !pointInPolygon(p, poly)) || poly.some((v) => strictlyInside(v, b))) { out[r.id] = 'Queda fuera del depósito'; return }
+    if (!rectInside(b, poly)) { out[r.id] = 'Queda fuera del depósito'; return }
     if (plan.columns.some((c) => overlap(b, { x: c.x - c.w / 2, y: c.y - c.d / 2, w: c.w, h: c.d }))) { out[r.id] = 'Choca con una columna'; return }
     const hitsWall = plan.walls.some((w) => {
       const half = w.thickness / 2
@@ -121,7 +150,8 @@ export function rackIssues(plan: Plan, racks: RackPlacement[]): Record<string, s
     })
     if (hitsWall) { out[r.id] = 'Choca con un tabique'; return }
     if (plan.zones.some((z) => overlap(b, { x: z.x, y: z.y, w: z.w, h: z.d }))) { out[r.id] = 'Pisa una zona libre'; return }
-    if (rects.some((o, j) => j !== i && overlap(b, o))) out[r.id] = 'Se pisa con otro rack'
+    if ((plan.aisles ?? []).some((a) => overlap(b, { x: a.x, y: a.y, w: a.w, h: a.d }))) { out[r.id] = 'Pisa un pasillo'; return }
+    for (const j of neighbours(b, i)) if (overlap(b, rects[j])) { out[r.id] = 'Se pisa con otro rack'; break }
   })
   return out
 }

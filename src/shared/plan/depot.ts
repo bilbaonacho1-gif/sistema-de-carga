@@ -9,6 +9,7 @@ import { planArea } from './geometry'
 import { autoLayout, type LayoutOptions, type LayoutResult, type RackModuleSize } from './layout'
 import { manualLayout, rackIssues } from './racks'
 import type { Plan, RackPlacement } from './types'
+import { metros } from '../units'
 
 export interface PlacedRack { placement: RackPlacement; structure: RackStructure }
 
@@ -99,16 +100,16 @@ export function depotSummaryText(plan: Plan, depot: Depot, options: LayoutOption
   const c = s.config
   return [
     'DEPÓSITO',
-    `Superficie: ${n(Math.round(planArea(plan.outline)))} m² · ${n(plan.columns.length)} columnas · altura de paredes ${n(plan.wallHeight)} mm`,
+    `Superficie: ${n(Math.round(planArea(plan.outline)))} m² · ${n(plan.columns.length)} columnas · altura de paredes ${metros(plan.wallHeight)}`,
     '',
     'DISTRIBUCIÓN',
     `${n(depot.layout.rows)} filas de rack selectivo${options.backToBack ? ' (dobles espalda con espalda)' : ''} · ${n(depot.layout.modules)} módulos`,
-    depot.manual ? 'Racks ubicados a mano sobre el plano' : `Pasillos de ${n(options.aisle)} mm · filas ${options.orientation === 'x' ? 'a lo largo' : 'a lo ancho'} del depósito`,
+    depot.manual ? 'Racks ubicados a mano sobre el plano' : `Pasillos de ${metros(options.aisle)} · filas ${options.orientation === 'x' ? 'a lo largo' : 'a lo ancho'} del depósito`,
     ...(Object.keys(depot.issues).length ? [`ATENCIÓN: ${n(Object.keys(depot.issues).length)} racks con interferencias (se pisan, chocan con columnas o quedan fuera)`] : []),
     `${n(depot.positions)} posiciones de pallet · capacidad estimada ${n(depot.capacity)} kg`,
     '',
     'RACK',
-    `Largo de viga ${n(c.width)} mm · profundidad ${n(c.depth)} mm · altura ${n(c.height)} mm · ${n(c.levels)} niveles`,
+    `Largo de viga ${metros(c.width)} · profundidad ${metros(c.depth)} · altura ${metros(c.height)} · ${n(c.levels)} niveles`,
     `Pallet ${s.pallet.name} · ${n(c.palletWeight)} kg · ${s.upright.name} · ${s.beam.name}`,
     '',
     'LISTA DE MATERIALES (todo el depósito)',

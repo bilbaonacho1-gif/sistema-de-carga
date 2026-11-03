@@ -73,3 +73,22 @@ describe('ubicación libre de racks', () => {
     expect(depot.issues).toEqual({})
   })
 })
+
+describe('depósitos grandes', () => {
+  it('distribuye, arma y revisa un depósito de 300 × 300 m rápido', () => {
+    const big = rectanglePlan(300_000, 300_000)
+    const t0 = performance.now()
+    const auto = autoLayout(big, size, DEFAULT_LAYOUT).placements
+    const depot = buildDepot(big, DEFAULT_CONFIGURATION, DEFAULT_LAYOUT)
+    expect(auto.length).toBeGreaterThan(40)          // filas largas de muchos módulos
+    expect(depot.positions).toBeGreaterThan(10_000)
+    // a mano: miles de racks cortos, todos revisados contra todos (con la grilla, no par contra par)
+    const many: RackPlacement[] = []
+    for (let i = 0; i < 40; i++) for (let j = 0; j < 60; j++)
+      many.push(fitPlacement({ id: `r${i}-${j}`, x: 2000 + i * 7000, y: 2000 + j * 4800, orientation: 'x', modules: 2, length: 0, depth: 0, pair: false }, size))
+    const t1 = performance.now()
+    expect(Object.keys(rackIssues(big, many))).toHaveLength(0)
+    expect(performance.now() - t1).toBeLessThan(1000)
+    expect(performance.now() - t0).toBeLessThan(5000)
+  })
+})

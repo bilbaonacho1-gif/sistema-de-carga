@@ -10,8 +10,9 @@ import { sceneLabels, bindLabel } from '../../three/labels'
 import { RackScene } from '../../three/RackScene'
 import type { CameraPreset } from '../../three/types'
 import { useDesigner } from './designerStore'
+import { metros } from '../../../shared/units'
 
-const mm = (n: number) => `${fmt(n)} mm`
+const mm = metros
 const kg = (n: number) => `${fmt(n)} kg`
 
 /* ------------------------------ Visor 3D ------------------------------ */
@@ -32,7 +33,7 @@ export function Viewport({ s }: { s: RackStructure }) {
         {labels.map((l) => l.kind === 'dim' ? (
           <div key={l.id} ref={bindLabel(l.id)} className={`dim-label dim-label--${l.spec.tone}`}>
             <span className="dim-label__caption">{l.spec.caption}</span>
-            <span className="dim-label__value">{l.spec.value.toLocaleString('es-AR')} mm</span>
+            <span className="dim-label__value">{metros(l.spec.value)}</span>
           </div>
         ) : <div key={l.id} ref={bindLabel(l.id)} className="warehouse-label">{l.text}</div>)}
       </div>

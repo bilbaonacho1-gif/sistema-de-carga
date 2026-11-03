@@ -61,6 +61,59 @@ describe('distribución automática', () => {
   })
 })
 
+describe('zonas de racks y pasillos dibujados', () => {
+  const inside = (b: { x: number; y: number; w: number; h: number }, z: { x: number; y: number; w: number; d: number }) =>
+    b.x >= z.x && b.y >= z.y && b.x + b.w <= z.x + z.w && b.y + b.h <= z.y + z.d
+
+  it('con zonas de racks, sólo se llenan esas zonas', () => {
+    const plan = rectanglePlan(60_000, 40_000)
+    const z1 = { id: 'a1', x: 2000, y: 2000, w: 25_000, d: 15_000, name: 'Zona A' }
+    const z2 = { id: 'a2', x: 32_000, y: 20_000, w: 20_000, d: 15_000, name: 'Zona B', orientation: 'y' as const }
+    plan.rackAreas = [z1, z2]
+    const r = autoLayout(plan, rack, DEFAULT_LAYOUT)
+    const enA = r.placements.filter((p) => p.id.startsWith('z1-'))
+    const enB = r.placements.filter((p) => p.id.startsWith('z2-'))
+    expect(enA.length).toBeGreaterThan(0)
+    expect(enB.length).toBeGreaterThan(0)
+    expect(enA.every((p) => inside(placementRect(p), z1) && p.orientation === 'x')).toBe(true)
+    expect(enB.every((p) => inside(placementRect(p), z2) && p.orientation === 'y')).toBe(true)
+    // todo el depósito entra mucho más que las dos zonas
+    expect(autoLayout({ ...plan, rackAreas: [] }, rack, DEFAULT_LAYOUT).modules).toBeGreaterThan(r.modules)
+  })
+
+  it('un pasillo que cruza las filas las corta', () => {
+    const plan = rectanglePlan(40_000, 20_000)
+    plan.aisles = [{ id: 'p', x: 18_000, y: 0, w: 4000, d: 20_000 }]
+    const r = autoLayout(plan, rack, DEFAULT_LAYOUT)
+    for (const p of r.placements) {
+      const b = placementRect(p)
+      expect(b.x + b.w <= 18_000 || b.x >= 22_000).toBe(true)
+    }
+    expect(r.placements.some((p) => p.x >= 22_000)).toBe(true)
+  })
+
+  it('un pasillo a lo largo de las filas reparte las filas a cada lado, con pares pegados al pasillo', () => {
+    const plan = rectanglePlan(40_000, 30_000)
+    plan.aisles = [{ id: 'p', x: 0, y: 14_000, w: 40_000, d: 4000 }]
+    const r = autoLayout(plan, rack, DEFAULT_LAYOUT)
+    for (const p of r.placements) {
+      const b = placementRect(p)
+      expect(b.y + b.h <= 14_000 || b.y >= 18_000).toBe(true)
+    }
+    const abajo = r.placements.filter((p) => p.y >= 18_000).sort((a, b) => a.y - b.y)
+    expect(abajo[0].pair).toBe(true)
+    expect(abajo[0].y).toBe(18_000 + DEFAULT_LAYOUT.obstacleGap)
+  })
+
+  it('un rack que pisa un pasillo se marca', async () => {
+    const { rackIssues } = await import('./racks')
+    const plan = rectanglePlan(40_000, 20_000)
+    plan.aisles = [{ id: 'p', x: 10_000, y: 0, w: 3000, d: 20_000 }]
+    const issues = rackIssues(plan, [{ id: 'x', x: 8000, y: 5000, orientation: 'x', modules: 2, length: 5600, depth: 1100, pair: false }])
+    expect(issues.x).toBe('Pisa un pasillo')
+  })
+})
+
 describe('depósito completo', () => {
   it('suma posiciones y materiales de todos los racks', async () => {
     const { buildDepot } = await import('./depot')

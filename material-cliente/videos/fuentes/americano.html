@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Rack americano</title>
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #dfe3e8; font-family: Inter, "DejaVu Sans", sans-serif; }
+  #c { position: absolute; inset: 0; }
+  .ov { position: absolute; pointer-events: none; }
+  #fade { inset: 0; background: #0f1720; opacity: 0; }
+  #grad { inset: 0; background: linear-gradient(90deg, rgba(15,23,32,.84) 0%, rgba(15,23,32,.55) 38%, rgba(15,23,32,0) 62%); opacity: 0; }
+  #title { left: 120px; top: 340px; color: #fff; }
+  #title .k { font-size: 30px; letter-spacing: 8px; font-weight: 700; color: #ff6b6b; }
+  #title h1 { margin: 10px 0 0; font-size: 112px; line-height: 1; font-weight: 800; letter-spacing: -2px; }
+  #title p { margin: 22px 0 0; font-size: 42px; font-weight: 500; opacity: .95; }
+  #spec { right: 110px; top: 170px; width: 720px; background: rgba(15,23,32,.9); color: #fff; border-radius: 24px; padding: 44px 50px; }
+  #spec .k { font-size: 22px; letter-spacing: 5px; font-weight: 700; color: #ff6b6b; }
+  #spec h2 { margin: 8px 0 26px; font-size: 54px; font-weight: 800; }
+  #spec .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+  #spec .m { background: rgba(255,255,255,.07); border-radius: 14px; padding: 16px 18px; }
+  #spec .m b { display: block; font-size: 46px; font-weight: 800; line-height: 1.05; }
+  #spec .m span { font-size: 20px; color: #c9d1da; }
+  #spec .row { display: flex; align-items: center; gap: 16px; font-size: 30px; padding: 12px 0; border-top: 1px solid rgba(255,255,255,.12); }
+  #spec .row i { font-style: normal; color: #ff6b6b; font-weight: 800; min-width: 150px; font-size: 34px; }
+  #cap { left: 80px; bottom: 70px; display: flex; align-items: stretch; background: rgba(15,23,32,.88); border-radius: 18px; overflow: hidden; box-shadow: 0 12px 40px rgba(0,0,0,.25); max-width: 1320px; }
+  #cap .num { background: #d7192a; color: #fff; font-weight: 800; font-size: 54px; display: flex; align-items: center; justify-content: center; min-width: 120px; padding: 0 22px; }
+  #cap .num small { display: block; font-size: 16px; letter-spacing: 3px; font-weight: 700; text-align: center; }
+  #cap .txt { padding: 22px 34px 24px; color: #fff; }
+  #cap .txt b { display: block; font-size: 44px; font-weight: 700; }
+  #cap .txt span { display: block; font-size: 29px; margin-top: 8px; color: #d6dde6; line-height: 1.3; }
+  #head { left: 80px; top: 60px; color: #0f1720; }
+  #head .k { font-size: 24px; letter-spacing: 6px; font-weight: 700; color: #c8102e; }
+  #head h2 { margin: 6px 0 0; font-size: 64px; font-weight: 800; }
+  .lbl { position: absolute; transform: translate(-50%, -100%); text-align: center; width: 440px; }
+  .lbl.below { transform: translate(-50%, 0); }
+  .lbl b { display: inline-block; background: #0f1720; color: #fff; font-size: 25px; font-weight: 700; padding: 6px 14px; border-radius: 8px; }
+  .lbl b i { font-style: normal; color: #ff6b6b; margin-right: 8px; }
+  .lbl b em { font-style: normal; color: #0f1720; background: #ffd400; border-radius: 6px; padding: 0 8px; margin-left: 10px; font-size: 22px; }
+  .lbl span { display: block; margin-top: 6px; font-size: 19px; color: #1d2733; font-weight: 500; line-height: 1.25; }
+  #formula { left: 50%; bottom: 70px; transform: translateX(-50%); background: #0f1720; color: #fff; font-size: 38px; font-weight: 600; padding: 20px 40px; border-radius: 16px; white-space: nowrap; }
+  #formula em { font-style: normal; color: #ff6b6b; font-weight: 800; }
+  #end { left: 110px; top: 190px; width: 760px; background: rgba(15,23,32,.9); color: #fff; border-radius: 22px; padding: 46px 52px; }
+  #end .k { font-size: 22px; letter-spacing: 5px; font-weight: 700; color: #ff6b6b; }
+  #end h2 { margin: 8px 0 24px; font-size: 64px; font-weight: 800; }
+  #end li { font-size: 32px; margin: 12px 0; line-height: 1.3; }
+  #end ul { padding-left: 34px; margin: 0; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<div id="labels" class="ov" style="inset:0"></div>
+<div id="head" class="ov"><div class="k">QUÉ TRAE LA CAJA</div><h2>Las partes</h2></div>
+<div id="formula" class="ov">Sin tornillos ni herramientas: <em>todo encastra</em></div>
+<div id="cap" class="ov"><div class="num"><div><small id="capk">PASO</small><span id="capn">1</span></div></div><div class="txt"><b id="capt"></b><span id="caps"></span></div></div>
+<div id="grad" class="ov"></div>
+<div id="title" class="ov"><div class="k">PARA REVENDEDORES</div><h1>Rack americano</h1><p>Estantería encastrable con estantes de madera</p></div>
+<div id="spec" class="ov">
+  <div class="k">FICHA TÉCNICA</div>
+  <h2>Rack americano</h2>
+  <div class="grid">
+    <div class="m"><b>2 m</b><span>de alto</span></div>
+    <div class="m"><b>2 m</b><span>de ancho</span></div>
+    <div class="m"><b>60 cm</b><span>de profundidad</span></div>
+  </div>
+  <div class="row"><i>1.400 kg</i>de capacidad</div>
+  <div class="row"><i>4</i>estantes de madera</div>
+  <div class="row"><i>0</i>tornillos: se arma por encastre</div>
+</div>
+<div id="end" class="ov">
+  <div class="k">RACK AMERICANO</div>
+  <h2>Listo para cargar</h2>
+  <ul>
+    <li>2 × 2 m, 60 cm de profundidad</li>
+    <li>Soporta 1.400 kg</li>
+    <li>Se arma en minutos, sin tornillos</li>
+    <li>Estantes a la altura que el cliente necesite</li>
+  </ul>
+</div>
+<div id="fade" class="ov"></div>
+
+<script type="importmap">{ "imports": { "three": "./node_modules/three/build/three.module.js", "three/addons/": "./node_modules/three/examples/jsm/" } }</script>
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const ease = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const easeOut = x => 1 - Math.pow(1 - x, 3);
+const easeBack = x => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const prog = (t, t0, d) => clamp((t - t0) / d);
+const win = (t, a, b, f = .5) => clamp(Math.min((t - a) / f, (b - t) / f));
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+// ---------- renderer ----------
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1); renderer.setSize(1920, 1080, false);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xdfe3e8);
+scene.fog = new THREE.Fog(0xdfe3e8, 14, 40);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 1.0;
+const camera = new THREE.PerspectiveCamera(38, 1920 / 1080, 0.01, 200);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f96, 0.7));
+const sun = new THREE.DirectionalLight(0xffffff, 2.0);
+sun.position.set(-4, 8, -5); sun.target.position.set(1, 0, 0.3);
+sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -5, right: 5, top: 5, bottom: -5, near: 1, far: 25 });
+sun.shadow.bias = -0.0003; sun.shadow.normalBias = 0.01;
+scene.add(sun, sun.target);
+
+// ---------- textures ----------
+function canvasTex(w, h, draw, repeat = true) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  draw(cv.getContext('2d'), w, h);
+  const tx = new THREE.CanvasTexture(cv); tx.colorSpace = THREE.SRGBColorSpace;
+  if (repeat) tx.wrapS = tx.wrapT = THREE.RepeatWrapping;
+  tx.anisotropy = 8; return tx;
+}
+function spangle(g, w, h, base) {
+  g.fillStyle = base; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 260; i++) {
+    const x = Math.random() * w, y = Math.random() * h, r = 6 + Math.random() * 26, l = Math.random() < .5 ? 255 : 0;
+    g.fillStyle = `rgba(${l},${l},${l},${0.03 + Math.random() * 0.06})`;
+    g.beginPath(); for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2 + Math.random() * .5; g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); } g.fill();
+  }
+}
+const floorTex = canvasTex(512, 512, (g, w, h) => {
+  g.fillStyle = '#bfc3c8'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 4000; i++) { g.fillStyle = `rgba(${Math.random() < .5 ? '0,0,0' : '255,255,255'},${Math.random() * .05})`; g.fillRect(Math.random() * w, Math.random() * h, 2, 2); }
+  g.strokeStyle = 'rgba(80,85,90,.3)'; g.lineWidth = 2; g.strokeRect(0, 0, w, h);
+});
+floorTex.repeat.set(60, 60);
+// slotted angle leg: u = 0 at the corner, 1 at the outer edge; 1 repeat = 0.5 m, slots every 50 mm
+const slotTex = canvasTex(64, 1024, (g, w, h) => {
+  spangle(g, w, h, '#cfd5db');
+  g.fillStyle = '#1b2026';
+  for (let i = 0; i < 10; i++) {
+    const y = i * 102.4 + 14, cx = 40;
+    g.beginPath(); g.arc(cx, y + 7, 7, Math.PI, 0); g.lineTo(cx + 2, y + 80); g.lineTo(cx - 2, y + 80); g.closePath(); g.fill();
+  }
+});
+const galvTex = canvasTex(512, 256, (g, w, h) => spangle(g, w, h, '#c9cfd5'));
+const woodTex = canvasTex(1024, 256, (g, w, h) => {
+  g.fillStyle = '#d9a86c'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 90; i++) {
+    const y = Math.random() * h; g.strokeStyle = `rgba(${120 + Math.random() * 40},${70 + Math.random() * 30},30,${0.12 + Math.random() * 0.18})`;
+    g.lineWidth = 1 + Math.random() * 3; g.beginPath(); g.moveTo(0, y);
+    for (let x = 0; x <= w; x += 32) g.lineTo(x, y + Math.sin(x / 90 + i) * 6 + Math.random() * 2);
+    g.stroke();
+  }
+  for (let i = 0; i < 6; i++) { g.fillStyle = 'rgba(130,80,35,.25)'; g.beginPath(); g.ellipse(Math.random() * w, Math.random() * h, 14, 6, 0, 0, Math.PI * 2); g.fill(); }
+}, false);
+const boxTex = canvasTex(256, 256, (g, w, h) => {
+  g.fillStyle = '#c99a5b'; g.fillRect(0, 0, w, h); g.fillStyle = 'rgba(120,80,40,.5)'; g.fillRect(0, 118, w, 20);
+  g.strokeStyle = '#8d6634'; g.lineWidth = 6; g.strokeRect(3, 3, w - 6, h - 6);
+}, false);
+
+// ---------- materials ----------
+const M = {
+  leg: new THREE.MeshStandardMaterial({ map: slotTex, metalness: .4, roughness: .42 }),
+  galv: new THREE.MeshStandardMaterial({ map: galvTex, metalness: .4, roughness: .42 }),
+  rivet: new THREE.MeshStandardMaterial({ color: 0xd8dde2, metalness: .9, roughness: .25 }),
+  wood: new THREE.MeshStandardMaterial({ map: woodTex, roughness: .7 }),
+  woodEdge: new THREE.MeshStandardMaterial({ color: 0xc89660, roughness: .8 }),
+  box: new THREE.MeshStandardMaterial({ map: boxTex, roughness: .85 }),
+  black: new THREE.MeshStandardMaterial({ color: 0x1d1f22, roughness: .55 }),
+  red: new THREE.MeshStandardMaterial({ color: 0xd11f2a, roughness: .45 }),
+  tire: new THREE.MeshStandardMaterial({ color: 0x18191b, roughness: .9 }),
+  can: new THREE.MeshStandardMaterial({ color: 0xf2f4f6, metalness: .3, roughness: .4 }),
+  canBlue: new THREE.MeshStandardMaterial({ color: 0x1f4fa8, roughness: .5 }),
+  foot: new THREE.MeshStandardMaterial({ color: 0x222428, roughness: .7 }),
+};
+const box = (w, h, d, mat, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; return m; };
+
+// ---------- dimensions (m) ----------
+const W = 2.0, D = 0.6, H = 2.0, LEG = 0.04, T = 0.003;
+const LEVELS = [0.10, 0.71, 1.32, 1.93];   // top of each beam (the shelf sits on it)
+const BEAM_H = 0.075, SHELF = 0.016, END = 0.024;   // END: beam end = slot column, measured from the corner
+
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), new THREE.MeshStandardMaterial({ map: floorTex, roughness: .95 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+
+// one leg of the angle: uv.x runs from the corner (0) to the outer edge (1) on every face
+function legBox(w, h, d, axis) {
+  const g = new THREE.BoxGeometry(w, h, d); const uv = g.attributes.uv, pos = g.attributes.position;
+  const L = axis === 'x' ? w : d;
+  for (let i = 0; i < uv.count; i++) {
+    const a = axis === 'x' ? pos.getX(i) : pos.getZ(i);
+    uv.setXY(i, (a + L / 2) / L, (pos.getY(i) + h / 2) / 0.5);
+  }
+  const m = new THREE.Mesh(g, M.leg); m.castShadow = m.receiveShadow = true; return m;
+}
+// upright: L angle, corner at local origin, legs toward +x and +z, outer faces on the x=0 and z=0 planes
+function upright(h = H) {
+  const g = new THREE.Group();
+  const a = legBox(LEG, h, T, 'x'); a.position.set(LEG / 2, h / 2, T / 2); g.add(a);
+  const b = legBox(T, h, LEG, 'z'); b.position.set(T / 2, h / 2, LEG / 2); g.add(b);
+  g.add(box(LEG + .004, 0.01, LEG + .004, M.foot, LEG / 2, 0.005, LEG / 2));
+  return g;
+}
+// beam: along +x from 0..len, top at y = 0. The face sits OUTSIDE the upright (z < 0); the top folds inward
+// into the ledge the shelf rests on. Each end has a folded clip with two hooks that go into the slots (+z).
+function beam(len) {
+  const g = new THREE.Group();
+  g.add(box(len, BEAM_H, T, M.galv, len / 2, -BEAM_H / 2, -T / 2 - 0.0005));
+  g.add(box(len - 0.07, T, 0.02, M.galv, len / 2, -T / 2, 0.01));                     // ledge for the shelf
+  const bead = new THREE.Mesh(new THREE.CylinderGeometry(0.0035, 0.0035, len - 0.07, 10), M.galv);
+  bead.rotation.z = Math.PI / 2; bead.position.set(len / 2, -0.004, 0.02); bead.castShadow = true; g.add(bead);
+  g.add(box(len - 0.07, T, 0.012, M.galv, len / 2, -BEAM_H + T / 2, 0.006));           // bottom return
+  for (const x of [0, len]) {
+    g.add(box(0.007, BEAM_H - 0.004, 0.006, M.galv, x, -BEAM_H / 2, -T / 2 - 0.001));  // folded end clip
+    for (const y of [-0.018, -0.05]) {
+      const hk = box(0.005, 0.014, 0.011, M.rivet, x, y, 0.005); hk.userData.hook = true; g.add(hk);
+    }
+  }
+  return g;
+}
+// shelf: rests on top of the beams, notched around the four uprights
+function shelfPanel() {
+  const g = new THREE.Group(), n = 0.05, mats = [M.woodEdge, M.woodEdge, M.wood, M.woodEdge, M.woodEdge, M.woodEdge];
+  const add = (w, d, x) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, SHELF, d), mats); m.position.set(x, SHELF / 2, 0); m.castShadow = m.receiveShadow = true; g.add(m); };
+  add(W - 2 * n, D, 0); add(n - 0.004, D - 2 * n, -(W / 2 - n / 2)); add(n - 0.004, D - 2 * n, W / 2 - n / 2);
+  return g;
+}
+
+// side frames (built lying on the floor, then stood up)
+function sideFrame(x, mirror) {
+  const g = new THREE.Group(); g.position.set(x, 0, 0); scene.add(g);
+  const s = mirror ? -1 : 1;
+  const ups = [];
+  for (const [z, rz] of [[0, 1], [D, -1]]) {
+    const u = upright(); u.scale.set(s, 1, rz); u.position.set(0, 0, z); g.add(u); ups.push(u);
+  }
+  const shorts = LEVELS.map(y => {
+    const b = beam(D - 2 * END); b.rotation.y = -Math.PI / 2; b.scale.z = mirror ? 1 : -1;
+    b.position.set(0, y, END); g.add(b); return b;
+  });
+  return { g, ups, shorts, x, s };
+}
+const left = sideFrame(0, false);
+const right = sideFrame(W, true);
+const longs = [];
+LEVELS.forEach((y, li) => [0, 1].forEach(back => {
+  const b = beam(W - 2 * END);
+  b.position.set(END, y, back ? D : 0);
+  if (back) b.scale.z = -1;
+  b.userData = { base: b.position.clone(), li, back };
+  scene.add(b); longs.push(b);
+}));
+const shelves = LEVELS.map((y, i) => { const s = shelfPanel(); s.position.set(W / 2, y, D / 2); s.userData.base = s.position.clone(); scene.add(s); return s; });
+
+// goods
+const goods = [];
+function addGood(obj, level, x, z = D / 2) { obj.position.set(x, LEVELS[level] + SHELF, z); obj.userData.base = obj.position.clone(); obj.userData.k = goods.length; scene.add(obj); goods.push(obj); }
+function toolbox(w = 0.42, h = 0.2, d = 0.26) { const g = new THREE.Group(); g.add(box(w, h, d, M.black, 0, h / 2, 0)); g.add(box(w * .9, 0.03, d * .3, M.black, 0, h + 0.015, 0)); for (const x of [-w * .3, w * .3]) g.add(box(0.05, 0.04, 0.02, M.red, x, h * .8, -d / 2 - 0.005)); return g; }
+function carton(w, h, d) { const g = new THREE.Group(); g.add(box(w, h, d, M.box, 0, h / 2, 0)); return g; }
+function can(r, h, blue) { const g = new THREE.Group(); const c = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 24), M.can); c.position.y = h / 2; c.castShadow = true; g.add(c); const b = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.005, r * 1.005, h * .35, 24), blue ? M.canBlue : M.red); b.position.y = h * .5; g.add(b); return g; }
+function tire() { const g = new THREE.Group(); const t = new THREE.Mesh(new THREE.TorusGeometry(0.21, 0.08, 14, 36), M.tire); t.rotation.x = Math.PI / 2; t.position.y = 0.08; t.castShadow = true; g.add(t); return g; }
+// level 0 (bottom): heavy cans
+[0.25, 0.55, 0.85].forEach((x, i) => addGood(can(0.13, 0.36, i % 2), 0, x, 0.3));
+addGood(carton(0.5, 0.36, 0.42), 0, 1.4); addGood(can(0.13, 0.36, 1), 0, 1.82, 0.3);
+// level 1: cartons
+addGood(carton(0.55, 0.4, 0.45), 1, 0.35); addGood(carton(0.45, 0.32, 0.4), 1, 0.92); addGood(carton(0.6, 0.45, 0.45), 1, 1.6);
+// level 2: toolboxes
+addGood(toolbox(), 2, 0.3); addGood(toolbox(0.5, 0.24, 0.3), 2, 0.85); addGood(toolbox(), 2, 1.4); addGood(can(0.1, 0.25, 0), 2, 1.8, 0.3);
+// level 3 (top): tires
+[0.33, 0.95].forEach(x => { addGood(tire(), 3, x); const t2 = tire(); t2.children[0].position.y = 0.24; addGood(t2, 3, x); });
+addGood(carton(0.5, 0.3, 0.4), 3, 1.62);
+
+// ---------- encastre demo rig (x = -30) ----------
+const demo = new THREE.Group(); demo.position.set(-30, 0, 0); scene.add(demo);
+const dUp = upright(1.2); demo.add(dUp);
+const dLong = beam(0.7); demo.add(dLong);
+const dHalf = 0;
+const dShort = beam(0.5); dShort.rotation.y = -Math.PI / 2; dShort.scale.z = -1; demo.add(dShort);
+const DEMO_Y = 0.75;
+const rivetHi = new THREE.MeshStandardMaterial({ color: 0xffc400, metalness: .3, roughness: .35, emissive: 0x996600, emissiveIntensity: .35 });
+[dLong, dShort].forEach(b => b.traverse(o => { if (o.userData.hook && o.position.x < 0.01) o.material = rivetHi; }));
+
+// ---------- parts kit (x = -60) ----------
+const kit = new THREE.Group(); kit.position.set(-60, 0, 0); scene.add(kit);
+const kitItems = [];
+function addKit(obj, pos, scale, label, qty, desc, below, spin) {
+  obj.position.copy(pos); obj.scale.setScalar(scale); kit.add(obj);
+  kitItems.push({ obj, scale, label, qty, desc, below, spin, anchor: new THREE.Vector3() });
+}
+{ const g = new THREE.Group(); const u = upright(2.0); u.position.set(-0.02, -1.0, -0.02); g.add(u); addKit(g, V(-2.3, 1.0, 0), 1, 'Parante', '× 4', 'Ángulo galvanizado con ranuras en toda su altura', true, true); }
+{ const g = new THREE.Group(); const b = beam(2.0); b.position.set(-1, 0.03, 0); b.rotation.x = 0.45; g.add(b); addKit(g, V(-0.15, 1.72, 0), 1, 'Larguero largo', '× 8', '2 m. Frente y fondo de cada estante', false, false); }
+{ const g = new THREE.Group(); const b = beam(0.6); b.position.set(-0.3, 0.03, 0); b.rotation.x = 0.45; g.add(b); addKit(g, V(1.9, 1.72, 0), 1, 'Larguero corto', '× 8', '60 cm. Costados de cada estante', false, false); }
+{ const g = new THREE.Group(); const s = shelfPanel(); s.rotation.x = -1.05; g.add(s); addKit(g, V(-0.15, 0.82, 0.3), 1, 'Estante de madera', '× 4', 'Apoya encima de los largueros', true, false); }
+{ const g = new THREE.Group(); const b = beam(0.16); b.position.set(-0.08, 0.04, 0); b.rotation.y = 0.5; g.add(b); addKit(g, V(2.0, 0.85, 0.3), 4, 'Ganchos de encastre', '', 'En cada punta del larguero: entran en las ranuras', true, true); }
+kit.updateMatrixWorld(true);
+const labelsDiv = document.getElementById('labels');
+kitItems.forEach((it, i) => {
+  const d = document.createElement('div'); d.className = 'lbl' + (it.below ? ' below' : '');
+  d.innerHTML = `<b><i>${i + 1}</i>${it.label}${it.qty ? `<em>${it.qty}</em>` : ''}</b><span>${it.desc}</span>`; labelsDiv.appendChild(d); it.el = d;
+  const bb = new THREE.Box3().setFromObject(it.obj);
+  it.anchor.set((bb.min.x + bb.max.x) / 2, it.below ? bb.min.y - 0.06 : bb.max.y + 0.1, (bb.min.z + bb.max.z) / 2);
+});
+
+// ---------- timeline ----------
+const T0 = { intro: 7, spec: 14, kit: [14, 31], demo: [31, 39], p1: 39, p2: 47, p3: 51.5, p4: 55.5, p5: 61.5, p6: 66.5, end: 72.5, total: 80 };
+const CAPS = [
+  [T0.demo[0], T0.demo[1], 'CLAVE', '★', 'Cómo funciona el encastre', 'La punta del larguero se apoya por fuera del parante, los ganchos entran en la ranura y se bajan hasta trabarse.'],
+  [T0.p1, T0.p2, 'PASO', 1, 'Armar los costados', 'Con el parante en el piso, encastrar los largueros cortos de abajo y de arriba. Repetir del otro lado.'],
+  [T0.p2, T0.p3, 'PASO', 2, 'Parar y unir abajo', 'Parar los dos costados y unirlos con los largueros largos de abajo, frente y fondo.'],
+  [T0.p3, T0.p4, 'PASO', 3, 'Unir arriba', 'Encastrar los largueros largos de arriba: la estructura queda firme y en escuadra.'],
+  [T0.p4, T0.p5, 'PASO', 4, 'Niveles intermedios', 'Los otros dos niveles van a la altura que se necesite: cualquier ranura sirve.'],
+  [T0.p5, T0.p6, 'PASO', 5, 'Colocar los estantes', 'Las placas de madera apoyan encima de los largueros.'],
+  [T0.p6, T0.end, 'PASO', 6, 'Listo para cargar', 'Soporta 1.400 kg. Lo más pesado, en los estantes de abajo.'],
+];
+
+function beamIn(b, t, t0, dur, out) {
+  // slide in horizontally, then drop into the slots
+  const p = prog(t, t0, dur); b.visible = p > 0;
+  const a = easeOut(clamp(p / 0.65)), d = easeOut(clamp((p - 0.65) / 0.35));
+  b.position.copy(b.userData.base);
+  b.position.addScaledVector(out, 1 - a);
+  b.position.y += 0.025 * (1 - d);
+}
+function frameState(f, t, tA) {
+  // tA: start; uprights appear lying, short beams snap on, then the frame stands up
+  const lying = 1 - ease(prog(t, tA + 3.4, 1.6));
+  f.g.visible = t >= tA;
+  f.g.rotation.z = -Math.PI / 2 * lying;
+  f.g.position.y = 0.045 * lying;
+  f.ups.forEach((u, i) => { const p = prog(t, tA + i * 0.35, 0.6); u.visible = p > 0; u.position.x = -0.4 * (1 - easeOut(p)); });
+  f.shorts.forEach((b, li) => {
+    const tt = li === 0 ? tA + 1.1 : li === 3 ? tA + 1.9 : T0.p4 + 0.4 + (li - 1) * 0.9 + (f.s < 0 ? 0.45 : 0);
+    const p = prog(t, tt, 0.8); b.visible = p > 0;
+    if (!b.userData.base) b.userData.base = b.position.clone();
+    b.position.copy(b.userData.base);
+    const a = easeOut(clamp(p / 0.65)), d = easeOut(clamp((p - 0.65) / 0.35));
+    if (li === 0 || li === 3) { const k = 0.001 + 0.999 * easeBack(clamp(p / 0.7)); b.scale.x = k; b.scale.y = k; }
+    else b.position.x += -f.s * 0.25 * (1 - a);
+    b.position.y += 0.02 * (1 - d);
+  });
+}
+
+const RC = V(1.0, 1.0, 0.3);
+const orbit = (a, r, h, c = RC) => V(c.x + r * Math.sin(a), h, c.z - r * Math.cos(a));
+// Camera: each continuous section is a time-based cubic Hermite curve through keyframes, so the camera never
+// stops at a keyframe (velocity is continuous) and only eases at the start and end of a section.
+const K = (t, p, q) => ({ t, p, q });
+const SECTIONS = [
+  { from: 14, to: 31, keys: [K(14, V(-60.15, 1.25, 5.1), V(-60, 1.08, 0)), K(31, V(-59.85, 1.22, 4.9), V(-60, 1.08, 0))] },
+  { from: 31, to: 39, keys: [K(31, V(-30.19, 1.13, -0.3), V(-29.985, 0.735, -0.01)), K(39, V(-30.13, 1.05, -0.24), V(-29.985, 0.73, 0.0))] },
+  { from: 39, to: 80, keys: [
+    K(39, V(2.4, 1.9, -2.3), V(1.8, 0.35, 0.3)),
+    K(45, V(2.7, 1.8, -3.4), V(1.3, 0.85, 0.3)),
+    K(51, V(1.8, 1.6, -4.2), V(1.0, 1.0, 0.3)),
+    K(57, V(2.5, 1.5, -3.4), V(1.0, 1.0, 0.3)),
+    K(63, V(2.0, 2.2, -3.1), V(1.0, 0.95, 0.3)),
+    K(68, V(0.2, 1.6, -3.7), V(1.0, 1.0, 0.3)),
+    K(72.5, orbit(-0.25, 4.6, 1.9), RC.clone()),
+    K(76.3, orbit(-0.6, 4.6, 1.9), RC.clone()),
+    K(80, orbit(-0.95, 4.6, 1.9), RC.clone())] },
+];
+function hermite(keys, t, field) {
+  const n = keys.length;
+  if (t <= keys[0].t) return keys[0][field].clone();
+  if (t >= keys[n - 1].t) return keys[n - 1][field].clone();
+  let i = 0; while (t > keys[i + 1].t) i++;
+  const a = keys[i], b = keys[i + 1], h = b.t - a.t, u = (t - a.t) / h;
+  const tan = (k) => {             // finite-difference velocity in m/s; zero at the ends of the section
+    if (k === 0 || k === n - 1) return new THREE.Vector3();
+    return keys[k + 1][field].clone().sub(keys[k - 1][field]).divideScalar(keys[k + 1].t - keys[k - 1].t);
+  };
+  const m0 = tan(i).multiplyScalar(h), m1 = tan(i + 1).multiplyScalar(h);
+  const u2 = u * u, u3 = u2 * u;
+  return a[field].clone().multiplyScalar(2 * u3 - 3 * u2 + 1).add(m0.multiplyScalar(u3 - 2 * u2 + u))
+    .add(b[field].clone().multiplyScalar(-2 * u3 + 3 * u2)).add(m1.multiplyScalar(u3 - u2));
+}
+function cameraAt(t) {
+  let fo = 0;
+  if (t < 14) fo = -13 + 21 * ease(prog(t, 6.1, 2.6));
+  if (t >= 72.5) fo = -9 * ease(prog(t, 72.8, 3.2));
+  camera.filmOffset = fo; camera.updateProjectionMatrix();
+  if (t < 14) { camera.position.copy(orbit(-1.0 + 1.25 * (t / 14), 4.4, 1.85)); camera.lookAt(RC); return; }
+  const sec = SECTIONS.find(x => t >= x.from && t < x.to) || SECTIONS[SECTIONS.length - 1];
+  // a single-segment section (the parts kit) gets a gentle ease; longer ones use the curve as is
+  const tt = sec.keys.length === 2 ? sec.from + (sec.to - sec.from) * ease(prog(t, sec.from, sec.to - sec.from)) : t;
+  camera.position.copy(hermite(sec.keys, tt, 'p'));
+  camera.lookAt(hermite(sec.keys, tt, 'q'));
+}
+
+const $ = id => document.getElementById(id);
+function renderAt(t) {
+  const full = t < T0.spec;            // intro + ficha: finished, loaded rack
+  const tt = full ? 1e9 : t;
+
+  frameState(left, tt, T0.p1 + 0.2);
+  frameState(right, tt, T0.p1 + 2.6);
+
+  longs.forEach(b => {
+    const { li, back } = b.userData;
+    const out = V(0, 0, back ? 0.3 : -0.3);
+    const t0 = li === 0 ? T0.p2 + 1.2 + back * 0.9 : li === 3 ? T0.p3 + 0.3 + back * 0.9 : T0.p4 + 0.8 + (li - 1) * 1.6 + back * 0.6;
+    beamIn(b, tt, t0, 1.1, out);
+  });
+  shelves.forEach((s, i) => {
+    const p = prog(tt, T0.p5 + 0.3 + i * 0.9, 0.9); s.visible = p > 0;
+    s.position.copy(s.userData.base); s.position.y += 0.7 * (1 - easeOut(p)); s.rotation.x = 0.25 * (1 - easeOut(p));
+  });
+  goods.forEach(g => {
+    const p = prog(tt, T0.p6 + 0.4 + g.userData.k * 0.18, 0.7); g.visible = p > 0;
+    g.position.copy(g.userData.base); g.position.z -= 0.9 * (1 - easeOut(p)); g.position.y += 0.03 * Math.sin(Math.PI * p);
+  });
+
+  // encastre demo
+  const inDemo = t >= T0.demo[0] - 0.5 && t < T0.demo[1] + 0.5;
+  demo.visible = inDemo;
+  if (inDemo) {
+    const cyc = (t0) => { const a = easeOut(prog(t, t0, 1.3)), d = easeOut(prog(t, t0 + 1.5, 0.6)); return { a, d }; };
+    const L = cyc(T0.demo[0] + 0.6);
+    dLong.position.set(END, DEMO_Y + 0.02 * (1 - L.d), -0.14 * (1 - L.a));
+    const S = cyc(T0.demo[0] + 3.5);
+    dShort.visible = t > T0.demo[0] + 3.4;
+    dShort.position.set(-0.14 * (1 - S.a), DEMO_Y + 0.02 * (1 - S.d), END);
+  }
+
+  // kit
+  const inKit = t >= T0.kit[0] - 0.5 && t < T0.kit[1] + 0.5;
+  kit.visible = inKit;
+  cameraAt(t); camera.updateMatrixWorld();
+  kitItems.forEach((it, i) => {
+    const t0 = T0.kit[0] + 1.0 + i * 1.9;
+    const p = prog(t, t0, 0.7);
+    it.obj.visible = p > 0;
+    it.obj.scale.setScalar(it.scale * (0.001 + 0.999 * easeBack(p)));
+    it.obj.rotation.y = it.spin ? Math.sin((t - t0) * 0.7) * 0.5 : 0;
+    const op = inKit ? clamp((t - t0 - 0.2) / 0.5) * clamp((T0.kit[1] - 0.6 - t) / 0.5) : 0;
+    it.el.style.opacity = op;
+    if (op > 0) { const v = it.anchor.clone().project(camera); it.el.style.left = ((v.x + 1) / 2 * 1920) + 'px'; it.el.style.top = ((1 - v.y) / 2 * 1080) + 'px'; }
+  });
+
+  // overlays
+  $('title').style.opacity = win(t, -1, 6.6, 0.7); $('grad').style.opacity = win(t, -1, 6.9, 0.7);
+  $('title').style.transform = `translateY(${(1 - easeOut(prog(t, 0.2, 1.2))) * 40}px)`;
+  $('spec').style.opacity = win(t, 8.0, 13.7, 0.6);
+  $('spec').style.transform = `translateX(${(1 - easeOut(prog(t, 8.0, 1))) * 60}px)`;
+  $('head').style.opacity = win(t, T0.kit[0] + 0.4, T0.kit[1] - 0.6, 0.5);
+  $('formula').style.opacity = win(t, T0.kit[0] + 11.5, T0.kit[1] - 0.6, 0.5);
+  $('end').style.opacity = win(t, T0.end + 2, T0.total + 5, 0.8);
+  $('end').style.transform = `translateX(${(1 - easeOut(prog(t, T0.end + 2, 1))) * -60}px)`;
+  let cap = null; for (const c of CAPS) if (t >= c[0] && t < c[1]) cap = c;
+  const capEl = $('cap');
+  if (cap) {
+    $('capk').textContent = cap[2]; $('capn').textContent = cap[3]; $('capt').textContent = cap[4]; $('caps').textContent = cap[5];
+    capEl.style.opacity = win(t, cap[0] + 0.15, cap[1] - 0.05, 0.35);
+    capEl.style.transform = `translateY(${(1 - easeOut(prog(t, cap[0] + 0.15, 0.5))) * 30}px)`;
+  } else capEl.style.opacity = 0;
+  let fo = 1 - clamp(t / 0.6);
+  for (const [c, w] of [[T0.kit[0], 0.6], [T0.demo[0], 0.5], [T0.demo[1], 0.5], [T0.total, 0.8]]) fo = Math.max(fo, 1 - clamp(Math.abs(t - c) / w));
+  $('fade').style.opacity = fo;
+
+  renderer.render(scene, camera);
+}
+window.renderAt = renderAt; window.TOTAL = T0.total; window.__camAt = (t) => { cameraAt(t); return [camera.position.x, camera.position.y, camera.position.z, camera.filmOffset]; };
+renderAt(0);
+document.fonts.ready.then(() => { window.ready = true; });
+</script>
+</body>
+</html>
