@@ -586,3 +586,5 @@
 .mark-tools .section-label { margin: 0; }
 .mark-tools .muted { margin: 0; }
 .mark-tools .plan-tools { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.plan-snap__select { margin-left: 4px; padding: 2px 4px; border: 1px solid var(--line); border-radius: 6px; background: #fff; font: inherit; color: var(--ink); }
+.plan-editor__square { display: inline-block; width: 10px; height: 10px; border: 1px solid #b9bec5; vertical-align: -1px; }

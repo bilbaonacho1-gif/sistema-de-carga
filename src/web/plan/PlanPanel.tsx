@@ -31,7 +31,7 @@ export function PlanPanel() {
 
 /** Herramientas, instructivo, lo seleccionado y los datos del depósito (sin el marco). */
 export function PlanTools() {
-  const { tool, setTool, plan, commit, undo, redo, past, future, snap, setSnap, showCotas, setShowCotas } = usePlan()
+  const { tool, setTool, plan, commit, undo, redo, past, future, snap, setSnap, snapStep, setSnapStep, showCotas, setShowCotas } = usePlan()
   const current = TOOLS.find((t) => t.id === tool)!
   const outside = itemsOutside(plan).size
   const hasMarks = !!(plan.rackAreas?.length || plan.aisles?.length)
@@ -49,7 +49,15 @@ export function PlanTools() {
         <Button size="sm" variant="ghost" icon={Undo2} onClick={undo} disabled={!past.length}>Deshacer</Button>
         <Button size="sm" variant="ghost" icon={Redo2} onClick={redo} disabled={!future.length}>Rehacer</Button>
         <span className="plan-toggles">
-          <label className="plan-snap"><input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} /> Imán 10 cm</label>
+          <label className="plan-snap" title="Lo que dibujás o arrastrás se acomoda a esta medida (Alt para mover libre)">Imán
+            <select className="plan-snap__select" value={snap ? snapStep : 0}
+              onChange={(e) => { const v = Number(e.target.value); setSnap(v > 0); if (v > 0) setSnapStep(v) }}>
+              <option value={1000}>1 m</option>
+              <option value={500}>50 cm</option>
+              <option value={100}>10 cm</option>
+              <option value={0}>Sin imán</option>
+            </select>
+          </label>
           <label className="plan-snap"><input type="checkbox" checked={showCotas} onChange={(e) => setShowCotas(e.target.checked)} /> Cotas</label>
         </span>
       </div>
@@ -72,7 +80,7 @@ export function PlanTools() {
           <Button size="sm" onClick={() => commit(removeOutside)}>Quitar lo que quedó afuera</Button>
         </div>
       )}
-      <NumberStepper label="Altura de las paredes" meters value={plan.wallHeight} min={2500} max={20_000} step={100}
+      <NumberStepper label="Altura de las paredes" meters value={plan.wallHeight} min={2500} max={20_000} step={1000} typedStep={10}
         onChange={(wallHeight) => commit((p) => ({ ...p, wallHeight }))} />
       <NumberStepper label="Espesor de las paredes" meters value={plan.wallThickness} min={100} max={600} step={10}
         onChange={(wallThickness) => commit((p) => ({ ...p, wallThickness }))} />
@@ -96,9 +104,9 @@ function Selection() {
     return (
       <div className="plan-sel">
         <h2 className="section-label">Esquina {selection.index + 1}</h2>
-        <NumberStepper label="Posición X" meters value={p.x} min={-500_000} max={500_000} step={100}
+        <NumberStepper label="Posición X" meters value={p.x} min={-500_000} max={500_000} step={1000} typedStep={10}
           onChange={(x) => commit((pl) => ({ ...pl, outline: { ...pl.outline, points: pl.outline.points.map((q, j) => (j === selection.index ? { ...q, x } : q)) } }))} />
-        <NumberStepper label="Posición Y" meters value={p.y} min={-500_000} max={500_000} step={100}
+        <NumberStepper label="Posición Y" meters value={p.y} min={-500_000} max={500_000} step={1000} typedStep={10}
           onChange={(y) => commit((pl) => ({ ...pl, outline: { ...pl.outline, points: pl.outline.points.map((q, j) => (j === selection.index ? { ...q, y } : q)) } }))} />
         <Button size="sm" variant="ghost" icon={Trash2} disabled={plan.outline.points.length <= 3} onClick={() => del((pl) => removeVertex(pl, selection.index))}>Quitar esquina</Button>
       </div>
@@ -119,12 +127,12 @@ function Selection() {
             options={[{ value: 'recta', label: 'Recta' }, { value: 'curva', label: 'Curva' }]} />
         )}</Field>
         {curved ? <>
-          <NumberStepper label="Flecha (cuánto se curva)" meters value={Math.abs(e.sag)} min={50} max={Math.round(chord / 2)} step={100}
+          <NumberStepper label="Flecha (cuánto se curva)" meters value={Math.abs(e.sag)} min={50} max={Math.round(chord / 2)} step={1000} typedStep={10}
             onChange={(v) => commit((pl) => setSag(pl, selection.index, Math.sign(e.sag || -1) * v))}
             hint={`Largo del arco: ${metros(edgeLength(e))} · cuerda ${metros(chord)}`} />
           <Button size="sm" variant="ghost" onClick={() => commit((pl) => setSag(pl, selection.index, -e.sag))}>Curvar para el otro lado</Button>
         </> : (
-          <NumberStepper label="Largo" meters value={Math.round(chord)} min={100} max={500_000} step={100}
+          <NumberStepper label="Largo" meters value={Math.round(chord)} min={100} max={500_000} step={1000} typedStep={10}
             onChange={(v) => commit((pl) => setEdgeLength(pl, selection.index, v))}
             hint="Se mueve la esquina final; la pared siguiente se acomoda." />
         )}
@@ -147,8 +155,8 @@ function Selection() {
         <NumberStepper label={c.shape === 'round' ? 'Diámetro' : 'Ancho'} meters value={c.w} min={100} max={3000} step={50} onChange={(w) => upd(c.shape === 'round' ? { w, d: w } : { w })} />
         {c.shape === 'rect' && <NumberStepper label="Fondo" meters value={c.d} min={100} max={3000} step={50} onChange={(d) => upd({ d })} />}
         <div className="plan-xy">
-          <NumberStepper label="X" meters value={c.x} min={-500_000} max={500_000} step={100} onChange={(x) => upd({ x })} />
-          <NumberStepper label="Y" meters value={c.y} min={-500_000} max={500_000} step={100} onChange={(y) => upd({ y })} />
+          <NumberStepper label="X" meters value={c.x} min={-500_000} max={500_000} step={1000} typedStep={10} onChange={(x) => upd({ x })} />
+          <NumberStepper label="Y" meters value={c.y} min={-500_000} max={500_000} step={1000} typedStep={10} onChange={(y) => upd({ y })} />
         </div>
         <Button size="sm" variant="ghost" icon={Trash2} onClick={() => del((pl) => removeItem(pl, 'column', c.id))}>Quitar columna</Button>
       </div>
@@ -162,7 +170,7 @@ function Selection() {
     return (
       <div className="plan-sel">
         <h2 className="section-label">Tabique</h2>
-        <NumberStepper label="Largo" meters value={Math.round(len)} min={100} max={500_000} step={100}
+        <NumberStepper label="Largo" meters value={Math.round(len)} min={100} max={500_000} step={1000} typedStep={10}
           onChange={(v) => commit((pl) => ({ ...pl, walls: pl.walls.map((x) => {
             if (x.id !== w.id) return x
             const k = v / (len || 1)
@@ -182,8 +190,8 @@ function Selection() {
     return (
       <div className="plan-sel">
         <h2 className="section-label">Portón</h2>
-        <NumberStepper label="Ancho" meters value={d.width} min={800} max={12_000} step={100} onChange={(width) => upd({ width })} />
-        <NumberStepper label="Alto" meters value={d.height} min={2000} max={plan.wallHeight} step={100} onChange={(height) => upd({ height })} />
+        <NumberStepper label="Ancho" meters value={d.width} min={800} max={12_000} step={500} typedStep={10} onChange={(width) => upd({ width })} />
+        <NumberStepper label="Alto" meters value={d.height} min={2000} max={plan.wallHeight} step={500} typedStep={10} onChange={(height) => upd({ height })} />
         <Button size="sm" variant="ghost" icon={Trash2} onClick={() => del((pl) => removeItem(pl, 'door', d.id))}>Quitar portón</Button>
       </div>
     )
@@ -202,12 +210,12 @@ function Selection() {
             options={[{ value: 'x', label: 'Horizontales' }, { value: 'y', label: 'Verticales' }]} />
         )}</Field>
         <div className="plan-xy">
-          <NumberStepper label="Ancho" meters value={a.w} min={1000} max={500_000} step={500} onChange={(w) => upd({ w })} />
-          <NumberStepper label="Fondo" meters value={a.d} min={1000} max={500_000} step={500} onChange={(d) => upd({ d })} />
+          <NumberStepper label="Ancho" meters value={a.w} min={1000} max={500_000} step={1000} typedStep={10} onChange={(w) => upd({ w })} />
+          <NumberStepper label="Fondo" meters value={a.d} min={1000} max={500_000} step={1000} typedStep={10} onChange={(d) => upd({ d })} />
         </div>
         <div className="plan-xy">
-          <NumberStepper label="X" meters value={a.x} min={-500_000} max={500_000} step={100} onChange={(x) => upd({ x })} />
-          <NumberStepper label="Y" meters value={a.y} min={-500_000} max={500_000} step={100} onChange={(y) => upd({ y })} />
+          <NumberStepper label="X" meters value={a.x} min={-500_000} max={500_000} step={1000} typedStep={10} onChange={(x) => upd({ x })} />
+          <NumberStepper label="Y" meters value={a.y} min={-500_000} max={500_000} step={1000} typedStep={10} onChange={(y) => upd({ y })} />
         </div>
         <p className="muted small">Arrastrá el borde o el nombre para moverla y la manija de la esquina para cambiar el tamaño.</p>
         <Button size="sm" variant="ghost" icon={Trash2} onClick={() => del((pl) => removeItem(pl, 'area', a.id))}>Quitar zona de racks</Button>
@@ -224,13 +232,13 @@ function Selection() {
     return (
       <div className="plan-sel">
         <h2 className="section-label">Pasillo {vertical ? 'vertical' : 'horizontal'}</h2>
-        <NumberStepper label="Ancho del pasillo" meters value={width} min={800} max={20_000} step={100}
+        <NumberStepper label="Ancho del pasillo" meters value={width} min={800} max={20_000} step={500} typedStep={10}
           onChange={(v) => upd(vertical ? { w: v, x: Math.round(a.x + (a.w - v) / 2) } : { d: v, y: Math.round(a.y + (a.d - v) / 2) })}
           hint="Para autoelevador contrapesado, unos 3,5 m; para retráctil, unos 2,8 m." />
-        <NumberStepper label="Largo" meters value={length} min={1000} max={500_000} step={500} onChange={(v) => upd(vertical ? { d: v } : { w: v })} />
+        <NumberStepper label="Largo" meters value={length} min={1000} max={500_000} step={1000} typedStep={10} onChange={(v) => upd(vertical ? { d: v } : { w: v })} />
         <div className="plan-xy">
-          <NumberStepper label="X" meters value={a.x} min={-500_000} max={500_000} step={100} onChange={(x) => upd({ x })} />
-          <NumberStepper label="Y" meters value={a.y} min={-500_000} max={500_000} step={100} onChange={(y) => upd({ y })} />
+          <NumberStepper label="X" meters value={a.x} min={-500_000} max={500_000} step={1000} typedStep={10} onChange={(x) => upd({ x })} />
+          <NumberStepper label="Y" meters value={a.y} min={-500_000} max={500_000} step={1000} typedStep={10} onChange={(y) => upd({ y })} />
         </div>
         <Button size="sm" variant="ghost" icon={vertical ? RotateCcw : RotateCw} onClick={() => commit((pl) => rotateAisle(pl, a.id))}>Girar 90°</Button>
         <Button size="sm" variant="ghost" icon={Trash2} onClick={() => del((pl) => removeItem(pl, 'aisle', a.id))}>Quitar pasillo</Button>
@@ -245,8 +253,8 @@ function Selection() {
     <div className="plan-sel">
       <h2 className="section-label">Zona libre</h2>
       <Field label="Nombre">{(id) => <Input id={id} value={z.name} onChange={(e) => upd({ name: e.target.value })} />}</Field>
-      <NumberStepper label="Ancho" meters value={z.w} min={500} max={200_000} step={100} onChange={(w) => upd({ w })} />
-      <NumberStepper label="Fondo" meters value={z.d} min={500} max={200_000} step={100} onChange={(d) => upd({ d })} />
+      <NumberStepper label="Ancho" meters value={z.w} min={500} max={200_000} step={1000} typedStep={10} onChange={(w) => upd({ w })} />
+      <NumberStepper label="Fondo" meters value={z.d} min={500} max={200_000} step={1000} typedStep={10} onChange={(d) => upd({ d })} />
       <Button size="sm" variant="ghost" icon={Trash2} onClick={() => del((pl) => removeItem(pl, 'zone', z.id))}>Quitar zona</Button>
     </div>
   )
@@ -261,8 +269,8 @@ function QuickStart() {
   return (
     <details className="plan-more">
       <summary>Empezar con un depósito rectangular</summary>
-      <NumberStepper label="Largo" meters value={L} min={2000} max={500_000} step={500} onChange={setL} />
-      <NumberStepper label="Ancho" meters value={W} min={2000} max={500_000} step={500} onChange={setW} />
+      <NumberStepper label="Largo" meters value={L} min={2000} max={500_000} step={1000} typedStep={10} onChange={setL} />
+      <NumberStepper label="Ancho" meters value={W} min={2000} max={500_000} step={1000} typedStep={10} onChange={setW} />
       <Button size="sm" onClick={() => { commit((p) => rectanglePlan(L, W, { wallHeight: p.wallHeight, wallThickness: p.wallThickness })); select(null) }} block>
         Reemplazar el plano por {fmt(L / 1000)} × {fmt(W / 1000)} m
       </Button>
@@ -278,8 +286,8 @@ function ColumnGrid() {
   return (
     <details className="plan-more">
       <summary><Grid3x3 size={15} aria-hidden /> Grilla de columnas</summary>
-      <NumberStepper label="Separación a lo largo" meters value={dx} min={2000} max={50_000} step={500} onChange={setDx} />
-      <NumberStepper label="Separación a lo ancho" meters value={dy} min={2000} max={50_000} step={500} onChange={setDy} />
+      <NumberStepper label="Separación a lo largo" meters value={dx} min={2000} max={50_000} step={1000} typedStep={10} onChange={setDx} />
+      <NumberStepper label="Separación a lo ancho" meters value={dy} min={2000} max={50_000} step={1000} typedStep={10} onChange={setDy} />
       <NumberStepper label="Medida de la columna" meters value={size} min={150} max={1500} step={50} onChange={setSize} />
       <Button size="sm" onClick={() => commit((p) => columnGrid(p, dx, dy, size))} block>Generar columnas (reemplaza las actuales)</Button>
     </details>
