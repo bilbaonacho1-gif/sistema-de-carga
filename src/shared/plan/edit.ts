@@ -118,11 +118,12 @@ export function removeOutside(plan: Plan): Plan {
 }
 
 /** Borra lo seleccionado. */
-export function removeItem(plan: Plan, kind: 'column' | 'wall' | 'door' | 'zone', id: string): Plan {
+export function removeItem(plan: Plan, kind: 'column' | 'wall' | 'door' | 'zone' | 'rack', id: string): Plan {
   switch (kind) {
     case 'column': return { ...plan, columns: plan.columns.filter((x) => x.id !== id) }
     case 'wall': return { ...plan, walls: plan.walls.filter((x) => x.id !== id) }
     case 'door': return { ...plan, doors: plan.doors.filter((x) => x.id !== id) }
     case 'zone': return { ...plan, zones: plan.zones.filter((x) => x.id !== id) }
+    case 'rack': return { ...plan, racks: (plan.racks ?? []).filter((x) => x.id !== id) }
   }
 }

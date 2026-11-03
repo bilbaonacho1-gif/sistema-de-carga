@@ -1,7 +1,5 @@
-import type { RackConfiguration } from '../rack/types'
-
 /**
- * PLANO DEL DEPÓSITO. Medidas en mm (al usuario se le muestran en metros). Ejes del plano: x hacia la derecha, y hacia abajo
+ * PLANO DEL DEPÓSITO. Medidas en mm. Ejes del plano: x hacia la derecha, y hacia abajo
  * (como se dibuja en pantalla); en el 3D, y del plano pasa a ser z.
  */
 
@@ -54,16 +52,19 @@ export interface PlanZone {
   name: string
 }
 
-/**
- * Un rack ubicado en el depósito: su configuración (la del cotizador) y dónde está.
- * (x, y) es el origen local del rack (frente izquierdo de la primera fila); rotation en grados.
- */
-export interface PlanRack {
+/** Un rack ubicado en el plano: una fila (o un par de filas espalda con espalda) de módulos. */
+export interface RackPlacement {
   id: string
+  /** Esquina superior izquierda del rectángulo que ocupa, en mm del plano. */
   x: number
   y: number
-  rotation: number
-  config: RackConfiguration
+  orientation: 'x' | 'y'
+  modules: number
+  /** Largo a lo largo de la fila (mm). */
+  length: number
+  /** Profundidad que ocupa (mm): una fila, o las dos del par más su separación. */
+  depth: number
+  pair: boolean
 }
 
 export interface Plan {
@@ -74,8 +75,11 @@ export interface Plan {
   walls: PlanWall[]
   doors: PlanDoor[]
   zones: PlanZone[]
-  /** Racks ubicados (opcional: los planos guardados antes no los tenían). */
-  racks?: PlanRack[]
+  /**
+   * Racks ubicados a mano. Si no hay, los ubica la distribución automática; al mover, girar o
+   * borrar uno, la distribución se copia acá y desde ahí se edita libremente.
+   */
+  racks?: RackPlacement[]
 }
 
 /** Lo que se puede seleccionar en el editor. */

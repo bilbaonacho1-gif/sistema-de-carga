@@ -39,3 +39,28 @@ describe('paredes rectas y curvas', () => {
     expect(n.distance).toBeCloseTo(300, 6)
   })
 })
+
+describe('cotas', () => {
+  it('la normal de afuera apunta fuera del depósito en cualquier sentido de dibujo', async () => {
+    const { outwardNormal, outlinePolygon } = await import('./geometry')
+    const p = rectanglePlan(10_000, 5000)
+    const poly = outlinePolygon(p.outline)
+    const [arriba, derecha] = edges(p.outline)
+    expect(outwardNormal(arriba, poly)).toEqual({ x: -0, y: -1 })
+    expect(outwardNormal(derecha, poly).x).toBeCloseTo(1, 9)
+    // dibujado al revés (sentido horario ↔ antihorario) sigue apuntando afuera
+    const inv = { ...p, outline: { points: [...p.outline.points].reverse(), sags: [0, 0, 0, 0] } }
+    const e0 = edges(inv.outline)[0]   // de (0,5000) a (10000,5000): la de abajo
+    expect(outwardNormal(e0, outlinePolygon(inv.outline)).y).toBeCloseTo(1, 9)
+  })
+
+  it('mide la distancia de una columna a las paredes', async () => {
+    const { rayToPolygon, outlinePolygon } = await import('./geometry')
+    const poly = outlinePolygon(rectanglePlan(30_000, 20_000).outline)
+    const c = { x: 10_000, y: 5000 }
+    expect(rayToPolygon(c, { x: -1, y: 0 }, poly)).toBeCloseTo(10_000, 6)
+    expect(rayToPolygon(c, { x: 1, y: 0 }, poly)).toBeCloseTo(20_000, 6)
+    expect(rayToPolygon(c, { x: 0, y: -1 }, poly)).toBeCloseTo(5000, 6)
+    expect(rayToPolygon(c, { x: 0, y: 1 }, poly)).toBeCloseTo(15_000, 6)
+  })
+})

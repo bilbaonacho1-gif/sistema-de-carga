@@ -2,14 +2,11 @@
  * Panel izquierdo del depósito: herramientas con su instructivo, arranque rápido,
  * grilla de columnas y las medidas de lo que esté seleccionado.
  */
-import { Box, Circle, Copy, DoorOpen, Download, Grid3x3, LayoutGrid, MousePointer2, PenLine, Pencil, Redo2, RotateCw, Square, Trash2, Undo2, Minus as WallIcon, type LucideIcon } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { Box, Circle, DoorOpen, Grid3x3, MousePointer2, PenLine, Redo2, Square, Trash2, Undo2, Minus as WallIcon, type LucideIcon } from 'lucide-react'
+import { useState } from 'react'
 import { columnGrid, itemsOutside, removeItem, removeOutside, removeVertex, setEdgeLength, setSag, splitEdge } from '../../shared/plan/edit'
 import { arcOf, edgeLength, edges, planArea, planPerimeter, rectanglePlan } from '../../shared/plan/geometry'
-import { CONFLICT_TEXT, configKey, localBox, rackConflicts, rackTotals, removeRack, repeatRack, rotateRack, structureFor, updateRack } from '../../shared/plan/racks'
 import type { Plan } from '../../shared/plan/types'
-import { MaterialsList } from '../pages/designer/CotizadorPanel'
-import { startEditingRack } from './rackEditing'
 import { NumberStepper } from '../components/fields'
 import { Button, Field, Input, KeyValue, Segmented } from '../components/ui'
 import { fmt } from '../lib/format'
@@ -17,8 +14,7 @@ import { usePlan, type PlanTool } from './planStore'
 import { metros } from '../../shared/units'
 
 const TOOLS: { id: PlanTool; label: string; icon: LucideIcon; help: string }[] = [
-  { id: 'select', label: 'Seleccionar', icon: MousePointer2, help: 'Arrastrá los puntos rojos para mover las esquinas o un rack para moverlo. Tocá una pared para escribir su largo o curvarla (arrastrando su manija del medio). Con un rack elegido: R lo gira, Ctrl+D lo duplica y Supr lo quita. Arrastrá el fondo para moverte y usá la rueda para acercar.' },
-  { id: 'rack', label: 'Rack', icon: LayoutGrid, help: 'Clic donde va cada rack: se ubica el rack que armaste en la pestaña Rack. R lo gira antes de ponerlo. Después lo podés mover, girar, editar o copiar en serie desde este panel.' },
+  { id: 'select', label: 'Seleccionar', icon: MousePointer2, help: 'Arrastrá los puntos rojos para mover las esquinas. Tocá una pared para escribir su largo o curvarla (arrastrando su manija del medio). Doble clic en una pared agrega un punto. Arrastrá el fondo para moverte y usá la rueda para acercar.' },
   { id: 'outline', label: 'Dibujar contorno', icon: PenLine, help: 'Hacé clic en cada esquina del depósito. Para cerrar, tocá el primer punto o apretá Enter. Las paredes se alinean solas a 90° cuando están casi derechas. Esc cancela.' },
   { id: 'column', label: 'Columna', icon: Square, help: 'Clic donde va cada columna. Después la podés arrastrar o escribir su medida. Para muchas columnas iguales usá "Grilla de columnas".' },
   { id: 'wall', label: 'Tabique', icon: WallIcon, help: 'Clic en el comienzo y en el final de la pared interna. Sigue encadenando la siguiente desde donde terminó; Esc termina.' },
@@ -26,12 +22,18 @@ const TOOLS: { id: PlanTool; label: string; icon: LucideIcon; help: string }[] =
   { id: 'zone', label: 'Zona libre', icon: Box, help: 'Clic para marcar un área donde no van racks (oficinas, carga y descarga). Después ajustá su medida y su nombre.' },
 ]
 
+/** El panel del depósito completo (con su marco). */
 export function PlanPanel() {
-  const { tool, setTool, plan, commit, undo, redo, past, future, snap, setSnap } = usePlan()
+  return <section className="designer__panel plan-panel" aria-label="Plano del depósito"><PlanTools /></section>
+}
+
+/** Herramientas, instructivo, lo seleccionado y los datos del depósito (sin el marco). */
+export function PlanTools() {
+  const { tool, setTool, plan, commit, undo, redo, past, future, snap, setSnap, showCotas, setShowCotas } = usePlan()
   const current = TOOLS.find((t) => t.id === tool)!
   const outside = itemsOutside(plan).size
   return (
-    <section className="designer__panel plan-panel" aria-label="Plano del depósito">
+    <>
       <div className="plan-tools" role="toolbar" aria-label="Herramientas">
         {TOOLS.map((t) => (
           <button key={t.id} type="button" className={`plan-tool${tool === t.id ? ' is-active' : ''}`} aria-pressed={tool === t.id} onClick={() => setTool(t.id)} title={t.label}>
@@ -43,7 +45,10 @@ export function PlanPanel() {
       <div className="plan-history">
         <Button size="sm" variant="ghost" icon={Undo2} onClick={undo} disabled={!past.length}>Deshacer</Button>
         <Button size="sm" variant="ghost" icon={Redo2} onClick={redo} disabled={!future.length}>Rehacer</Button>
-        <label className="plan-snap"><input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} /> Imán 10 cm</label>
+        <span className="plan-toggles">
+          <label className="plan-snap"><input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} /> Imán 10 cm</label>
+          <label className="plan-snap"><input type="checkbox" checked={showCotas} onChange={(e) => setShowCotas(e.target.checked)} /> Cotas</label>
+        </span>
       </div>
 
       <Selection />
@@ -55,7 +60,6 @@ export function PlanPanel() {
         ['Paredes', fmt(plan.outline.points.length)],
         ['Columnas', fmt(plan.columns.length)],
       ]} />
-      <RackSummary plan={plan} />
       {outside > 0 && (
         <div className="note note--amber plan-outside">
           <span>{outside === 1 ? 'Quedó 1 elemento' : `Quedaron ${outside} elementos`} fuera del contorno (marcados en rojo punteado).</span>
@@ -69,7 +73,7 @@ export function PlanPanel() {
 
       <QuickStart />
       <ColumnGrid />
-    </section>
+    </>
   )
 }
 
@@ -79,8 +83,6 @@ function Selection() {
   const { plan, selection, commit, select } = usePlan()
   if (!selection) return <p className="muted small">Tocá una pared, una esquina o una columna para ver y escribir sus medidas.</p>
   const del = (fn: (p: Plan) => Plan) => { commit(fn); select(null) }
-
-  if (selection.kind === 'rack') return <RackSelection id={selection.id} />
 
   if (selection.kind === 'vertex') {
     const p = plan.outline.points[selection.index]
@@ -227,105 +229,4 @@ function ColumnGrid() {
       <Button size="sm" onClick={() => commit((p) => columnGrid(p, dx, dy, size))} block>Generar columnas (reemplaza las actuales)</Button>
     </details>
   )
-}
-
-/* ------------------------------ Racks ------------------------------ */
-
-const ROTATIONS = [0, 90, 180, 270]
-
-function RackSelection({ id }: { id: string }) {
-  const { plan, commit, select } = usePlan()
-  const [count, setCount] = useState(4)
-  const [direction, setDirection] = useState<'along' | 'across'>('across')
-  const rack = plan.racks?.find((r) => r.id === id)
-  const conflicts = useMemo(() => rackConflicts(plan).get(id), [plan, id])
-  const [gap, setGap] = useState(rack?.config.layout.aisleWidth ?? 3000)
-  if (!rack) return null
-  const n = (plan.racks ?? []).indexOf(rack) + 1
-  const s = structureFor(rack.config)
-  const b = localBox(s)
-  const key = configKey(rack.config)
-  const same = (plan.racks ?? []).filter((r) => r !== rack && configKey(r.config) === key).length
-  const edit = () => startEditingRack(rack.id)
-  return (
-    <div className="plan-sel">
-      <h2 className="section-label">Rack R{n}</h2>
-      <KeyValue items={[
-        ['Largo × fondo × alto', `${metros(b.u1 - b.u0)} × ${metros(b.v1 - b.v0)} × ${metros(s.config.height)}`],
-        ['Filas · módulos', `${fmt(s.rows.length)} · ${fmt(s.modules.length)}`],
-        ['Niveles', fmt(s.storageLevels)],
-        ['Posiciones', fmt(s.positionsAvailable)],
-        ...(same ? [['Iguales en el depósito', fmt(same)] as [string, string]] : []),
-      ]} />
-      {conflicts && (
-        <div className="note note--amber">Este rack {[...conflicts].map((c) => CONFLICT_TEXT[c]).join(', ')}.</div>
-      )}
-      <Button size="sm" variant="primary" icon={Pencil} onClick={edit} block>Editar este rack</Button>
-      <Field label="Giro">{() => (
-        <Segmented label="Giro" value={String(ROTATIONS.includes(rack.rotation) ? rack.rotation : 0)}
-          onChange={(v) => commit((p) => rotateRack(p, id, Number(v)))}
-          options={ROTATIONS.map((r) => ({ value: String(r), label: `${r}°` }))} />
-      )}</Field>
-      <div className="plan-xy">
-        <NumberStepper label="X" meters value={rack.x} min={-500_000} max={500_000} step={100} onChange={(x) => commit((p) => updateRack(p, id, { x }))} />
-        <NumberStepper label="Y" meters value={rack.y} min={-500_000} max={500_000} step={100} onChange={(y) => commit((p) => updateRack(p, id, { y }))} />
-      </div>
-      <div className="plan-history">
-        <Button size="sm" variant="ghost" icon={RotateCw} onClick={() => commit((p) => rotateRack(p, id, rack.rotation + 90))}>Girar 90°</Button>
-        <Button size="sm" variant="ghost" icon={Copy} onClick={() => {
-          let ids: string[] = []
-          commit((p) => { const r = repeatRack(p, id, 1, 'across', rack.config.layout.aisleWidth); ids = r.ids; return r.plan })
-          if (ids[0]) select({ kind: 'rack', id: ids[0] })
-        }}>Duplicar</Button>
-        <Button size="sm" variant="ghost" icon={Trash2} onClick={() => { commit((p) => removeRack(p, id)); select(null) }}>Quitar</Button>
-      </div>
-      <details className="plan-more" open>
-        <summary>Copiar en serie</summary>
-        <Field label="Hacia dónde">{() => (
-          <Segmented label="Hacia dónde" value={direction} onChange={(v) => { setDirection(v); setGap(v === 'across' ? rack.config.layout.aisleWidth : 0) }}
-            options={[{ value: 'across', label: 'Enfrente (con pasillo)' }, { value: 'along', label: 'A continuación' }]} />
-        )}</Field>
-        <NumberStepper label="Copias" value={count} min={1} max={200} step={1} onChange={setCount} />
-        <NumberStepper label={direction === 'across' ? 'Pasillo' : 'Separación'} meters value={gap} min={0} max={20_000} step={100} onChange={setGap} />
-        <Button size="sm" onClick={() => commit((p) => repeatRack(p, id, count, direction, gap).plan)} block>
-          Agregar {fmt(count)} {count === 1 ? 'copia' : 'copias'}
-        </Button>
-      </details>
-    </div>
-  )
-}
-
-function RackSummary({ plan }: { plan: Plan }) {
-  const totals = useMemo(() => rackTotals(plan), [plan])
-  const conflicts = useMemo(() => rackConflicts(plan), [plan])
-  if (!totals.racks) return <p className="muted small">Todavía no hay racks. Elegí la herramienta Rack y hacé clic en el plano para ubicar el que armaste.</p>
-  return (
-    <>
-      <KeyValue items={[
-        ['Racks', fmt(totals.racks)],
-        ['Módulos', fmt(totals.modules)],
-        ['Posiciones de pallet', fmt(totals.positions)],
-        ['Capacidad estimada', `${fmt(Math.round(totals.capacityKg / 1000))} t`],
-      ]} />
-      {conflicts.size > 0 && (
-        <div className="note note--amber">{conflicts.size === 1 ? 'Hay 1 rack con problemas' : `Hay ${fmt(conflicts.size)} racks con problemas`} (marcados en rojo punteado): fuera del depósito, sobre columnas, zonas o tabiques, o superpuestos.</div>
-      )}
-      <details className="plan-more">
-        <summary>Lista de materiales del depósito</summary>
-        <MaterialsList lines={totals.materials} />
-        <Button size="sm" icon={Download} block onClick={() => downloadCsv(totals.materials)}>Descargar lista (CSV)</Button>
-      </details>
-    </>
-  )
-}
-
-function downloadCsv(lines: { group: string; code: string; name: string; detail?: string; qty: number }[]) {
-  const rows = [['Grupo', 'Código', 'Pieza', 'Detalle', 'Cantidad'], ...lines.map((l) => [l.group, l.code, l.name, l.detail ?? '', String(l.qty)])]
-  const csv = '\ufeff' + rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(';')).join('\r\n')
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'materiales-deposito.csv'
-  a.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }

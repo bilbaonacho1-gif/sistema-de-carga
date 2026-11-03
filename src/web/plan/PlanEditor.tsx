@@ -5,15 +5,17 @@
  *  - Contorno: clic punto por punto; se cierra tocando el primero (o Enter).
  *  - Tabique: clic en cada extremo (encadena el siguiente; Esc termina).
  *  - Columna / Portón / Zona: clic donde va.
+ *  - Racks (si están a la vista): se arrastran igual; Supr los borra.
  * Rueda o pellizco: zoom. Arrastrar el fondo: mover. Ctrl+Z / Ctrl+Y: deshacer / rehacer.
  */
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { itemsOutside, moveVertex, newId, removeItem, removeVertex, sagFromPoint, setOutline, splitEdge } from '../../shared/plan/edit'
-import { apex, arcOf, edgeLength, edges, nearestOnEdge, planBounds, pointInPolygon, pointOnEdge, tangentOnEdge, type Edge } from '../../shared/plan/geometry'
-import { addRack, footprint, localBox, rackConflicts, removeRack, repeatRack, rotateRack, rowBands, structureFor, toPlanPoint, type ConflictReason, type RowBand } from '../../shared/plan/racks'
-import type { RackStructure } from '../../shared/rack/types'
-import type { Plan, PlanPoint, PlanRack } from '../../shared/plan/types'
-import { useDesigner } from '../pages/designer/designerStore'
+import { apex, arcOf, edgeLength, edges, nearestOnEdge, planBounds, pointOnEdge, tangentOnEdge, type Edge } from '../../shared/plan/geometry'
+import type { Plan, PlanPoint } from '../../shared/plan/types'
+import type { RackModuleSize, RackPlacement } from '../../shared/plan/layout'
+import { freezeRacks, moveRack } from '../../shared/plan/racks'
+import { PlanCotas } from './PlanCotas'
+import { PlanRacks } from './PlanRacks'
 import { usePlan } from './planStore'
 
 type VB = { x: number; y: number; w: number; h: number }
@@ -44,15 +46,10 @@ export function outlineD(plan: Plan): string {
   return `M ${es[0].a.x} ${es[0].a.y} ${es.map((e) => edgeD(e, false)).join(' ')} Z`
 }
 
-const rackFootprint = footprint
-
 function fitView(plan: Plan, aspect: number): VB {
   const b = planBounds(plan)
-  for (const r of plan.racks ?? []) {
-    const f = rackFootprint(r)
-    b.minX = Math.min(b.minX, f.minX); b.minY = Math.min(b.minY, f.minY); b.maxX = Math.max(b.maxX, f.maxX); b.maxY = Math.max(b.maxY, f.maxY)
-  }
-  const pad = Math.max(b.maxX - b.minX, b.maxY - b.minY) * 0.12 + 1000
+  // margen para las cotas, que van por afuera del depósito
+  const pad = Math.max(b.maxX - b.minX, b.maxY - b.minY) * 0.2 + 1500
   let w = b.maxX - b.minX + pad * 2
   let h = b.maxY - b.minY + pad * 2
   if (w / h > aspect) h = w / aspect
@@ -60,8 +57,11 @@ function fitView(plan: Plan, aspect: number): VB {
   return { x: (b.minX + b.maxX) / 2 - w / 2, y: (b.minY + b.maxY) / 2 - h / 2, w, h }
 }
 
-export function PlanEditor({ fitRequest }: { fitRequest: number }) {
-  const { plan, tool, selection, draft, snap, commit, begin, live, select, setDraft, setTool } = usePlan()
+/** Racks a dibujar sobre el plano (de la distribución automática o ubicados a mano). */
+export interface PlanRackLayer { racks: RackPlacement[]; size: RackModuleSize; issues?: Record<string, string> }
+
+export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rackLayer?: PlanRackLayer }) {
+  const { plan, tool, selection, draft, snap, showCotas, commit, begin, live, select, setDraft, setTool } = usePlan()
   const svgRef = useRef<SVGSVGElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 800, h: 600 })
@@ -70,7 +70,9 @@ export function PlanEditor({ fitRequest }: { fitRequest: number }) {
   const drag = useRef<Drag | null>(null)
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const pinch = useRef<{ d: number; vb: VB; mid: PlanPoint } | null>(null)
-  const [ghostRot, setGhostRot] = useState(0)
+  // los racks a la vista, para copiarlos al plano en la primera edición a mano
+  const layerRef = useRef(rackLayer)
+  layerRef.current = rackLayer
   const scale = vb.w / Math.max(1, size.w)   // mm por pixel
   const px = (n: number) => n * scale
 
@@ -140,32 +142,12 @@ export function PlanEditor({ fitRequest }: { fitRequest: number }) {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); s.redo(); return }
       if (e.key === 'Escape') { if (s.draft.length) s.setDraft([]); else s.select(null); return }
       if (e.key === 'Enter' && s.tool === 'outline' && s.draft.length >= 3) { closeOutline(s.draft); return }
-      if (e.key.toLowerCase() === 'r' && !e.ctrlKey && !e.metaKey) {
-        if (s.tool === 'rack') { setGhostRot((r) => (r + 90) % 360); return }
-        const sel = s.selection
-        if (sel?.kind === 'rack') {
-          const rack = s.plan.racks?.find((x) => x.id === sel.id)
-          if (rack) s.commit((p) => rotateRack(p, sel.id, rack.rotation + (e.shiftKey ? -90 : 90)))
-        }
-        return
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
-        const sel = s.selection
-        if (sel?.kind !== 'rack') return
-        e.preventDefault()
-        const rack = s.plan.racks?.find((x) => x.id === sel.id)
-        if (!rack) return
-        let ids: string[] = []
-        s.commit((p) => { const r = repeatRack(p, sel.id, 1, 'across', rack.config.layout.aisleWidth); ids = r.ids; return r.plan })
-        if (ids[0]) s.select({ kind: 'rack', id: ids[0] })
-        return
-      }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const sel = s.selection
         if (!sel) return
         e.preventDefault()
         if (sel.kind === 'vertex') s.commit((p) => removeVertex(p, sel.index))
-        else if (sel.kind === 'rack') s.commit((p) => removeRack(p, sel.id))
+        else if (sel.kind === 'rack') s.commit((p) => removeItem(freezeRacks(p, layerRef.current?.racks ?? []), 'rack', sel.id))
         else if (sel.kind !== 'edge') s.commit((p) => removeItem(p, sel.kind, sel.id))
         s.select(null)
       }
@@ -191,15 +173,6 @@ export function PlanEditor({ fitRequest }: { fitRequest: number }) {
       return
     }
     const raw = toPlan(e.clientX, e.clientY)
-    // los racks se dibujan juntos en un solo trazo: cuál se tocó se averigua con la geometría
-    if (tool === 'select' && e.button === 0) {
-      const hit = rackAt(raw)
-      if (hit) {
-        select({ kind: 'rack', id: hit.id })
-        drag.current = { type: 'rack', id: hit.id, dx: raw.x - hit.x, dy: raw.y - hit.y, started: false }
-        return
-      }
-    }
     if (e.button === 1 || tool === 'select') {
       drag.current = { type: 'pan', cx: e.clientX, cy: e.clientY, vb, moved: false }
       return
@@ -207,12 +180,6 @@ export function PlanEditor({ fitRequest }: { fitRequest: number }) {
     const last = draft[draft.length - 1]
     const p = ortho(snapPt(raw, e.altKey), last)
     switch (tool) {
-      case 'rack': {
-        let id = ''
-        commit((pl) => { const r = addRack(pl, useDesigner.getState().config, snapPt(raw, e.altKey), ghostRot); id = r.id; return r.plan })
-        select({ kind: 'rack', id })
-        break
-      }
       case 'outline': {
         const first = draft[0]
         if (first && draft.length >= 3 && Math.hypot(raw.x - first.x, raw.y - first.y) < px(14)) closeOutline(draft)
@@ -295,7 +262,7 @@ export function PlanEditor({ fitRequest }: { fitRequest: number }) {
         }),
       })); break
       case 'wall-end': live((pl) => ({ ...pl, walls: pl.walls.map((w) => (w.id === d.id ? { ...w, [d.end]: p } : w)) })); break
-      case 'rack': live((pl) => ({ ...pl, racks: (pl.racks ?? []).map((r) => (r.id === d.id ? { ...r, x: sn(raw.x - d.dx, e.altKey), y: sn(raw.y - d.dy, e.altKey) } : r)) })); break
+      case 'rack': live((pl) => moveRack(freezeRacks(pl, layerRef.current?.racks ?? []), d.id, sn(raw.x - d.dx, e.altKey), sn(raw.y - d.dy, e.altKey))); break
       case 'door': live((pl) => ({
         ...pl, doors: pl.doors.map((dr) => {
           if (dr.id !== d.id) return dr
@@ -328,32 +295,6 @@ export function PlanEditor({ fitRequest }: { fitRequest: number }) {
 
   const es = edges(plan.outline)
   const outside = useMemo(() => itemsOutside(plan), [plan])
-  const conflicts = useMemo(() => rackConflicts(plan), [plan])
-  const racks = plan.racks ?? []
-  // sólo se dibujan los racks que caen en pantalla; el detalle de módulos aparece al acercarse
-  const detail = scale < 60
-  const visibleRacks = useMemo(() => {
-    const m = vb.w * 0.05
-    return racks.filter((r) => { const f = rackFootprint(r); return f.maxX >= vb.x - m && f.minX <= vb.x + vb.w + m && f.maxY >= vb.y - m && f.minY <= vb.y + vb.h + m })
-  }, [racks, vb])
-  /** El rack que está debajo de un punto (el de arriba de todo si hay varios). */
-  function rackAt(p: PlanPoint): PlanRack | null {
-    for (let i = racks.length - 1; i >= 0; i--) {
-      const f = rackFootprint(racks[i])
-      if (p.x < f.minX || p.x > f.maxX || p.y < f.minY || p.y > f.maxY) continue
-      if (pointInPolygon(p, f.corners)) return racks[i]
-    }
-    return null
-  }
-  const selectedRack = selection?.kind === 'rack' ? racks.find((r) => r.id === selection.id) ?? null : null
-  const ghost = useMemo<PlanRack | null>(() => {
-    if (tool !== 'rack' || !cursor) return null
-    const config = useDesigner.getState().config
-    const b = localBox(structureFor(config))
-    const c = toPlanPoint({ x: 0, y: 0, rotation: ghostRot }, (b.u0 + b.u1) / 2, (b.v0 + b.v1) / 2)
-    const at = snapPt(cursor)
-    return { id: 'ghost', x: at.x - c.x, y: at.y - c.y, rotation: ghostRot, config }
-  }, [tool, cursor, ghostRot]) // eslint-disable-line react-hooks/exhaustive-deps -- snapPt depende de snap
   const centroid = useMemo(() => {
     const pts = plan.outline.points
     return { x: pts.reduce((n, p) => n + p.x, 0) / pts.length, y: pts.reduce((n, p) => n + p.y, 0) / pts.length }
@@ -404,11 +345,6 @@ export function PlanEditor({ fitRequest }: { fitRequest: number }) {
               {label({ x: z.x + z.w / 2, y: z.y + z.d / 2 }, z.name, `zl${z.id}`, RED)}
             </g>
           ))}
-          <g>
-            <RacksLayer racks={visibleRacks} conflicts={conflicts} skipId={selectedRack?.id ?? null} detail={detail} />
-            {selectedRack && <RackShape rack={selectedRack} selected conflict={conflicts.has(selectedRack.id)} detail={detail} />}
-            {ghost && <RackShape rack={ghost} selected={false} conflict={false} detail={detail} ghost />}
-          </g>
           {es.map((e) => (
             <g key={`e${e.index}`}>
               <path d={edgeD(e)} fill="none" stroke={isSel('edge', e.index) ? RED : '#2b2e33'} strokeWidth={Math.max(plan.wallThickness, px(2))} strokeLinecap="square" />
@@ -417,6 +353,11 @@ export function PlanEditor({ fitRequest }: { fitRequest: number }) {
             </g>
           ))}
         </>}
+
+        {/* racks ubicados */}
+        {rackLayer && <PlanRacks racks={rackLayer.racks} size={rackLayer.size} px={px} issues={rackLayer.issues}
+          selectedId={selection?.kind === 'rack' ? selection.id : undefined}
+          onDown={tool === 'select' ? (e, r) => { select({ kind: 'rack', id: r.id }); const p = toPlan(e.clientX, e.clientY); startDrag(e, { type: 'rack', id: r.id, dx: p.x - r.x, dy: p.y - r.y, started: false }) } : undefined} />}
 
         {/* tabiques */}
         {plan.walls.map((w) => (
@@ -461,14 +402,11 @@ export function PlanEditor({ fitRequest }: { fitRequest: number }) {
             : <rect key={c.id} x={c.x - Math.max(c.w / 2, minR)} y={c.y - Math.max(c.d / 2, minR)} width={Math.max(c.w, minR * 2)} height={Math.max(c.d, minR * 2)} {...props} />
         })}
 
-        {/* número de cada rack (al acercarse) */}
-        {detail && visibleRacks.length <= 400 && visibleRacks.map((r) => {
-          const n = racks.indexOf(r) + 1
-          return label(rackFootprint(r).center, `R${n}`, `rl${r.id}`, conflicts.has(r.id) ? RED : '#7a1420')
-        })}
-
-        {/* medidas de cada pared */}
-        {tool !== 'outline' && es.map((e) => {
+        {/* cotas (o, si están apagadas, el largo de cada pared) */}
+        {showCotas && tool !== 'outline' && (
+          <PlanCotas plan={plan} px={px} column={selection?.kind === 'column' ? plan.columns.find((c) => c.id === selection.id) : null} />
+        )}
+        {!showCotas && tool !== 'outline' && es.map((e) => {
           const m = apex(e)
           const dir = { x: m.x - centroid.x, y: m.y - centroid.y }
           const L = Math.hypot(dir.x, dir.y) || 1
@@ -502,76 +440,7 @@ export function PlanEditor({ fitRequest }: { fitRequest: number }) {
         </>}
         {cursor && tool !== 'select' && <circle cx={snapPt(cursor).x} cy={snapPt(cursor).y} r={px(3)} fill={RED} pointerEvents="none" />}
       </svg>
-      <div className="plan-editor__coords" aria-hidden>{cursor ? `x ${meters(cursor.x)} · y ${meters(cursor.y)}` : 'Grilla con imán de 10 cm · Alt para mover libre'}{tool === 'rack' ? ' · R para girar' : ''}</div>
+      <div className="plan-editor__coords" aria-hidden>{cursor ? `x ${meters(cursor.x)} · y ${meters(cursor.y)}` : 'Grilla con imán de 10 cm · Alt para mover libre'}</div>
     </div>
   )
 }
-
-/**
- * Un rack en el plano: cada fila como una banda y, al acercarse, la división de módulos.
- * Se dibuja en sus coordenadas locales dentro de translate + rotate; los trazos no escalan
- * con el zoom (vector-effect), así no hace falta redibujarlo al acercar o alejar.
- */
-const RackShape = memo(function RackShape({ rack, selected, conflict, detail, onDown, ghost }: {
-  rack: PlanRack; selected: boolean; conflict: boolean; detail: boolean; ghost?: boolean; onDown?: (e: React.PointerEvent, r: PlanRack) => void
-}) {
-  const s = structureFor(rack.config)
-  const bands = rowBands(s)
-  const stroke = conflict ? RED : selected ? '#7a1420' : ghost ? RED : '#a3283a'
-  const fill = conflict ? 'rgba(190,30,48,.22)' : selected ? '#f3b8c0' : ghost ? 'rgba(190,30,48,.12)' : '#f8dde1'
-  return (
-    <g transform={`translate(${rack.x} ${rack.y}) rotate(${rack.rotation})`} onPointerDown={onDown ? (e) => onDown(e, rack) : undefined}
-      style={{ cursor: onDown ? 'move' : undefined, pointerEvents: ghost ? 'none' : undefined }} opacity={ghost ? 0.8 : 1}>
-      {/* zona de clic de todo el rack (incluye la separación entre filas espalda con espalda) */}
-      <rect x={0} y={Math.min(...bands.map((b) => b.v0))} width={s.totalWidth} height={Math.max(...bands.map((b) => b.v1)) - Math.min(...bands.map((b) => b.v0))} fill="transparent" />
-      {bands.map((b) => (
-        <rect key={b.index} x={0} y={b.v0} width={s.totalWidth} height={b.v1 - b.v0} fill={fill} stroke={stroke}
-          strokeWidth={selected ? 2.5 : 1.2} vectorEffect="non-scaling-stroke" strokeDasharray={conflict || ghost ? '6 4' : undefined} />
-      ))}
-      {detail && bands.map((b) => b.frames.slice(1, -1).map((fx) => (
-        <line key={`${b.index}-${fx}`} x1={fx} y1={b.v0} x2={fx} y2={b.v1} stroke={stroke} strokeWidth={0.8} strokeOpacity={0.7} vectorEffect="non-scaling-stroke" />
-      )))}
-      {/* frente de la primera fila: una línea más marcada indica hacia dónde mira el rack */}
-      <line x1={0} y1={bands[0].v1} x2={s.totalWidth} y2={bands[0].v1} stroke={stroke} strokeWidth={selected ? 3.5 : 2} vectorEffect="non-scaling-stroke" />
-    </g>
-  )
-})
-
-/**
- * Todos los racks quietos en pocos trazos (uno para los normales, otro para los que tienen problemas,
- * los frentes y las divisiones de módulos). Con miles de racks el navegador dibuja 4 elementos en vez
- * de miles, y el arrastre sigue fluido. El rack elegido se dibuja aparte, encima.
- */
-const bandsCache = new WeakMap<RackStructure, RowBand[]>()
-const bandsOf = (s: RackStructure) => { let b = bandsCache.get(s); if (!b) bandsCache.set(s, (b = rowBands(s))); return b }
-
-const RacksLayer = memo(function RacksLayer({ racks, conflicts, skipId, detail }: {
-  racks: PlanRack[]; conflicts: Map<string, Set<ConflictReason>>; skipId: string | null; detail: boolean
-}) {
-  const d = useMemo(() => {
-    const normal: string[] = [], bad: string[] = [], fronts: string[] = [], mods: string[] = []
-    for (const r of racks) {
-      if (r.id === skipId) continue
-      const s = structureFor(r.config)
-      const t = (r.rotation * Math.PI) / 180, c = Math.cos(t), sn = Math.sin(t)
-      const P = (u: number, v: number) => `${Math.round(r.x + u * c - v * sn)} ${Math.round(r.y + u * sn + v * c)}`
-      const W = s.totalWidth
-      const out = conflicts.has(r.id) ? bad : normal
-      const bands = bandsOf(s)
-      for (const b of bands) {
-        out.push(`M${P(0, b.v0)}L${P(W, b.v0)}L${P(W, b.v1)}L${P(0, b.v1)}Z`)
-        if (detail) for (let i = 1; i < b.frames.length - 1; i++) mods.push(`M${P(b.frames[i], b.v0)}L${P(b.frames[i], b.v1)}`)
-      }
-      fronts.push(`M${P(0, bands[0].v1)}L${P(W, bands[0].v1)}`)
-    }
-    return { normal: normal.join(''), bad: bad.join(''), fronts: fronts.join(''), mods: mods.join('') }
-  }, [racks, conflicts, skipId, detail])
-  return (
-    <g pointerEvents="none">
-      {d.normal && <path d={d.normal} fill="#f8dde1" stroke="#a3283a" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />}
-      {d.bad && <path d={d.bad} fill="rgba(190,30,48,.22)" stroke={RED} strokeWidth={1.4} strokeDasharray="6 4" vectorEffect="non-scaling-stroke" />}
-      {d.mods && <path d={d.mods} fill="none" stroke="#a3283a" strokeOpacity={0.7} strokeWidth={0.8} vectorEffect="non-scaling-stroke" />}
-      {d.fronts && <path d={d.fronts} fill="none" stroke="#a3283a" strokeWidth={2} vectorEffect="non-scaling-stroke" />}
-    </g>
-  )
-})

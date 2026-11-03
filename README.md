@@ -33,23 +33,23 @@ flecha, como la "bulge" de AutoCAD), medidas escritas a mano, columnas (sueltas 
 tabiques, portones y zonas libres, con imán a 10 cm, deshacer/rehacer y vista 3D. El plano se guarda
 en el navegador.
 
-**Racks en el depósito** (`src/shared/plan/racks.ts`): con la herramienta *Rack* se ubica el rack armado
-en la pestaña Rack; cada uno guarda su propia configuración, se mueve arrastrándolo, se gira (R), se
-duplica (Ctrl+D), se copia en serie (enfrente con pasillo o a continuación) y se edita con el panel del
-cotizador (*Editar este rack*, con la opción de aplicar el cambio a todos los iguales). El plano avisa
-si un rack queda fuera del depósito, pisa una columna, invade una zona libre, cruza un tabique o se
-superpone con otro, y suma posiciones, capacidad y la lista de materiales de todo el depósito (CSV).
-
 **Todo en metros:** por dentro las medidas se guardan en mm (enteros), pero se muestran y se escriben en
 metros (`src/shared/units.ts`, `NumberStepper` con `meters`).
 
-**Depósitos grandes** (300 × 300 m o más, miles de racks): los racks iguales comparten el cálculo
-(caché por configuración); los choques se buscan con una grilla espacial; en el plano los racks quietos
-se dibujan en pocos trazos y sólo lo que está en pantalla; en el 3D (`src/web/plan/RackInstances.tsx`)
-cada tipo de pieza es un `InstancedMesh` y el detalle baja solo según el tamaño (completo → sin
-diagonales y pallet+carga en una caja → sólo estructura); el 3D se dibuja sólo cuando se mueve la cámara
-y el guardado espera a que se termine de arrastrar. Referencia medida (compilación de producción):
-306 racks / 39.168 posiciones en 300 × 300 m → ~10 ms por movimiento al arrastrar; 1.500 racks → ~19 ms.
+**Depósitos grandes** (300 × 300 m o más, miles de racks):
+- choques de racks (`rackIssues` en `src/shared/plan/racks.ts`) con una grilla espacial de 10 m y una
+  prueba exacta de "dentro del contorno" que no depende del largo del rack;
+- en el plano (`src/web/plan/PlanRacks.tsx`) todos los racks quietos van en pocos trazos que no cambian
+  de grosor con el zoom, y los bastidores aparecen recién al acercarse;
+- en el 3D, con más de 30 racks, cada tipo de pieza es un `InstancedMesh` (`src/web/plan/RackInstances.tsx`)
+  y el detalle baja solo según el tamaño (completo → sin diagonales y pallet+carga en una caja → sólo
+  estructura); los racks se tocan y arrastran con una sola malla invisible (instanceId). Con pocos racks
+  se sigue usando el modelo detallado del cotizador;
+- el 3D se dibuja sólo cuando algo cambia (`frameloop="demand"`) y el guardado espera a que se termine de
+  arrastrar.
+
+Referencia medida (compilación de producción): depósito de 300 × 300 m con columnas cada 25 m,
+265 filas, 69.756 posiciones → ~18 ms por movimiento al arrastrar un rack en el plano.
 
 - **Panel guiado** de 6 pasos con una ayuda en cada uno (producto, medidas, carga, estructura,
   accesorios, resumen), o **Ver todo** para tener todas las opciones juntas.

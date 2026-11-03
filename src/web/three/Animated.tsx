@@ -43,6 +43,9 @@ export function Animated({ position, rotationY = 0, appear = 'none', delay = 0, 
     g.position.x = THREE.MathUtils.damp(g.position.x, target.current.x, 9, step)
     g.position.z = THREE.MathUtils.damp(g.position.z, target.current.z, 9, step)
 
+    // la escena puede dibujarse sólo a demanda (depósito en 3D): mientras algo se mueve, se pide el cuadro siguiente
+    const settling = Math.abs(g.position.x - target.current.x) + Math.abs(g.position.z - target.current.z) + Math.abs(g.position.y - target.current.y) > 1e-4
+    if (!mount.done || settling) state.invalidate()
     if (mount.done) {
       g.position.y = THREE.MathUtils.damp(g.position.y, target.current.y, 9, step)
       return

@@ -1,101 +1,94 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_CONFIGURATION } from '../rack/technicalSpecs'
-import type { RackConfiguration } from '../rack/types'
+import { buildDepot } from './depot'
 import { rectanglePlan } from './geometry'
-import {
-  addRack, footprint, localBox, packPlan, rackConflicts, rackTotals, repeatRack, rotateRack, structureFor, toLocal, toPlanPoint, unpackPlan,
-} from './racks'
-import type { Plan } from './types'
+import { DEFAULT_LAYOUT, autoLayout, placementRect, type RackModuleSize } from './layout'
+import { addRack, duplicateRack, fitPlacement, freezeRacks, moveRack, rackIssues, rotateRack, setRackModules } from './racks'
+import { DEFAULT_CONFIGURATION } from '../rack/technicalSpecs'
+import type { RackPlacement } from './types'
 
-const cfg: RackConfiguration = { ...DEFAULT_CONFIGURATION, positions: 18, layout: { ...DEFAULT_CONFIGURATION.layout, rows: 1 } }
-const big = (): Plan => rectanglePlan(300_000, 300_000)
+const size: RackModuleSize = { width: 2700, depth: 1000, upright: 100, backToBackGap: 200 }
+const rack = (o: Partial<RackPlacement> = {}): RackPlacement => fitPlacement({ id: 'a', x: 2000, y: 2000, orientation: 'x', modules: 3, length: 0, depth: 0, pair: false, ...o }, size)
 
-describe('racks en el plano', () => {
-  it('ubica el rack centrado donde se hace clic y lo gira sobre su centro', () => {
-    const { plan, id } = addRack(big(), cfg, { x: 50_000, y: 50_000 })
-    const f = footprint(plan.racks![0])
-    expect(f.center.x).toBeCloseTo(50_000, -2)
-    expect(f.center.y).toBeCloseTo(50_000, -2)
-    const rotated = rotateRack(plan, id, 90)
-    const g = footprint(rotated.racks![0])
-    expect(g.center.x).toBeCloseTo(50_000, -2)
-    expect(g.center.y).toBeCloseTo(50_000, -2)
-    // girado 90°: el largo queda en vertical
-    expect(g.maxY - g.minY).toBeCloseTo(f.maxX - f.minX, -1)
+describe('ubicación libre de racks', () => {
+  const plan = rectanglePlan(30_000, 20_000)
+
+  it('ajusta largo y profundidad al módulo', () => {
+    expect(rack().length).toBe(3 * 2700 + 4 * 100)
+    expect(rack({ pair: true }).depth).toBe(2 * 1000 + 200)
   })
 
-  it('pasa de coordenadas locales al plano y vuelve', () => {
-    const r = { x: 1000, y: 2000, rotation: 37 }
-    const p = toPlanPoint(r, 1500, -800)
-    const back = toLocal(r, p)
-    expect(back.u).toBeCloseTo(1500)
-    expect(back.v).toBeCloseTo(-800)
+  it('la primera edición copia la distribución automática y después no la vuelve a pisar', () => {
+    const auto = autoLayout(plan, size, DEFAULT_LAYOUT).placements
+    const p = freezeRacks(plan, auto)
+    expect(p.racks).toHaveLength(auto.length)
+    expect(freezeRacks(p, [])).toBe(p)
   })
 
-  it('detecta racks superpuestos, fuera del depósito y sobre columnas o zonas', () => {
-    let plan = big()
-    plan = addRack(plan, cfg, { x: 20_000, y: 20_000 }).plan
-    plan = addRack(plan, cfg, { x: 20_500, y: 20_000 }).plan            // pisa al primero
-    plan = addRack(plan, cfg, { x: 299_000, y: 100_000 }).plan          // se sale por la derecha
-    plan = addRack(plan, cfg, { x: 100_000, y: 100_000 }).plan          // queda bien
-    plan = { ...plan, columns: [{ id: 'c1', x: 150_000, y: 150_000, shape: 'rect', w: 400, d: 400 }] }
-    plan = addRack(plan, cfg, { x: 150_000, y: 150_000 }).plan          // sobre la columna
-    plan = { ...plan, zones: [{ id: 'z1', x: 200_000, y: 200_000, w: 10_000, d: 10_000, name: 'Oficina' }] }
-    plan = addRack(plan, cfg, { x: 205_000, y: 205_000 }).plan          // dentro de la zona
-    const c = rackConflicts(plan)
-    const [a, b, out, ok, col, zone] = plan.racks!.map((r) => c.get(r.id))
-    expect(a?.has('rack')).toBe(true)
-    expect(b?.has('rack')).toBe(true)
-    expect(out?.has('afuera')).toBe(true)
-    expect(ok).toBeUndefined()
-    expect(col?.has('columna')).toBe(true)
-    expect(zone?.has('zona')).toBe(true)
+  it('mueve, gira sobre su centro, duplica y cambia módulos', () => {
+    const p = { ...plan, racks: [rack()] }
+    expect(moveRack(p, 'a', 5000, 6000).racks![0]).toMatchObject({ x: 5000, y: 6000 })
+    const r0 = placementRect(p.racks[0]), r1 = placementRect(rotateRack(p, 'a').racks![0])
+    expect(r1.w).toBe(r0.h)
+    expect(r1.x + r1.w / 2).toBeCloseTo(r0.x + r0.w / 2, -1)
+    const d = duplicateRack(p, 'a', 3000)
+    expect(d.plan.racks).toHaveLength(2)
+    expect(d.plan.racks![1].y).toBe(2000 + 1000 + 3000)
+    expect(setRackModules(p, 'a', 7).racks![0].modules).toBe(7)
   })
 
-  it('las copias en serie dejan el pasillo y no se pisan', () => {
-    const first = addRack(big(), cfg, { x: 30_000, y: 30_000 })
-    const { plan, ids } = repeatRack(first.plan, first.id, 4, 'across', 3000)
-    expect(ids).toHaveLength(4)
-    expect(rackConflicts(plan).size).toBe(0)
-    const b = localBox(structureFor(cfg))
-    const f0 = footprint(plan.racks![0]), f1 = footprint(plan.racks![1])
-    expect(f1.minY - f0.maxY).toBeCloseTo(3000, -1)          // pasillo de 3 m, del lado del frente
-    expect(f0.maxY - f0.minY).toBeCloseTo(b.v1 - b.v0, -1)
+  it('avisa cuando un rack se pisa, choca o queda afuera', () => {
+    const p = {
+      ...plan,
+      columns: [{ id: 'c', x: 20_500, y: 2500, shape: 'rect' as const, w: 400, d: 400 }],
+      zones: [{ id: 'z', x: 10_000, y: 15_000, w: 3000, d: 3000, name: 'Oficina' }],
+    }
+    const racks = [
+      rack({ id: 'ok', x: 2000, y: 10_000 }),
+      rack({ id: 'col', x: 18_000, y: 2000 }),
+      rack({ id: 'zona', x: 9000, y: 15_500 }),
+      rack({ id: 'fuera', x: 25_000, y: 2000 }),
+      rack({ id: 'p1', x: 2000, y: 5000 }),
+      rack({ id: 'p2', x: 4000, y: 5500 }),
+    ]
+    const issues = rackIssues(p, racks)
+    expect(issues.ok).toBeUndefined()
+    expect(issues.col).toMatch(/columna/)
+    expect(issues.zona).toMatch(/zona/)
+    expect(issues.fuera).toMatch(/fuera/)
+    expect(issues.p1).toMatch(/otro rack/)
+    expect(issues.p2).toMatch(/otro rack/)
   })
 
-  it('suma posiciones y materiales de todo el depósito', () => {
-    const first = addRack(big(), cfg, { x: 30_000, y: 30_000 })
-    const { plan } = repeatRack(first.plan, first.id, 9, 'along', 0)
-    const t = rackTotals(plan)
-    const one = structureFor(cfg)
-    expect(t.racks).toBe(10)
-    expect(t.positions).toBe(one.positionsAvailable * 10)
-    const beams = one.materials.filter((l) => l.code.startsWith('VIGA')).reduce((n, l) => n + l.qty, 0)
-    expect(t.materials.filter((l) => l.code.startsWith('VIGA')).reduce((n, l) => n + l.qty, 0)).toBe(beams * 10)
+  it('la distribución automática no tiene interferencias', () => {
+    const p = { ...plan, columns: [{ id: 'c', x: 15_000, y: 10_000, shape: 'rect' as const, w: 400, d: 400 }] }
+    expect(rackIssues(p, autoLayout(p, size, DEFAULT_LAYOUT).placements)).toEqual({})
   })
 
-  it('guarda las configuraciones repetidas una sola vez y las recupera', () => {
-    const first = addRack(big(), cfg, { x: 30_000, y: 30_000 })
-    const { plan } = repeatRack(first.plan, first.id, 99, 'along', 0)
-    const packed = packPlan(plan)
-    expect(packed.rackConfigs).toHaveLength(1)
-    const back = unpackPlan(JSON.parse(JSON.stringify(packed)))
-    expect(back.racks).toHaveLength(100)
-    expect(back.racks![50].config).toEqual(cfg)
+  it('el depósito usa los racks a mano y los cuenta', () => {
+    const one = addRack(plan, size, 4)
+    const depot = buildDepot(one.plan, DEFAULT_CONFIGURATION, DEFAULT_LAYOUT)
+    expect(depot.manual).toBe(true)
+    expect(depot.layout.placements).toHaveLength(1)
+    expect(depot.layout.modules).toBe(4)
+    expect(depot.issues).toEqual({})
   })
+})
 
-  it('revisa un depósito con 3.000 racks rápido', () => {
-    let plan = big()
-    const first = addRack(plan, cfg, { x: 10_000, y: 10_000 })
-    plan = first.plan
-    // 30 filas de 100 racks
-    const row = repeatRack(plan, first.id, 99, 'along', 0)
-    plan = row.plan
-    for (const id of [first.id, ...row.ids]) plan = repeatRack(plan, id, 29, 'across', 3000).plan
-    expect(plan.racks).toHaveLength(3000)
+describe('depósitos grandes', () => {
+  it('distribuye, arma y revisa un depósito de 300 × 300 m rápido', () => {
+    const big = rectanglePlan(300_000, 300_000)
     const t0 = performance.now()
-    rackConflicts(plan)
-    rackTotals(plan)
-    expect(performance.now() - t0).toBeLessThan(1500)
+    const auto = autoLayout(big, size, DEFAULT_LAYOUT).placements
+    const depot = buildDepot(big, DEFAULT_CONFIGURATION, DEFAULT_LAYOUT)
+    expect(auto.length).toBeGreaterThan(40)          // filas largas de muchos módulos
+    expect(depot.positions).toBeGreaterThan(10_000)
+    // a mano: miles de racks cortos, todos revisados contra todos (con la grilla, no par contra par)
+    const many: RackPlacement[] = []
+    for (let i = 0; i < 40; i++) for (let j = 0; j < 60; j++)
+      many.push(fitPlacement({ id: `r${i}-${j}`, x: 2000 + i * 7000, y: 2000 + j * 4800, orientation: 'x', modules: 2, length: 0, depth: 0, pair: false }, size))
+    const t1 = performance.now()
+    expect(Object.keys(rackIssues(big, many))).toHaveLength(0)
+    expect(performance.now() - t1).toBeLessThan(1000)
+    expect(performance.now() - t0).toBeLessThan(5000)
   })
 })

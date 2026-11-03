@@ -2,7 +2,7 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { rectanglePlan } from '../../shared/plan/geometry'
-import { packPlan, unpackPlan, type PackedPlan } from '../../shared/plan/racks'
+import { DEFAULT_LAYOUT, type LayoutOptions } from '../../shared/plan/layout'
 import type { Plan, PlanPoint, PlanSelection } from '../../shared/plan/types'
 
 /**
@@ -19,7 +19,11 @@ const safeStorage = {
   removeItem: (k: string) => { try { localStorage.removeItem(k) } catch { /* sin memoria */ } },
 }
 
-export type PlanTool = 'select' | 'rack' | 'outline' | 'column' | 'wall' | 'door' | 'zone'
+export type PlanTool = 'select' | 'outline' | 'column' | 'wall' | 'door' | 'zone'
+
+/** Pasos del cotizador de depósitos: primero el lugar, después el rack y su distribución. */
+export const FLOW = ['deposito', 'rack', 'carga', 'distribucion', 'accesorios', 'resumen'] as const
+export type FlowStep = (typeof FLOW)[number]
 
 export const DEFAULT_PLAN = rectanglePlan(32_000, 22_000)
 const HISTORY = 80
@@ -33,11 +37,15 @@ interface PlanState {
   /** Puntos del contorno o de la pared que se está dibujando. */
   draft: PlanPoint[]
   snap: boolean
+  /** Cotas del plano (como en AutoCAD) a la vista. */
+  showCotas: boolean
   view3d: boolean
   /** Qué se está editando en el cotizador: el rack o el plano del depósito. */
   workspace: 'rack' | 'deposito'
-  /** Rack del depósito que se está editando en la pestaña Rack (null = el rack suelto del cotizador). */
-  editingRackId: string | null
+  /** Paso actual del cotizador de depósitos. */
+  flowStep: FlowStep
+  /** Opciones de la distribución automática (pasillos, orientación…). */
+  layout: LayoutOptions
   /** Cambio con historial (deshacer vuelve a como estaba antes). */
   commit(fn: (p: Plan) => Plan): void
   /** Guarda una copia antes de empezar a arrastrar… */
@@ -50,9 +58,13 @@ interface PlanState {
   select(s: PlanSelection): void
   setDraft(d: PlanPoint[]): void
   setSnap(v: boolean): void
+  setShowCotas(v: boolean): void
   setView3d(v: boolean): void
   setWorkspace(w: 'rack' | 'deposito'): void
-  setEditingRack(id: string | null): void
+  setFlowStep(s: FlowStep): void
+  setLayout(patch: Partial<LayoutOptions>): void
+  /** Vuelve a empezar: depósito inicial, primer paso y opciones de fábrica. */
+  resetAll(): void
 }
 
 export const usePlan = create<PlanState>()(
@@ -65,9 +77,11 @@ export const usePlan = create<PlanState>()(
       selection: null,
       draft: [],
       snap: true,
+      showCotas: true,
       view3d: false,
       workspace: 'rack',
-      editingRackId: null,
+      flowStep: 'deposito',
+      layout: DEFAULT_LAYOUT,
       commit: (fn) => set((s) => ({ plan: fn(s.plan), past: [...s.past, s.plan].slice(-HISTORY), future: [] })),
       begin: () => set((s) => ({ past: [...s.past, s.plan].slice(-HISTORY), future: [] })),
       live: (fn) => set((s) => ({ plan: fn(s.plan) })),
@@ -83,21 +97,23 @@ export const usePlan = create<PlanState>()(
       select: (selection) => set({ selection }),
       setDraft: (draft) => set({ draft }),
       setSnap: (snap) => set({ snap }),
+      setShowCotas: (showCotas) => set({ showCotas }),
       setView3d: (view3d) => set({ view3d }),
       setWorkspace: (workspace) => set({ workspace }),
-      setEditingRack: (editingRackId) => set({ editingRackId }),
+      setFlowStep: (flowStep) => set({ flowStep }),
+      setLayout: (patch) => set((s) => ({ layout: { ...s.layout, ...patch } })),
+      resetAll: () => set({ plan: DEFAULT_PLAN, past: [], future: [], selection: null, draft: [], tool: 'select', flowStep: 'deposito', layout: DEFAULT_LAYOUT, view3d: false }),
     }),
     {
       name: 'sdc-plan',
-      version: 2,
+      version: 1,
       storage: createJSONStorage(() => safeStorage),
-      // los racks con la misma configuración se guardan una sola vez (depósitos con miles de racks)
-      partialize: (s) => ({ plan: packPlan(s.plan) as unknown as Plan, snap: s.snap, workspace: s.workspace, view3d: s.view3d }),
+      partialize: (s) => ({ plan: s.plan, snap: s.snap, showCotas: s.showCotas, workspace: s.workspace, view3d: s.view3d, flowStep: s.flowStep, layout: s.layout }),
+      // estados guardados antes de la distribución no tienen estas opciones
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<PlanState>
-        return { ...current, ...p, plan: p.plan ? unpackPlan(p.plan as unknown as PackedPlan) : current.plan }
+        return { ...current, ...p, layout: { ...DEFAULT_LAYOUT, ...p.layout } }
       },
-      migrate: (persisted) => persisted as never,
     },
   ),
 )
