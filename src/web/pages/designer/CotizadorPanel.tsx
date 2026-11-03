@@ -15,9 +15,10 @@ import { NumberStepper, Switch } from '../../components/fields'
 import { Badge, Button, Field, KeyValue, Segmented, Select } from '../../components/ui'
 import { fmt, plural } from '../../lib/format'
 import { STEPS, useDesigner, type StepId } from './designerStore'
+import { metros } from '../../../shared/units'
 
 const L = DESIGN_RULES.limits
-const mm = (n: number) => `${fmt(n)} mm`
+const mm = metros
 const kg = (n: number) => `${fmt(n)} kg`
 
 const META: Record<StepId, { title: string; short: string; help: string }> = {
@@ -129,12 +130,12 @@ function DimensionsStep({ s }: { s: RackStructure }) {
   }
   return (
     <div className="cot-fields">
-      <NumberStepper label="Profundidad del bastidor" unit="mm" value={config.depth} min={L.depth.min} max={L.depth.max} step={50} slider onChange={(depth) => update({ depth })} />
+      <NumberStepper label="Profundidad del bastidor" meters value={config.depth} min={L.depth.min} max={L.depth.max} step={50} slider onChange={(depth) => update({ depth })} />
       <Switch label="Tramos con medidas distintas" checked={multi} onChange={toggleSections}
         hint="Partes del rack con otra altura, otro largo de viga u otra cantidad de niveles." />
       {multi ? <Sections s={s} /> : <>
-        <NumberStepper label="Largo de viga (ancho del módulo)" unit="mm" value={config.width} min={L.width.min} max={L.width.max} step={50} slider onChange={(width) => update({ width })} />
-        <NumberStepper label="Altura" unit="mm" value={config.height} min={L.height.min} max={L.height.max} step={100} slider onChange={(height) => update({ height })}
+        <NumberStepper label="Largo de viga (ancho del módulo)" meters value={config.width} min={L.width.min} max={L.width.max} step={50} slider onChange={(width) => update({ width })} />
+        <NumberStepper label="Altura" meters value={config.height} min={L.height.min} max={L.height.max} step={100} slider onChange={(height) => update({ height })}
           hint={config.height > OFFICIAL_REFERENCE.maxHeight ? <span className="late">Supera los {mm(OFFICIAL_REFERENCE.maxHeight)} publicados.</span> : undefined} />
         <NumberStepper label="Cantidad de posiciones" value={config.positions} min={L.positions.min} max={L.positions.max} step={1} slider onChange={(positions) => update({ positions })}
           hint={`${plural(s.palletsPerModule * s.storageLevels, 'posición', 'posiciones')} por módulo · crece hacia la derecha`} />
@@ -174,8 +175,8 @@ function Sections({ s }: { s: RackStructure }) {
               </span>
             </div>
             <NumberStepper label="Módulos" value={sec.modules} min={L.sectionModules.min} max={L.sectionModules.max} step={1} onChange={(modules) => updateSection(i, { modules })} />
-            <NumberStepper label="Largo de viga" unit="mm" value={sec.width} min={L.width.min} max={L.width.max} step={50} onChange={(width) => updateSection(i, { width })} />
-            <NumberStepper label="Altura" unit="mm" value={sec.height} min={L.height.min} max={L.height.max} step={100} onChange={(height) => updateSection(i, { height })} />
+            <NumberStepper label="Largo de viga" meters value={sec.width} min={L.width.min} max={L.width.max} step={50} onChange={(width) => updateSection(i, { width })} />
+            <NumberStepper label="Altura" meters value={sec.height} min={L.height.min} max={L.height.max} step={100} onChange={(height) => updateSection(i, { height })} />
             <NumberStepper label="Niveles" value={sec.levels} min={minLevels} max={L.levels.max} step={1} onChange={(levels) => updateSection(i, { levels })} />
           </div>
         )
@@ -195,14 +196,14 @@ function LoadStep({ s }: { s: RackStructure }) {
     <div className="cot-fields">
       <Field label="Tipo de pallet">{(id) => (
         <Select id={id} value={config.palletTypeId} onChange={(e) => update({ palletTypeId: e.target.value })}>
-          {PALLET_TYPES.map((p) => <option key={p.id} value={p.id}>{p.name} mm</option>)}
+          {PALLET_TYPES.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           <option value="custom">A medida…</option>
         </Select>
       )}</Field>
       {custom && <div className="cot-inline">
-        <NumberStepper label="Frente" unit="mm" value={cp.front} min={L.palletFront.min} max={L.palletFront.max} step={10} onChange={(front) => update({ customPallet: { ...cp, front } })} />
-        <NumberStepper label="Fondo" unit="mm" value={cp.deep} min={L.palletDeep.min} max={L.palletDeep.max} step={10} onChange={(deep) => update({ customPallet: { ...cp, deep } })} />
-        <NumberStepper label="Alto del pallet" unit="mm" value={cp.height} min={L.palletHeight.min} max={L.palletHeight.max} step={5} onChange={(height) => update({ customPallet: { ...cp, height } })} />
+        <NumberStepper label="Frente" meters value={cp.front} min={L.palletFront.min} max={L.palletFront.max} step={10} onChange={(front) => update({ customPallet: { ...cp, front } })} />
+        <NumberStepper label="Fondo" meters value={cp.deep} min={L.palletDeep.min} max={L.palletDeep.max} step={10} onChange={(deep) => update({ customPallet: { ...cp, deep } })} />
+        <NumberStepper label="Alto del pallet" meters value={cp.height} min={L.palletHeight.min} max={L.palletHeight.max} step={5} onChange={(height) => update({ customPallet: { ...cp, height } })} />
       </div>}
       <NumberStepper label="Carga por pallet" unit="kg" value={config.palletWeight} min={L.palletWeight.min} max={L.palletWeight.max} step={50} onChange={(palletWeight) => update({ palletWeight })}
         hint={config.palletWeight > OFFICIAL_REFERENCE.maxPalletWeight ? <span className="late">Supera la referencia de {kg(OFFICIAL_REFERENCE.maxPalletWeight)}.</span> : `Referencia publicada: hasta ${kg(OFFICIAL_REFERENCE.maxPalletWeight)} por pallet.`} />
@@ -236,7 +237,7 @@ function StructureStep({ s }: { s: RackStructure }) {
       )}</Field>
       <NumberStepper label="Filas de rack" value={config.layout.rows} min={L.rows.min} max={L.rows.max} step={1} onChange={(rows) => updateLayout({ rows })} />
       {config.layout.rows > 1 && <>
-        <NumberStepper label="Ancho de pasillo" unit="mm" value={config.layout.aisleWidth} min={L.aisleWidth.min} max={L.aisleWidth.max} step={100} onChange={(aisleWidth) => updateLayout({ aisleWidth })} />
+        <NumberStepper label="Ancho de pasillo" meters value={config.layout.aisleWidth} min={L.aisleWidth.min} max={L.aisleWidth.max} step={100} onChange={(aisleWidth) => updateLayout({ aisleWidth })} />
         <Switch label="Filas espalda con espalda" checked={config.layout.backToBack} onChange={(backToBack) => updateLayout({ backToBack })}
           hint="Dos filas unidas por la espalda con distanciadores: un solo pasillo para las dos." />
       </>}
@@ -245,7 +246,7 @@ function StructureStep({ s }: { s: RackStructure }) {
         ['Bastidores', fmt(s.counts.frames)],
         ['Vigas', fmt(s.counts.beams)],
         ['Posiciones totales', fmt(s.positionsAvailable)],
-        ['Medidas', `${fmt(s.totalWidth)} × ${fmt(s.totalDepth)} × ${fmt(s.config.height)} mm`],
+        ['Medidas', `${metros(s.totalWidth)} × ${metros(s.totalDepth)} × ${metros(s.config.height)}`],
       ]} />
     </div>
   )

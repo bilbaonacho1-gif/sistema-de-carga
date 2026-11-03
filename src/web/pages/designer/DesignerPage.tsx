@@ -15,6 +15,7 @@ import { fmt, plural } from '../../lib/format'
 import { CotizadorPanel, MaterialsList } from './CotizadorPanel'
 import { LoadPlate, Viewport, Warnings } from './CotizadorView'
 import { useDesignedStructure, useDesigner } from './designerStore'
+import { metros } from '../../../shared/units'
 
 export default function DesignerPage() {
   const { can } = useAuth()
@@ -79,7 +80,7 @@ function AddToWarehouseDialog({ s, onClose }: { s: RackStructure; onClose(): voi
       <KeyValue items={[
         ['Estructura', `${s.modulesPerRow} módulos × ${s.storageLevels} niveles`],
         ['Posiciones', fmt(perRow)],
-        ['Medidas', `${fmt(s.totalWidth)} × ${fmt(s.config.depth)} × ${fmt(s.config.height)} mm`],
+        ['Medidas', `${metros(s.totalWidth)} × ${metros(s.config.depth)} × ${metros(s.config.height)}`],
       ]} />
       {s.rows.length > 1 && <p className="note note--amber">El diseño tiene {s.rows.length} filas: se agrega una. Para sumar las otras, repetí la operación en otro pasillo.</p>}
       <Field label="Pasillo" hint="Se ubica al final del pasillo elegido; un pasillo nuevo se ubica debajo de los existentes.">{(id) => (

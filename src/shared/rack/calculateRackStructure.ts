@@ -13,6 +13,7 @@ import {
   BEAM_PROFILES, DEFAULT_ACCESSORIES, DESIGN_RULES, OFFICIAL_REFERENCE, PALLET_TYPES, UPRIGHT_PROFILES,
 } from './technicalSpecs'
 import { beamCapacityForSpan, defaultRules, type StructuralRules } from './rules'
+import { metros } from '../units'
 import type {
   AccessoryConfig, BeamLayout, BeamProfile, FrameLayout, LevelLayout, ModuleLayout, PalletType, PositionSlot,
   RackConfiguration, RackSection, RackStructure, RackWarning, RowLayout, UprightProfile,
@@ -176,9 +177,9 @@ export function calculateRackStructure(
     let ppm = config.palletsPerModule === 'auto' ? auto : config.palletsPerModule
     if (ppm < 1) {
       ppm = 1
-      warn({ code: `width-${i}`, level: 'validation', message: `${label(i)}el largo de viga (${fmt(width)} mm) no alcanza para un pallet ${pallet.name} con sus holguras.` })
+      warn({ code: `width-${i}`, level: 'validation', message: `${label(i)}el largo de viga (${metros(width)}) no alcanza para un pallet ${pallet.name} con sus holguras.` })
     } else if (ppm > auto) {
-      warn({ code: `ppm-${i}`, level: 'warning', message: `${label(i)}${ppm} pallets por módulo no entran con la holgura mínima de ${R.minPalletGap} mm. Aumentá el largo de viga.` })
+      warn({ code: `ppm-${i}`, level: 'warning', message: `${label(i)}${ppm} pallets por módulo no entran con la holgura mínima de ${metros(R.minPalletGap)}. Aumentá el largo de viga.` })
     }
     return ppm
   }
@@ -211,8 +212,8 @@ export function calculateRackStructure(
       warn({
         code: `beam-${index}`, level: 'validation',
         message: forcedBeam
-          ? `${label(index)}la ${beam.name} soporta ${fmt(beamCapacity)} kg con ${fmt(sec.width)} mm de luz y el nivel lleva ${fmt(levelLoad)} kg. Elegí una viga mayor o dejá la selección automática.`
-          : `${label(index)}ninguna viga del catálogo cubre ${fmt(levelLoad)} kg en una luz de ${fmt(sec.width)} mm. La configuración ingresada requiere validación técnica.`,
+          ? `${label(index)}la ${beam.name} soporta ${fmt(beamCapacity)} kg con ${metros(sec.width)} de luz y el nivel lleva ${fmt(levelLoad)} kg. Elegí una viga mayor o dejá la selección automática.`
+          : `${label(index)}ninguna viga del catálogo cubre ${fmt(levelLoad)} kg en una luz de ${metros(sec.width)}. La configuración ingresada requiere validación técnica.`,
       })
     }
     return { index, sec, ppm, levelLoad, beam, beamCapacity, beamOk, levels, beamLevels: config.floorStorage ? sec.levels - 1 : sec.levels }
@@ -347,7 +348,7 @@ export function calculateRackStructure(
   if (levelLoad > OFFICIAL_REFERENCE.maxLevelLoad)
     warn({ code: 'level-load', level: 'validation', message: `Carga por plano de ${fmt(levelLoad)} kg: supera la referencia publicada de ${fmt(OFFICIAL_REFERENCE.maxLevelLoad)} kg por plano. ${VALIDATION}` })
   if (config.height > OFFICIAL_REFERENCE.maxHeight)
-    warn({ code: 'height', level: 'validation', message: `Altura de ${fmt(config.height)} mm: supera la altura máxima publicada de ${fmt(OFFICIAL_REFERENCE.maxHeight)} mm. ${VALIDATION}` })
+    warn({ code: 'height', level: 'validation', message: `Altura de ${metros(config.height)}: supera la altura máxima publicada de ${metros(OFFICIAL_REFERENCE.maxHeight)}. ${VALIDATION}` })
   if (!uprightOk)
     warn({
       code: 'upright', level: 'validation',
@@ -359,9 +360,9 @@ export function calculateRackStructure(
   const overhang = (pallet.deep - config.depth) / 2
   const beamDepth = Math.max(...calcs.map((c) => c.beam.depth))
   if (pallet.deep < config.depth - 2 * beamDepth)
-    warn({ code: 'depth', level: 'validation', message: `El pallet (${fmt(pallet.deep)} mm) no llega a apoyar sobre las dos vigas con una profundidad de ${fmt(config.depth)} mm.` })
+    warn({ code: 'depth', level: 'validation', message: `El pallet (${metros(pallet.deep)}) no llega a apoyar sobre las dos vigas con una profundidad de ${metros(config.depth)}.` })
   else if (overhang > R.palletOverhang.max)
-    warn({ code: 'overhang', level: 'warning', message: `Voladizo del pallet de ${fmt(overhang)} mm por lado. Se recomienda un bastidor más profundo.` })
+    warn({ code: 'overhang', level: 'warning', message: `Voladizo del pallet de ${metros(overhang)} por lado. Se recomienda un bastidor más profundo.` })
 
   if (!multi && positionsAvailable > config.positions)
     warn({ code: 'free-positions', level: 'info', message: `Los módulos se completan enteros: la estructura ofrece ${positionsAvailable} posiciones (${positionsAvailable - config.positions} libres para crecer).` })
@@ -369,9 +370,9 @@ export function calculateRackStructure(
     warn({ code: 'top-ties', level: 'info', message: 'Los conectores superiores unen filas entre sí: con una sola fila no se usan.' })
 
   if (layout.warehouseLength > 0 && rowLength > layout.warehouseLength)
-    warn({ code: 'fit-length', level: 'warning', message: `El largo total (${fmt(rowLength)} mm) excede el largo del depósito (${fmt(layout.warehouseLength)} mm).` })
+    warn({ code: 'fit-length', level: 'warning', message: `El largo total (${metros(rowLength)}) excede el largo del depósito (${metros(layout.warehouseLength)}).` })
   if (layout.warehouseWidth > 0 && totalDepth > layout.warehouseWidth)
-    warn({ code: 'fit-width', level: 'warning', message: `La profundidad total (${fmt(totalDepth)} mm) excede el ancho del depósito (${fmt(layout.warehouseWidth)} mm).` })
+    warn({ code: 'fit-width', level: 'warning', message: `La profundidad total (${metros(totalDepth)}) excede el ancho del depósito (${metros(layout.warehouseWidth)}).` })
 
   const first = calcs[0]
   const structure: RackStructure = {

@@ -2,15 +2,24 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { rectanglePlan } from '../../shared/plan/geometry'
+import { packPlan, unpackPlan, type PackedPlan } from '../../shared/plan/racks'
 import type { Plan, PlanPoint, PlanSelection } from '../../shared/plan/types'
 
+/**
+ * Guardado en el navegador. Mientras se arrastra algo el plano cambia en cada movimiento: se guarda
+ * recién cuando se deja de mover (300 ms), así un depósito grande no traba el arrastre.
+ */
+const pending = new Map<string, ReturnType<typeof setTimeout>>()
 const safeStorage = {
   getItem: (k: string) => { try { return localStorage.getItem(k) } catch { return null } },
-  setItem: (k: string, v: string) => { try { localStorage.setItem(k, v) } catch { /* sin memoria */ } },
+  setItem: (k: string, v: string) => {
+    clearTimeout(pending.get(k))
+    pending.set(k, setTimeout(() => { try { localStorage.setItem(k, v) } catch { /* sin memoria */ } }, 300))
+  },
   removeItem: (k: string) => { try { localStorage.removeItem(k) } catch { /* sin memoria */ } },
 }
 
-export type PlanTool = 'select' | 'outline' | 'column' | 'wall' | 'door' | 'zone'
+export type PlanTool = 'select' | 'rack' | 'outline' | 'column' | 'wall' | 'door' | 'zone'
 
 export const DEFAULT_PLAN = rectanglePlan(32_000, 22_000)
 const HISTORY = 80
@@ -27,6 +36,8 @@ interface PlanState {
   view3d: boolean
   /** Qué se está editando en el cotizador: el rack o el plano del depósito. */
   workspace: 'rack' | 'deposito'
+  /** Rack del depósito que se está editando en la pestaña Rack (null = el rack suelto del cotizador). */
+  editingRackId: string | null
   /** Cambio con historial (deshacer vuelve a como estaba antes). */
   commit(fn: (p: Plan) => Plan): void
   /** Guarda una copia antes de empezar a arrastrar… */
@@ -41,6 +52,7 @@ interface PlanState {
   setSnap(v: boolean): void
   setView3d(v: boolean): void
   setWorkspace(w: 'rack' | 'deposito'): void
+  setEditingRack(id: string | null): void
 }
 
 export const usePlan = create<PlanState>()(
@@ -55,6 +67,7 @@ export const usePlan = create<PlanState>()(
       snap: true,
       view3d: false,
       workspace: 'rack',
+      editingRackId: null,
       commit: (fn) => set((s) => ({ plan: fn(s.plan), past: [...s.past, s.plan].slice(-HISTORY), future: [] })),
       begin: () => set((s) => ({ past: [...s.past, s.plan].slice(-HISTORY), future: [] })),
       live: (fn) => set((s) => ({ plan: fn(s.plan) })),
@@ -72,12 +85,19 @@ export const usePlan = create<PlanState>()(
       setSnap: (snap) => set({ snap }),
       setView3d: (view3d) => set({ view3d }),
       setWorkspace: (workspace) => set({ workspace }),
+      setEditingRack: (editingRackId) => set({ editingRackId }),
     }),
     {
       name: 'sdc-plan',
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => safeStorage),
-      partialize: (s) => ({ plan: s.plan, snap: s.snap, workspace: s.workspace, view3d: s.view3d }),
+      // los racks con la misma configuración se guardan una sola vez (depósitos con miles de racks)
+      partialize: (s) => ({ plan: packPlan(s.plan) as unknown as Plan, snap: s.snap, workspace: s.workspace, view3d: s.view3d }),
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<PlanState>
+        return { ...current, ...p, plan: p.plan ? unpackPlan(p.plan as unknown as PackedPlan) : current.plan }
+      },
+      migrate: (persisted) => persisted as never,
     },
   ),
 )

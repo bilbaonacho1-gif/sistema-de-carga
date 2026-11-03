@@ -5,6 +5,7 @@
  */
 import { DESIGN_RULES, PRICE_LIST } from './technicalSpecs'
 import type { MaterialLine, RackStructure } from './types'
+import { metros } from '../units'
 
 const fmt = (n: number) => n.toLocaleString('es-AR')
 
@@ -21,7 +22,7 @@ export function buildMaterials(s: RackStructure): MaterialLine[] {
   for (const [height, qty] of [...frameHeights].sort((a, b) => a[0] - b[0]))
     add({
       code: `BAST-${upright.id}-${config.depth}-${height}`, group: 'Estructura', qty,
-      name: `Bastidor ${fmt(config.depth)} × ${fmt(height)} mm`,
+      name: `Bastidor ${metros(config.depth)} × ${metros(height)}`,
       detail: `${upright.name}, con diagonales, travesaños y 2 placas base`,
     })
 
@@ -35,15 +36,15 @@ export function buildMaterials(s: RackStructure): MaterialLine[] {
     beams.set(key, prev)
   }
   for (const b of [...beams.values()].sort((a, c) => a.length - c.length))
-    add({ code: `VIGA-${b.id}-${b.length}`, group: 'Estructura', qty: b.qty, name: `${b.name} · ${fmt(b.length)} mm`, detail: 'Con conectores soldados en ambos extremos' })
+    add({ code: `VIGA-${b.id}-${b.length}`, group: 'Estructura', qty: b.qty, name: `${b.name} · ${metros(b.length)}`, detail: 'Con conectores soldados en ambos extremos' })
 
   add({ code: 'PAS-SEG', group: 'Fijación', qty: counts.safetyPins, name: 'Pasador de seguridad', detail: '2 por viga' })
   add({ code: 'ANC-M12', group: 'Fijación', qty: counts.anchorBolts, name: 'Anclaje al piso M12', detail: `${DESIGN_RULES.anchorBoltsPerPlate} por placa base` })
-  add({ code: 'DIST-ESP', group: 'Estructura', qty: counts.spacers, name: 'Distanciador espalda con espalda', detail: `${fmt(DESIGN_RULES.backToBackGap)} mm` })
+  add({ code: 'DIST-ESP', group: 'Estructura', qty: counts.spacers, name: 'Distanciador espalda con espalda', detail: metros(DESIGN_RULES.backToBackGap) })
 
   add({ code: 'PROT-COL', group: 'Accesorios', qty: counts.protectors, name: 'Protector de columna', detail: acc.protectors === 'ends' ? 'En los extremos de cada fila' : 'En cada parante del lado del pasillo' })
-  add({ code: 'GUARD-CAB', group: 'Accesorios', qty: counts.guardrails, name: 'Guardarraíl de cabecera', detail: `Para bastidor de ${fmt(config.depth)} mm` })
-  add({ code: 'CONEC-SUP', group: 'Accesorios', qty: counts.topTies, name: 'Conector superior', detail: config.layout.backToBack ? 'Une las filas espalda con espalda por arriba' : `Une las filas por arriba del pasillo (${fmt(config.layout.aisleWidth)} mm)` })
+  add({ code: 'GUARD-CAB', group: 'Accesorios', qty: counts.guardrails, name: 'Guardarraíl de cabecera', detail: `Para bastidor de ${metros(config.depth)}` })
+  add({ code: 'CONEC-SUP', group: 'Accesorios', qty: counts.topTies, name: 'Conector superior', detail: config.layout.backToBack ? 'Une las filas espalda con espalda por arriba' : `Une las filas por arriba del pasillo (${metros(config.layout.aisleWidth)})` })
   add({ code: 'CRUZ-ARR', group: 'Accesorios', qty: counts.crossBraces, name: 'Cruz de arriostramiento posterior', detail: `Una cada ${DESIGN_RULES.modulesPerCrossBrace} módulos` })
   add({ code: 'CART-CAP', group: 'Accesorios', qty: counts.capacitySigns, name: 'Cartel de capacidad', detail: `Hasta ${fmt(s.levelLoad)} kg por nivel` })
   add({

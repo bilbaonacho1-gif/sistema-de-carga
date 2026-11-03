@@ -17,6 +17,7 @@ import { LoadPlate, Viewport, Warnings } from '../web/pages/designer/CotizadorVi
 import { useDesignedStructure, useDesigner } from '../web/pages/designer/designerStore'
 import { PlanWorkspace } from '../web/plan/PlanWorkspace'
 import { usePlan } from '../web/plan/planStore'
+import { EditRackBanner } from '../web/plan/rackEditing'
 
 export function CotizadorApp() {
   const s = useDesignedStructure()
@@ -39,6 +40,7 @@ export function CotizadorApp() {
         </div>
       </header>
       <main className="cz-main">
+        {workspace === 'rack' && <EditRackBanner />}
         {workspace === 'deposito' ? <PlanWorkspace /> : <div className="designer">
           <CotizadorPanel s={s} actions={{ onQuote: () => setQuote(true), quoteLabel: 'Pedir presupuesto' }} />
           <Viewport s={s} />

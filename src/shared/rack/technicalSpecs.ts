@@ -33,10 +33,10 @@ export const CONTACT = {
 /* ------------------------------------------------------------------------ */
 
 export const PALLET_TYPES: PalletType[] = [
-  { id: 'arlog', name: 'Arlog 1000 × 1200', front: 1000, deep: 1200, height: 144 },
-  { id: 'euro', name: 'Europeo 800 × 1200', front: 800, deep: 1200, height: 144 },
-  { id: 'americano', name: 'Americano 1016 × 1219', front: 1016, deep: 1219, height: 150 },
-  { id: 'industrial', name: 'Industrial 1200 × 1000', front: 1200, deep: 1000, height: 144 },
+  { id: 'arlog', name: 'Arlog 1,00 × 1,20 m', front: 1000, deep: 1200, height: 144 },
+  { id: 'euro', name: 'Europeo 0,80 × 1,20 m', front: 800, deep: 1200, height: 144 },
+  { id: 'americano', name: 'Americano 1,016 × 1,219 m', front: 1016, deep: 1219, height: 150 },
+  { id: 'industrial', name: 'Industrial 1,20 × 1,00 m', front: 1200, deep: 1000, height: 144 },
 ]
 
 /** Parantes, de menor a mayor. El motor elige el primero que soporta la carga. */

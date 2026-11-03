@@ -30,8 +30,26 @@ donde sea. En desarrollo se ve en `http://localhost:5174/cotizador.html`.
 Arriba, **Rack / Depósito** cambia entre el rack y el **plano del depósito** (`src/web/plan/`,
 geometría en `src/shared/plan/`): contorno dibujado punto por punto, paredes rectas o curvas (por
 flecha, como la "bulge" de AutoCAD), medidas escritas a mano, columnas (sueltas o en grilla),
-tabiques, portones y zonas libres, con imán a 10 cm, deshacer/rehacer y vista 3D. Por ahora el plano
-se guarda en el navegador; ubicar los racks adentro y exportar a DXF son las próximas etapas.
+tabiques, portones y zonas libres, con imán a 10 cm, deshacer/rehacer y vista 3D. El plano se guarda
+en el navegador.
+
+**Racks en el depósito** (`src/shared/plan/racks.ts`): con la herramienta *Rack* se ubica el rack armado
+en la pestaña Rack; cada uno guarda su propia configuración, se mueve arrastrándolo, se gira (R), se
+duplica (Ctrl+D), se copia en serie (enfrente con pasillo o a continuación) y se edita con el panel del
+cotizador (*Editar este rack*, con la opción de aplicar el cambio a todos los iguales). El plano avisa
+si un rack queda fuera del depósito, pisa una columna, invade una zona libre, cruza un tabique o se
+superpone con otro, y suma posiciones, capacidad y la lista de materiales de todo el depósito (CSV).
+
+**Todo en metros:** por dentro las medidas se guardan en mm (enteros), pero se muestran y se escriben en
+metros (`src/shared/units.ts`, `NumberStepper` con `meters`).
+
+**Depósitos grandes** (300 × 300 m o más, miles de racks): los racks iguales comparten el cálculo
+(caché por configuración); los choques se buscan con una grilla espacial; en el plano los racks quietos
+se dibujan en pocos trazos y sólo lo que está en pantalla; en el 3D (`src/web/plan/RackInstances.tsx`)
+cada tipo de pieza es un `InstancedMesh` y el detalle baja solo según el tamaño (completo → sin
+diagonales y pallet+carga en una caja → sólo estructura); el 3D se dibuja sólo cuando se mueve la cámara
+y el guardado espera a que se termine de arrastrar. Referencia medida (compilación de producción):
+306 racks / 39.168 posiciones en 300 × 300 m → ~10 ms por movimiento al arrastrar; 1.500 racks → ~19 ms.
 
 - **Panel guiado** de 6 pasos con una ayuda en cada uno (producto, medidas, carga, estructura,
   accesorios, resumen), o **Ver todo** para tener todas las opciones juntas.

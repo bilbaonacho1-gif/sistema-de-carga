@@ -12,6 +12,7 @@ import type { RackStructure } from '../../shared/rack/types'
 import type { CameraView } from './types'
 import { computeDimensions, labelAnchor, type DimSpec, type V3 } from './dimensionsModel'
 import { m } from './materials'
+import { metros } from '../../shared/units'
 
 export type SceneLabel =
   | { id: string; kind: 'dim'; position: V3; spec: DimSpec }
@@ -28,7 +29,7 @@ export function sceneLabels(s: RackStructure, showDimensions: boolean, view: Cam
       id: 'warehouse',
       kind: 'warehouse',
       position: [-0.5 + 0.15, 0.01, m(aisleWidth) - 0.15],
-      text: `DEPÓSITO ${warehouseLength.toLocaleString('es-AR')} × ${warehouseWidth.toLocaleString('es-AR')} mm`,
+      text: `DEPÓSITO ${metros(warehouseLength)} × ${metros(warehouseWidth)}`,
     })
   }
   return labels

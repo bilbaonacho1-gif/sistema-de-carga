@@ -4,10 +4,12 @@
  */
 import { Grid, OrbitControls } from '@react-three/drei'
 import { Canvas } from '@react-three/fiber'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import * as THREE from 'three'
 import { edges, outlinePolygon, planBounds, pointOnEdge, tangentOnEdge } from '../../shared/plan/geometry'
 import type { Plan, PlanPoint } from '../../shared/plan/types'
+import { fmt } from '../lib/format'
+import { RackInstances, type InstanceStats } from './RackInstances'
 
 const m = (mm: number) => mm / 1000
 
@@ -66,6 +68,7 @@ function Segment({ a, b, height, thickness, material }: { a: PlanPoint; b: PlanP
 }
 
 export function Plan3D({ plan }: { plan: Plan }) {
+  const [stats, setStats] = useState<InstanceStats | null>(null)
   const poly = useMemo(() => outlinePolygon(plan.outline, 300), [plan.outline])
   const b = planBounds(plan)
   const center = new THREE.Vector3(m((b.minX + b.maxX) / 2), 0, m((b.minY + b.maxY) / 2))
@@ -78,7 +81,8 @@ export function Plan3D({ plan }: { plan: Plan }) {
   }, [poly])
 
   return (
-    <Canvas shadows dpr={[1, 2]} camera={{ fov: 40, near: 0.1, far: 2000, position: [center.x + span * 0.7, span * 0.75, center.z + span * 1.05] }}>
+    <div className="plan3d">
+    <Canvas shadows frameloop="demand" dpr={[1, (plan.racks?.length ?? 0) > 150 ? 1.25 : 2]} camera={{ fov: 40, near: 0.1, far: Math.max(2000, span * 10), position: [center.x + span * 0.7, span * 0.75, center.z + span * 1.05] }}>
       <color attach="background" args={['#eef0f2']} />
       <hemisphereLight args={['#ffffff', '#cfd3d8', 1]} />
       <directionalLight position={[center.x + span, span * 1.5, center.z + span * 0.6]} intensity={1.4} castShadow shadow-bias={-0.0005} shadow-normalBias={0.05}
@@ -124,7 +128,17 @@ export function Plan3D({ plan }: { plan: Plan }) {
         </mesh>
       ))}
 
+      {/* racks: todas las piezas de todos los racks en pocas mallas repetidas */}
+      <RackInstances racks={plan.racks ?? []} onStats={setStats} />
+
       <OrbitControls makeDefault target={center} enableDamping maxPolarAngle={Math.PI / 2 - 0.02} minDistance={2} maxDistance={span * 6} />
     </Canvas>
+    {stats && stats.racks > 0 && (
+      <div className="plan3d__stats" aria-live="polite">
+        {fmt(stats.racks)} {stats.racks === 1 ? 'rack' : 'racks'} · {fmt(stats.instances)} piezas
+        {stats.detail !== 'completo' && <> · vista {stats.detail === 'medio' ? 'simplificada' : 'sólo estructura'} para que no se trabe</>}
+      </div>
+    )}
+    </div>
   )
 }

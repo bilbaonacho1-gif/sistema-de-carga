@@ -166,7 +166,7 @@ export function dxfBulge(e: Edge): number {
 /** Plano inicial: depósito rectangular. */
 export function rectanglePlan(length: number, width: number, base?: Partial<Plan>): Plan {
   return {
-    wallHeight: 8000, wallThickness: 200, columns: [], walls: [], doors: [], zones: [], ...base,
+    wallHeight: 8000, wallThickness: 200, columns: [], walls: [], doors: [], zones: [], racks: [], ...base,
     outline: { points: [{ x: 0, y: 0 }, { x: length, y: 0 }, { x: length, y: width }, { x: 0, y: width }], sags: [0, 0, 0, 0] },
   }
 }
