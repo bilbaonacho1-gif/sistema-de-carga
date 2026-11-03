@@ -180,3 +180,24 @@ export function drawnRect(kind: RectKind, a: PlanPoint, b: PlanPoint, plan: Plan
   if (Math.min(dx, dy) >= 2000) return clip({ x, y, w: dx, d: dy })
   return clip(dx >= dy ? { x, y: r(a.y - aisle / 2), w: dx, d: aisle } : { x: r(a.x - aisle / 2), y, w: aisle, d: dy })
 }
+
+/* ------------------------------ Dibujo con medidas escritas ------------------------------ */
+
+/** Depósito vacío: así arranca el plano (se crea escribiendo las medidas o dibujándolo). */
+export function emptyPlan(base?: Partial<Plan>): Plan {
+  return { wallHeight: 8000, wallThickness: 200, columns: [], walls: [], doors: [], zones: [], ...base, outline: { points: [], sags: [] }, racks: undefined, rackAreas: [], aisles: [] }
+}
+
+/**
+ * Punto siguiente al escribir el largo de una pared (como en AutoCAD): desde `last`, `length` mm hacia
+ * donde apunta el mouse (`toward`); sin mouse, siguiendo la pared anterior. Con `snapAngle` (imán
+ * prendido) la pared sale derecha: horizontal o vertical, la más cercana al mouse.
+ */
+export function pointAtLength(last: PlanPoint, toward: PlanPoint | null, prev: PlanPoint | undefined, length: number, snapAngle: boolean): PlanPoint {
+  let dx = 1, dy = 0
+  if (toward && Math.hypot(toward.x - last.x, toward.y - last.y) > 1) { dx = toward.x - last.x; dy = toward.y - last.y }
+  else if (prev && Math.hypot(last.x - prev.x, last.y - prev.y) > 1) { dx = last.x - prev.x; dy = last.y - prev.y }
+  let ang = Math.atan2(dy, dx)
+  if (snapAngle) ang = Math.round(ang / (Math.PI / 2)) * (Math.PI / 2)
+  return { x: Math.round(last.x + Math.cos(ang) * length), y: Math.round(last.y + Math.sin(ang) * length) }
+}

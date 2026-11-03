@@ -52,5 +52,23 @@ describe('edición del contorno', () => {
     const girado = rotateAisle({ ...plan, aisles: [{ id: 'p', x: 0, y: 4500, w: 30_000, d: 3000 }] }, 'p').aisles![0]
     expect(girado).toEqual({ id: 'p', x: 13_500, y: 0, w: 3000, d: 20_000 })
   })
+
+  it('empezar vacío y dibujar escribiendo el largo de cada pared', async () => {
+    const { emptyPlan, pointAtLength } = await import('./edit')
+    const { autoLayout, DEFAULT_LAYOUT } = await import('./layout')
+    const { rackIssues } = await import('./racks')
+    const vacio = emptyPlan()
+    expect(vacio.outline.points).toHaveLength(0)
+    expect(autoLayout(vacio, { width: 2700, depth: 1100, upright: 80, backToBackGap: 200 }, DEFAULT_LAYOUT).placements).toHaveLength(0)
+    expect(rackIssues(vacio, [])).toEqual({})
+    // hacia donde apunta el mouse, casi derecho → derecho
+    expect(pointAtLength({ x: 0, y: 0 }, { x: 5000, y: 300 }, undefined, 40_000, true)).toEqual({ x: 40_000, y: 0 })
+    expect(pointAtLength({ x: 40_000, y: 0 }, { x: 40_200, y: 9000 }, { x: 0, y: 0 }, 25_500, true)).toEqual({ x: 40_000, y: 25_500 })
+    // sin mouse sigue la dirección de la pared anterior
+    expect(pointAtLength({ x: 10_000, y: 0 }, null, { x: 0, y: 0 }, 5000, true)).toEqual({ x: 15_000, y: 0 })
+    // sin imán, el ángulo exacto del mouse
+    const libre = pointAtLength({ x: 0, y: 0 }, { x: 3000, y: 4000 }, undefined, 10_000, false)
+    expect(libre).toEqual({ x: 6000, y: 8000 })
+  })
 })
 
