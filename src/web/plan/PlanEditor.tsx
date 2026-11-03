@@ -66,7 +66,7 @@ function fitView(plan: Plan, aspect: number): VB {
 export interface PlanRackLayer { racks: RackPlacement[]; size: RackModuleSize; issues?: Record<string, string> }
 
 export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rackLayer?: PlanRackLayer }) {
-  const { plan, tool, selection, draft, snap, showCotas, commit, begin, live, select, setDraft, setTool } = usePlan()
+  const { plan, tool, selection, draft, snap, snapStep, showCotas, commit, begin, live, select, setDraft, setTool } = usePlan()
   const svgRef = useRef<SVGSVGElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 800, h: 600 })
@@ -110,7 +110,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
     const p = pt.matrixTransform(svg.getScreenCTM()!.inverse())
     return { x: p.x, y: p.y }
   }
-  const sn = (v: number, free = false) => (snap && !free ? Math.round(v / 100) * 100 : Math.round(v))
+  const sn = (v: number, free = false) => (snap && !free ? Math.round(v / snapStep) * snapStep : Math.round(v))
   const snapPt = (p: PlanPoint, free = false): PlanPoint => ({ x: sn(p.x, free), y: sn(p.y, free) })
   /** Mientras se dibuja: a 90° del punto anterior si está casi alineado. */
   const ortho = (p: PlanPoint, prev?: PlanPoint): PlanPoint => {
@@ -313,17 +313,16 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
     drag.current = null
   }
 
-  /* ---- grilla adaptada al zoom ---- */
+  /* ---- grilla: cuadros de 1 m (con una línea más marcada cada 5 m); de lejos, cuadros de 10 m ---- */
   const grid = useMemo(() => {
-    const steps = [100, 250, 500, 1000, 2500, 5000, 10_000, 25_000, 50_000]
-    const step = steps.find((s) => s / scale >= 16) ?? 100_000
-    const major = step * (step === 250 || step === 2500 || step === 25_000 ? 4 : 5)
+    const step = [1000, 10_000, 100_000].find((s) => s / scale >= 7) ?? 1_000_000
+    const major = step * 5
     const lines: { k: string; x1: number; y1: number; x2: number; y2: number; major: boolean }[] = []
     for (let x = Math.floor(vb.x / step) * step; x <= vb.x + vb.w; x += step)
       lines.push({ k: `x${x}`, x1: x, y1: vb.y, x2: x, y2: vb.y + vb.h, major: Math.abs(x % major) < 1e-6 })
     for (let y = Math.floor(vb.y / step) * step; y <= vb.y + vb.h; y += step)
       lines.push({ k: `y${y}`, x1: vb.x, y1: y, x2: vb.x + vb.w, y2: y, major: Math.abs(y % major) < 1e-6 })
-    return lines
+    return { lines, step }
   }, [vb, scale])
 
   const es = edges(plan.outline)
@@ -370,12 +369,12 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
           </pattern>
         </defs>
 
-        {/* grilla */}
-        <g>{grid.map(({ k, major, ...l }) => <line key={k} {...l} stroke={major ? '#cfd3d8' : '#e6e8eb'} strokeWidth={px(major ? 1 : 0.6)} />)}</g>
+        {/* piso del depósito y, encima, la grilla de 1 m (así los cuadros se ven también adentro) */}
+        {es.length >= 3 && <path d={outlineD(plan)} fill="#fff" stroke="none" />}
+        <g>{grid.lines.map(({ k, major, ...l }) => <line key={k} {...l} stroke={major ? '#c3c8cf' : '#dde0e5'} strokeWidth={px(major ? 1.2 : 1)} />)}</g>
 
         {/* piso y paredes */}
         {es.length >= 3 && <>
-          <path d={outlineD(plan)} fill="#fff" stroke="none" />
           {plan.zones.map((z) => (
             <g key={z.id} onPointerDown={(e) => { select({ kind: 'zone', id: z.id }); const p = toPlan(e.clientX, e.clientY); startDrag(e, { type: 'zone', id: z.id, dx: p.x - z.x, dy: p.y - z.y, started: false }) }}>
               <rect x={z.x} y={z.y} width={z.w} height={z.d} fill="url(#plan-hatch)" stroke={isSel('zone', z.id) ? RED : '#c98a93'} strokeWidth={px(isSel('zone', z.id) ? 2.5 : 1.2)} strokeDasharray={`${px(6)} ${px(4)}`} />
@@ -529,7 +528,10 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         })()}
         {cursor && tool !== 'select' && <circle cx={snapPt(cursor).x} cy={snapPt(cursor).y} r={px(3)} fill={RED} pointerEvents="none" />}
       </svg>
-      <div className="plan-editor__coords" aria-hidden>{cursor ? `x ${meters(cursor.x)} · y ${meters(cursor.y)}` : 'Grilla con imán de 10 cm · Alt para mover libre'}</div>
+      <div className="plan-editor__coords" aria-hidden>
+        <span className="plan-editor__square" />{` cuadro = ${meters(grid.step)}`}
+        {cursor ? ` · x ${meters(snapPt(cursor).x)} · y ${meters(snapPt(cursor).y)}` : snap ? ` · imán ${meters(snapStep)} (Alt: libre)` : ''}
+      </div>
     </div>
   )
 }

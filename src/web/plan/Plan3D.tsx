@@ -122,8 +122,11 @@ function useDrag() {
   })
 }
 
-/** Redondea a la grilla de 10 cm si el imán está prendido (Alt mueve libre). */
-const snapTo = (v: number, free: boolean) => (usePlan.getState().snap && !free ? Math.round(v / 100) * 100 : Math.round(v))
+/** Redondea al imán elegido (1 m por defecto) si está prendido (Alt mueve libre). */
+const snapTo = (v: number, free: boolean) => {
+  const { snap, snapStep } = usePlan.getState()
+  return snap && !free ? Math.round(v / snapStep) * snapStep : Math.round(v)
+}
 
 /* ------------------------------ Racks ------------------------------ */
 
