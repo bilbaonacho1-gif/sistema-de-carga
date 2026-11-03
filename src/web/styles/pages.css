@@ -588,3 +588,39 @@
 .mark-tools .plan-tools { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .plan-snap__select { margin-left: 4px; padding: 2px 4px; border: 1px solid var(--line); border-radius: 6px; background: #fff; font: inherit; color: var(--ink); }
 .plan-editor__square { display: inline-block; width: 10px; height: 10px; border: 1px solid #b9bec5; vertical-align: -1px; }
+/* plano vacío: crear el depósito escribiendo las medidas */
+.plan-start { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(420px, calc(100% - 32px)); display: flex; flex-direction: column; gap: 12px; padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: 0 12px 40px rgba(20, 24, 30, .14); user-select: text; }
+.plan-start__t { margin: 0; font: 700 20px var(--f-display, var(--f-body)); text-transform: uppercase; letter-spacing: .02em; color: var(--ink); }
+.plan-start__p { margin: 0; color: var(--ink-2); font-size: 14px; }
+.plan-start__row { display: flex; align-items: flex-end; gap: 10px; }
+.plan-start__f { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; font: 600 13px var(--f-body); color: var(--ink-2); }
+.plan-start__in { display: flex; align-items: center; gap: 6px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.plan-start__in:focus-within { border-color: var(--red); box-shadow: 0 0 0 3px var(--red-tint); }
+.plan-start__in input { flex: 1; min-width: 0; width: 100%; padding: 12px 0; border: 0; outline: 0; background: transparent; font: 600 22px var(--f-mono); color: var(--ink); text-align: right; }
+.plan-start__in small { color: var(--ink-3, #8a9099); font: 600 13px var(--f-mono); }
+.plan-start__x { padding-bottom: 14px; font-size: 20px; color: var(--ink-2); }
+.plan-start__go { padding: 12px; border: 0; border-radius: 10px; background: var(--red); color: #fff; font: 700 15px var(--f-body); cursor: pointer; }
+.plan-start__go:disabled { opacity: .45; cursor: default; }
+.plan-start__or { display: flex; align-items: center; gap: 10px; color: var(--ink-2); font-size: 13px; }
+.plan-start__or::before, .plan-start__or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.plan-start__draw { padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font: 600 14px var(--f-body); cursor: pointer; }
+.plan-start__draw:hover { border-color: var(--red); color: var(--red); }
+.plan-start__small { margin: 0; color: var(--ink-2); font-size: 12.5px; }
+.plan-editor__hint { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); max-width: calc(100% - 24px); padding: 7px 14px; border-radius: 8px; background: #1f2328; color: #fff; font: 500 13px var(--f-body); pointer-events: none; text-align: center; }
+.plan-editor__hint strong { color: #ffd166; }
+/* cotizador de depósitos: sin columna derecha, el plano ocupa todo el ancho */
+.designer.depot { grid-template-columns: 350px minmax(0, 1fr); }
+@media (max-width: 900px) { .designer.depot { grid-template-columns: minmax(0, 1fr); } }
+.plan-stage__summary { margin-left: auto; min-width: 0; }
+.depot-strip { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 18px; margin: 0; }
+.depot-strip div { display: flex; align-items: baseline; gap: 6px; }
+.depot-strip dt { font: 600 11px var(--f-body); text-transform: uppercase; letter-spacing: .06em; color: var(--ink-2); }
+.depot-strip dd { margin: 0; font: 700 15px var(--f-mono); color: var(--ink); }
+.depot-strip__strong dd { color: var(--red); }
+.cot-editing { display: flex; flex-direction: column; gap: 10px; }
+.rack-editor__issue { display: flex; align-items: center; gap: 6px; margin: 0; padding: 6px 10px; border-radius: 8px; background: #fff; color: var(--red); font-weight: 600; font-size: 13px; }
+.rack-editor__row { display: flex; align-items: center; justify-content: space-between; font-weight: 600; font-size: 14px; }
+.rack-editor__num { display: inline-flex; align-items: center; gap: 10px; }
+.rack-editor__num strong { min-width: 2ch; text-align: center; font: 700 18px var(--f-mono); }
+.rack-editor__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.rack-editor__actions .vp-btn { justify-content: center; background: #fff; }

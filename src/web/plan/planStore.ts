@@ -1,7 +1,7 @@
 /** Estado del editor del plano: el plano, la herramienta, la selección y el historial. */
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
-import { rectanglePlan } from '../../shared/plan/geometry'
+import { emptyPlan } from '../../shared/plan/edit'
 import { DEFAULT_LAYOUT, type LayoutOptions } from '../../shared/plan/layout'
 import type { Plan, PlanPoint, PlanSelection } from '../../shared/plan/types'
 
@@ -25,7 +25,17 @@ export type PlanTool = 'select' | 'outline' | 'column' | 'wall' | 'door' | 'zone
 export const FLOW = ['deposito', 'rack', 'carga', 'distribucion', 'accesorios', 'resumen'] as const
 export type FlowStep = (typeof FLOW)[number]
 
-export const DEFAULT_PLAN = rectanglePlan(32_000, 22_000)
+/** El plano arranca vacío: el depósito se crea escribiendo sus medidas o dibujándolo. */
+export const DEFAULT_PLAN = emptyPlan()
+
+/** ¿Es el depósito de ejemplo con el que arrancaba antes (32 × 22 m, sin nada)? */
+function isOldSample(p?: Plan): boolean {
+  if (!p) return false
+  const pts = p.outline?.points ?? []
+  const sample = [[0, 0], [32_000, 0], [32_000, 22_000], [0, 22_000]]
+  return pts.length === 4 && pts.every((q, i) => q.x === sample[i][0] && q.y === sample[i][1])
+    && !p.columns?.length && !p.walls?.length && !p.doors?.length && !p.zones?.length && !p.racks && !p.rackAreas?.length && !p.aisles?.length
+}
 const HISTORY = 80
 
 interface PlanState {
@@ -111,7 +121,12 @@ export const usePlan = create<PlanState>()(
     }),
     {
       name: 'sdc-plan',
-      version: 1,
+      version: 2,
+      // v2: el plano arranca vacío; si quedó guardado el depósito de ejemplo sin tocar, se vacía
+      migrate: (persisted, version) => {
+        const p = (persisted ?? {}) as Partial<PlanState>
+        return (version < 2 && isOldSample(p.plan) ? { ...p, plan: emptyPlan() } : p) as PlanState
+      },
       storage: createJSONStorage(() => safeStorage),
       partialize: (s) => ({ plan: s.plan, snap: s.snap, snapStep: s.snapStep, showCotas: s.showCotas, workspace: s.workspace, view3d: s.view3d, flowStep: s.flowStep, layout: s.layout }),
       // estados guardados antes de la distribución no tienen estas opciones

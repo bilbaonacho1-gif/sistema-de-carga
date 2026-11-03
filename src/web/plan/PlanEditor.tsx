@@ -2,7 +2,9 @@
  * EDITOR DEL PLANO (vista de arriba, SVG en milímetros).
  *  - Seleccionar: arrastrar puntos, columnas, zonas, tabiques y portones. Tocando una pared
  *    aparece su manija del medio: arrastrándola la pared se curva. Doble clic agrega un punto.
- *  - Contorno: clic punto por punto; se cierra tocando el primero (o Enter).
+ *  - Plano vacío: se crea escribiendo largo × ancho, o se dibuja a mano.
+ *  - Contorno: clic punto por punto; se cierra tocando el primero (o Enter). Después del primer punto se
+ *    puede escribir el largo de cada pared y Enter: va hacia donde apunta el mouse (como en AutoCAD).
  *  - Tabique: clic en cada extremo (encadena el siguiente; Esc termina).
  *  - Columna / Portón / Zona: clic donde va.
  *  - Zona de racks / Pasillo: arrastrar de punta a punta (un clic solo pone una de medida estándar).
@@ -10,7 +12,9 @@
  * Rueda o pellizco: zoom. Arrastrar el fondo: mover. Ctrl+Z / Ctrl+Y: deshacer / rehacer.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { drawnRect, itemsOutside, moveVertex, newId, removeItem, removeVertex, sagFromPoint, setOutline, splitEdge, updateRect } from '../../shared/plan/edit'
+import { drawnRect, itemsOutside, moveVertex, newId, pointAtLength, removeItem, removeVertex, sagFromPoint, setOutline, splitEdge, updateRect } from '../../shared/plan/edit'
+import { rectanglePlan } from '../../shared/plan/geometry'
+import { parseMetros } from '../../shared/units'
 import { apex, arcOf, edgeLength, edges, nearestOnEdge, planBounds, pointOnEdge, tangentOnEdge, type Edge } from '../../shared/plan/geometry'
 import type { Plan, PlanPoint } from '../../shared/plan/types'
 import type { RackModuleSize, RackPlacement } from '../../shared/plan/layout'
@@ -52,7 +56,8 @@ export function outlineD(plan: Plan): string {
 }
 
 function fitView(plan: Plan, aspect: number): VB {
-  const b = planBounds(plan)
+  // plano vacío: una vista de unos 50 × 30 m para empezar a dibujar
+  const b = plan.outline.points.length < 3 ? { minX: 0, minY: 0, maxX: 50_000, maxY: 30_000 } : planBounds(plan)
   // margen para las cotas, que van por afuera del depósito
   const pad = Math.max(b.maxX - b.minX, b.maxY - b.minY) * 0.2 + 1500
   let w = b.maxX - b.minX + pad * 2
@@ -72,6 +77,11 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
   const [size, setSize] = useState({ w: 800, h: 600 })
   const [vb, setVb] = useState<VB>(() => fitView(plan, 4 / 3))
   const [cursor, setCursor] = useState<PlanPoint | null>(null)
+  const cursorRef = useRef<PlanPoint | null>(null)
+  /** Largo escrito con el teclado mientras se dibuja una pared (texto en metros). */
+  const [typed, setTypedState] = useState('')
+  const typedRef = useRef('')
+  const setTyped = (t: string) => { typedRef.current = t; setTypedState(t) }
   /** Zona de racks o pasillo que se está dibujando (de a hasta b). */
   const [rectDraft, setRectDraft] = useState<{ kind: 'area' | 'aisle'; a: PlanPoint; b: PlanPoint } | null>(null)
   const drag = useRef<Drag | null>(null)
@@ -147,7 +157,12 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
       const s = usePlan.getState()
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) s.redo(); else s.undo(); return }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); s.redo(); return }
-      if (e.key === 'Escape') { if (s.draft.length) s.setDraft([]); else s.select(null); return }
+      // dibujando: los números son el largo de la pared; Enter la pone
+      const drawing = (s.tool === 'outline' || s.tool === 'wall') && s.draft.length > 0
+      if (drawing && !e.ctrlKey && !e.metaKey && /^[\d.,]$/.test(e.key)) { e.preventDefault(); setTyped(typedRef.current + e.key); return }
+      if (drawing && e.key === 'Backspace' && typedRef.current) { e.preventDefault(); setTyped(typedRef.current.slice(0, -1)); return }
+      if (drawing && e.key === 'Enter' && typedRef.current) { e.preventDefault(); placeTyped(); return }
+      if (e.key === 'Escape') { setTyped(''); if (s.draft.length) s.setDraft([]); else s.select(null); return }
       if (e.key === 'Enter' && s.tool === 'outline' && s.draft.length >= 3) { closeOutline(s.draft); return }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const sel = s.selection
@@ -162,6 +177,45 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps -- lee el estado al momento
+
+  /** Pone el punto siguiente a la distancia escrita. */
+  const placeTyped = () => {
+    const L = parseMetros(typedRef.current)
+    setTyped('')
+    const s = usePlan.getState()
+    const last = s.draft[s.draft.length - 1]
+    if (!last || !(L >= 50)) return
+    const p = pointAtLength(last, cursorRef.current, s.draft[s.draft.length - 2], L, s.snap)
+    // si el punto nuevo queda fuera de la vista, se aleja para que se vea todo lo dibujado
+    setVb((v) => {
+      const pad = Math.max(v.w, v.h) * 0.08
+      if (p.x > v.x + pad && p.x < v.x + v.w - pad && p.y > v.y + pad && p.y < v.y + v.h - pad) return v
+      const pts = [...s.draft, p]
+      const x0 = Math.min(...pts.map((q) => q.x)), x1 = Math.max(...pts.map((q) => q.x))
+      const y0 = Math.min(...pts.map((q) => q.y)), y1 = Math.max(...pts.map((q) => q.y))
+      const m = Math.max(x1 - x0, y1 - y0) * 0.35 + 3000
+      let w = x1 - x0 + 2 * m, h = y1 - y0 + 2 * m
+      const aspect = v.w / v.h
+      if (w / h > aspect) h = w / aspect; else w = h * aspect
+      return { x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - h / 2, w, h }
+    })
+    if (s.tool === 'outline') {
+      const first = s.draft[0]
+      if (s.draft.length >= 3 && Math.hypot(p.x - first.x, p.y - first.y) < 50) closeOutline(s.draft)
+      else s.setDraft([...s.draft, p])
+    } else {
+      const id = newId('w')
+      s.commit((pl) => ({ ...pl, walls: [...pl.walls, { id, a: last, b: p, thickness: 150 }] }))
+      s.setDraft([p])
+    }
+  }
+
+  /** Depósito rectangular a partir de las medidas escritas. */
+  const createRect = (L: number, W: number) => {
+    commit((p) => rectanglePlan(L, W, p))
+    select(null)
+    setVb(fitView(usePlan.getState().plan, size.w / size.h))
+  }
 
   const closeOutline = (pts: PlanPoint[]) => {
     commit((p) => setOutline(p, pts))
@@ -250,6 +304,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
     }
     const raw = toPlan(e.clientX, e.clientY)
     setCursor(raw)
+    cursorRef.current = raw
     const d = drag.current
     if (!d) return
     if (d.type === 'pan') {
@@ -346,7 +401,11 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
 
   // vista previa de lo que se está dibujando
   const last = draft[draft.length - 1]
-  const preview = cursor && last && (tool === 'outline' || tool === 'wall') ? ortho(snapPt(cursor), last) : null
+  const typedLen = typed ? parseMetros(typed) : NaN
+  const preview = last && (tool === 'outline' || tool === 'wall')
+    ? typedLen > 0 ? pointAtLength(last, cursor, draft[draft.length - 2], typedLen, snap) : cursor ? ortho(snapPt(cursor), last) : null
+    : null
+  const empty = plan.outline.points.length < 3
 
   return (
     <div ref={wrapRef} className={`plan-editor plan-editor--${tool}`}>
@@ -469,7 +528,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         })}
 
         {/* cotas (o, si están apagadas, el largo de cada pared) */}
-        {showCotas && tool !== 'outline' && (
+        {showCotas && tool !== 'outline' && !empty && (
           <PlanCotas plan={plan} px={px} column={selection?.kind === 'column' ? plan.columns.find((c) => c.id === selection.id) : null} />
         )}
         {!showCotas && tool !== 'outline' && es.map((e) => {
@@ -513,7 +572,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         {draft.length > 0 && <>
           <polyline points={[...draft, ...(preview ? [preview] : [])].map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke={RED} strokeWidth={px(2.5)} strokeDasharray={`${px(8)} ${px(5)}`} />
           {draft.map((p, i) => <circle key={`d${i}`} cx={p.x} cy={p.y} r={px(i === 0 && tool === 'outline' ? 8 : 5)} fill={i === 0 && tool === 'outline' ? RED : '#fff'} stroke={RED} strokeWidth={px(2)} />)}
-          {preview && label({ x: (last.x + preview.x) / 2, y: (last.y + preview.y) / 2 - px(14) }, meters(Math.hypot(preview.x - last.x, preview.y - last.y)), 'draft-len', RED)}
+          {preview && label({ x: (last.x + preview.x) / 2, y: (last.y + preview.y) / 2 - px(14) }, typed ? `${typed} m ⏎` : meters(Math.hypot(preview.x - last.x, preview.y - last.y)), 'draft-len', RED)}
         </>}
         {rectDraft && (Math.abs(rectDraft.b.x - rectDraft.a.x) > 0 || Math.abs(rectDraft.b.y - rectDraft.a.y) > 0) && (() => {
           const r = drawnRect(rectDraft.kind, rectDraft.a, rectDraft.b, plan, usePlan.getState().layout.aisle)
@@ -528,10 +587,44 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         })()}
         {cursor && tool !== 'select' && <circle cx={snapPt(cursor).x} cy={snapPt(cursor).y} r={px(3)} fill={RED} pointerEvents="none" />}
       </svg>
+      {empty && draft.length === 0 && tool !== 'outline' && <StartCard onCreate={createRect} onDraw={() => setTool('outline')} />}
+      {(tool === 'outline' || tool === 'wall') && (
+        <div className="plan-editor__hint" role="status">
+          {draft.length === 0
+            ? tool === 'outline' ? 'Hacé clic donde va la primera esquina del depósito.' : 'Hacé clic donde empieza el tabique.'
+            : typed
+              ? <>Largo <strong>{typed} m</strong> · Enter para ponerlo · apuntá con el mouse para la dirección</>
+              : <>Escribí el largo de la pared (ej. <strong>40</strong>) y Enter, o hacé clic.{tool === 'outline' && draft.length >= 3 ? ' Enter solo o tocar el primer punto cierra el depósito.' : ''} Esc cancela.</>}
+        </div>
+      )}
       <div className="plan-editor__coords" aria-hidden>
         <span className="plan-editor__square" />{` cuadro = ${meters(grid.step)}`}
         {cursor ? ` · x ${meters(snapPt(cursor).x)} · y ${meters(snapPt(cursor).y)}` : snap ? ` · imán ${meters(snapStep)} (Alt: libre)` : ''}
       </div>
     </div>
+  )
+}
+
+/** Plano vacío: crear el depósito escribiendo largo × ancho, o dibujarlo a mano. */
+function StartCard({ onCreate, onDraw }: { onCreate(L: number, W: number): void; onDraw(): void }) {
+  const [L, setL] = useState('')
+  const [W, setW] = useState('')
+  const l = parseMetros(L), w = parseMetros(W)
+  const ok = l >= 2000 && w >= 2000 && l <= 2_000_000 && w <= 2_000_000
+  const clean = (v: string) => v.replace(/[^\d.,]/g, '')
+  return (
+    <form className="plan-start" onPointerDown={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); if (ok) onCreate(l, w) }}>
+      <h2 className="plan-start__t">Empezá tu depósito</h2>
+      <p className="plan-start__p">Escribí las medidas del depósito en metros:</p>
+      <div className="plan-start__row">
+        <label className="plan-start__f"><span>Largo</span><span className="plan-start__in"><input autoFocus inputMode="decimal" placeholder="ej. 40" value={L} onChange={(e) => setL(clean(e.target.value))} aria-label="Largo en metros" /><small>m</small></span></label>
+        <span className="plan-start__x" aria-hidden>×</span>
+        <label className="plan-start__f"><span>Ancho</span><span className="plan-start__in"><input inputMode="decimal" placeholder="ej. 25" value={W} onChange={(e) => setW(clean(e.target.value))} aria-label="Ancho en metros" /><small>m</small></span></label>
+      </div>
+      <button type="submit" className="plan-start__go" disabled={!ok}>Crear depósito{ok ? ` de ${meters(l)} × ${meters(w)}` : ''}</button>
+      <div className="plan-start__or"><span>o</span></div>
+      <button type="button" className="plan-start__draw" onClick={onDraw}>Dibujarlo a mano (forma en L, paredes curvas…)</button>
+      <p className="plan-start__small">Hacés clic en cada esquina y escribís el largo de cada pared. Después podés cambiar cualquier medida.</p>
+    </form>
   )
 }

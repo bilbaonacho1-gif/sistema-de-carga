@@ -15,9 +15,9 @@ import { metros } from '../../shared/units'
 
 export const TOOLS: { id: PlanTool; label: string; icon: LucideIcon; help: string }[] = [
   { id: 'select', label: 'Seleccionar', icon: MousePointer2, help: 'Arrastrá los puntos rojos para mover las esquinas. Tocá una pared para escribir su largo o curvarla (arrastrando su manija del medio). Doble clic en una pared agrega un punto. Arrastrá el fondo para moverte y usá la rueda para acercar.' },
-  { id: 'outline', label: 'Dibujar contorno', icon: PenLine, help: 'Hacé clic en cada esquina del depósito. Para cerrar, tocá el primer punto o apretá Enter. Las paredes se alinean solas a 90° cuando están casi derechas. Esc cancela.' },
+  { id: 'outline', label: 'Dibujar contorno', icon: PenLine, help: 'Hacé clic en la primera esquina. Después escribí el largo de cada pared (ej. 40) y Enter: va hacia donde apunta el mouse. También podés hacer clic en cada esquina. Para cerrar, tocá el primer punto o Enter. Esc cancela.' },
   { id: 'column', label: 'Columna', icon: Square, help: 'Clic donde va cada columna. Después la podés arrastrar o escribir su medida. Para muchas columnas iguales usá "Grilla de columnas".' },
-  { id: 'wall', label: 'Tabique', icon: WallIcon, help: 'Clic en el comienzo y en el final de la pared interna. Sigue encadenando la siguiente desde donde terminó; Esc termina.' },
+  { id: 'wall', label: 'Tabique', icon: WallIcon, help: 'Clic donde empieza la pared interna; después clic donde termina, o escribí su largo y Enter. Sigue encadenando la siguiente desde donde terminó; Esc termina.' },
   { id: 'door', label: 'Portón', icon: DoorOpen, help: 'Clic sobre una pared del contorno para poner un portón. Arrastralo para correrlo a lo largo de la pared.' },
   { id: 'zone', label: 'Zona libre', icon: Box, help: 'Clic para marcar un área donde no van racks (oficinas, carga y descarga). Después ajustá su medida y su nombre.' },
   { id: 'area', label: 'Zona de racks', icon: LayoutGrid, help: 'Arrastrá un rectángulo donde querés los racks: se llenan solos con filas y pasillos. Podés marcar varias zonas, cada una con filas horizontales o verticales. Si no marcás ninguna, se usa todo el depósito.' },
@@ -30,7 +30,8 @@ export function PlanPanel() {
 }
 
 /** Herramientas, instructivo, lo seleccionado y los datos del depósito (sin el marco). */
-export function PlanTools() {
+/** `showSelection`: las medidas de lo seleccionado van acá (si no, las muestra quien lo usa, arriba de todo). */
+export function PlanTools({ showSelection = true }: { showSelection?: boolean } = {}) {
   const { tool, setTool, plan, commit, undo, redo, past, future, snap, setSnap, snapStep, setSnapStep, showCotas, setShowCotas } = usePlan()
   const current = TOOLS.find((t) => t.id === tool)!
   const outside = itemsOutside(plan).size
@@ -62,7 +63,9 @@ export function PlanTools() {
         </span>
       </div>
 
-      <Selection />
+      {plan.outline.points.length < 3 && tool !== 'outline'
+        ? <p className="note note--blue">Empezá escribiendo el largo y el ancho del depósito en el plano, o dibujalo a mano con "Dibujar contorno" (clic en cada esquina y escribís el largo de cada pared).</p>
+        : showSelection && <Selection />}
       {hasMarks && plan.racks && <ManualRacksNote />}
 
       <h2 className="section-label">Depósito</h2>
@@ -93,7 +96,8 @@ export function PlanTools() {
 
 /* ------------------------------ Lo seleccionado ------------------------------ */
 
-function Selection() {
+/** Las medidas de lo seleccionado en el plano (pared, esquina, columna, zona, pasillo…). */
+export function Selection() {
   const { plan, selection, commit, select, layout } = usePlan()
   if (!selection) return <p className="muted small">Tocá una pared, una esquina, una columna, una zona o un pasillo para ver y escribir sus medidas.</p>
   const del = (fn: (p: Plan) => Plan) => { commit(fn); select(null) }
@@ -310,7 +314,7 @@ export function ManualRacksNote() {
  * en el paso de la distribución sin volver al plano del depósito.
  */
 export function MarkTools() {
-  const { tool, setTool, plan, selection } = usePlan()
+  const { tool, setTool, plan } = usePlan()
   const ids: PlanTool[] = ['select', 'area', 'aisle']
   const current = TOOLS.find((t) => t.id === tool && ids.includes(t.id))
   const n = (plan.rackAreas?.length ?? 0), k = (plan.aisles?.length ?? 0)
@@ -329,7 +333,6 @@ export function MarkTools() {
           : n || k ? `${n ? `${n} ${n === 1 ? 'zona de racks' : 'zonas de racks'}` : 'Todo el depósito'}${k ? ` · ${k} ${k === 1 ? 'pasillo marcado' : 'pasillos marcados'}` : ''}. Tocá una zona o un pasillo en el plano para cambiarlo.`
             : 'Marcá en el plano las zonas donde van los racks y los pasillos que necesitás: las filas se acomodan solas.'}
       </p>
-      {(selection?.kind === 'area' || selection?.kind === 'aisle') && <Selection />}
     </div>
   )
 }

@@ -21,9 +21,9 @@ import { fmt, plural } from '../web/lib/format'
 import { AccessoriesStep, LoadStep, MaterialsList, downloadMaterials } from '../web/pages/designer/CotizadorPanel'
 import { Viewport, Warnings } from '../web/pages/designer/CotizadorView'
 import { useDesigner } from '../web/pages/designer/designerStore'
-import { MarkTools, PlanTools } from '../web/plan/PlanPanel'
+import { MarkTools, PlanTools, Selection } from '../web/plan/PlanPanel'
 import { FLOW, usePlan, type FlowStep } from '../web/plan/planStore'
-import { PlanStage } from '../web/plan/PlanWorkspace'
+import { PlanStage, RackEditor } from '../web/plan/PlanWorkspace'
 import { metros, metrosNum } from '../shared/units'
 
 const L = DESIGN_RULES.limits
@@ -64,28 +64,36 @@ export function DepotFlow({ onQuote }: { onQuote(): void }) {
   const { size } = useMemo(() => moduleSize(config), [config])
   const showRacks = FLOW.indexOf(flowStep) >= FLOW.indexOf('distribucion')
   const rackView = flowStep === 'rack' || flowStep === 'carga'
+  const rackLayer = showRacks ? { racks: depot.layout.placements, size, issues: depot.issues } : undefined
+  // lo que se está editando en el plano va arriba de todo en el panel (en lugar de la ayuda del paso)
+  const selection = usePlan((s) => s.selection)
+  const editing = !rackView && !!selection && (selection.kind !== 'rack' || !!rackLayer)
+  const area = planArea(plan.outline)
 
   return (
     <div className="designer depot">
       <section className="designer__panel cotizador" aria-label="Cotizador de depósitos">
         <Steps />
+        {editing
+          ? <div className="cot-editing">{selection?.kind === 'rack' && rackLayer ? <RackEditor rackLayer={rackLayer} /> : <Selection />}</div>
+          : <p className="cot-help"><Lightbulb size={16} aria-hidden /><span>{META[flowStep].help}</span></p>}
         <StepBody step={flowStep} depot={depot} preview={preview} onQuote={onQuote} />
+        {rackView && <Warnings warnings={preview.warnings.filter((w) => w.code !== 'free-positions')} />}
+        {flowStep === 'resumen' && <>
+          <p className="disclaimer">Simulación de referencia: no reemplaza el cálculo estructural. Toda configuración la valida el departamento técnico.</p>
+          <div className="cz-contact">
+            <strong>{CONTACT.company}</strong>
+            <a href={`tel:${CONTACT.phone.replace(/\D/g, '')}`}><Phone size={14} aria-hidden /> {CONTACT.phone}</a>
+            <a href={`mailto:${CONTACT.email}`}><Mail size={14} aria-hidden /> {CONTACT.email}</a>
+            <span>{CONTACT.address}</span>
+          </div>
+        </>}
         <StepNav />
       </section>
       {rackView
         ? <Viewport s={preview} />
-        : <PlanStage rackLayer={showRacks ? { racks: depot.layout.placements, size, issues: depot.issues } : undefined} racks={showRacks ? depot.racks : undefined} />}
-      <aside className="designer__side">
-        <DepotPlate depot={depot} area={planArea(plan.outline)} />
-        <Warnings warnings={preview.warnings.filter((w) => w.code !== 'free-positions')} />
-        <p className="disclaimer">Simulación de referencia: no reemplaza el cálculo estructural. Toda configuración la valida el departamento técnico.</p>
-        <div className="cz-contact">
-          <strong>{CONTACT.company}</strong>
-          <a href={`tel:${CONTACT.phone.replace(/\D/g, '')}`}><Phone size={14} aria-hidden /> {CONTACT.phone}</a>
-          <a href={`mailto:${CONTACT.email}`}><Mail size={14} aria-hidden /> {CONTACT.email}</a>
-          <span>{CONTACT.address}</span>
-        </div>
-      </aside>
+        : <PlanStage rackLayer={rackLayer} racks={showRacks ? depot.racks : undefined}
+            summary={area > 0 && <DepotStrip depot={depot} area={area} />} />}
     </div>
   )
 }
@@ -111,7 +119,6 @@ function Steps() {
         <span className="cot-head__k">Paso {i + 1} de {FLOW.length}</span>
         <h2 className="cot-head__t">{META[flowStep].title}</h2>
       </div>
-      <p className="cot-help"><Lightbulb size={16} aria-hidden /><span>{META[flowStep].help}</span></p>
     </>
   )
 }
@@ -130,7 +137,7 @@ function StepNav() {
 
 function StepBody({ step, depot, preview, onQuote }: { step: FlowStep; depot: Depot; preview: RackStructure; onQuote(): void }) {
   switch (step) {
-    case 'deposito': return <div className="cot-fields plan-panel"><PlanTools /></div>
+    case 'deposito': return <div className="cot-fields plan-panel"><PlanTools showSelection={false} /></div>
     case 'rack': return <RackStep s={preview} />
     case 'carga': return <LoadStep s={preview} />
     case 'distribucion': return <LayoutStep depot={depot} />
@@ -276,6 +283,19 @@ function SummaryStep({ depot, onQuote }: { depot: Depot; onQuote(): void }) {
 }
 
 /* ------------------------------ Placa del depósito ------------------------------ */
+
+/** Los números del depósito en una franja, arriba del plano. */
+function DepotStrip({ depot, area }: { depot: Depot; area: number }) {
+  return (
+    <dl className="depot-strip">
+      <div><dt>Posiciones</dt><dd>{fmt(depot.positions)}</dd></div>
+      <div><dt>Filas</dt><dd>{fmt(depot.layout.rows)}</dd></div>
+      <div><dt>Módulos</dt><dd>{fmt(depot.layout.modules)}</dd></div>
+      <div><dt>Superficie</dt><dd>{fmt(Math.round(area))} m²</dd></div>
+      <div className="depot-strip__strong"><dt>Capacidad</dt><dd>{kg(depot.capacity)}</dd></div>
+    </dl>
+  )
+}
 
 export function DepotPlate({ depot, area, compact }: { depot: Depot; area: number; compact?: boolean }) {
   const s = depot.sample
