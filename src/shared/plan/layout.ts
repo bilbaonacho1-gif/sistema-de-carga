@@ -104,11 +104,30 @@ function obstacleBoxes(plan: Plan, gap: number): Box[] {
   const boxes: Box[] = []
   for (const c of plan.columns) boxes.push({ x0: c.x - c.w / 2 - gap, y0: c.y - c.d / 2 - gap, x1: c.x + c.w / 2 + gap, y1: c.y + c.d / 2 + gap })
   for (const z of plan.zones) boxes.push({ x0: z.x - gap, y0: z.y - gap, x1: z.x + z.w + gap, y1: z.y + z.d + gap })
-  for (const w of plan.walls) {
-    const t = w.thickness / 2 + gap
-    boxes.push({ x0: Math.min(w.a.x, w.b.x) - t, y0: Math.min(w.a.y, w.b.y) - t, x1: Math.max(w.a.x, w.b.x) + t, y1: Math.max(w.a.y, w.b.y) + t })
-  }
   return boxes
+}
+
+/** Tabique como segmento con su medio espesor (más la separación). */
+interface Seg { a: PlanPoint; b: PlanPoint; t: number }
+
+/**
+ * Lo que ocupa un tabique dentro de la franja [y0, y1]: sólo el tramo que la cruza. Un tabique en
+ * diagonal tapa una franja angosta en cada fila, no todo el rectángulo que lo encierra.
+ */
+function segBox(s: Seg, y0: number, y1: number): Box | null {
+  const lo = y0 - s.t, hi = y1 + s.t
+  const { a, b } = s
+  if (Math.max(a.y, b.y) < lo || Math.min(a.y, b.y) > hi) return null
+  let t0 = 0, t1 = 1
+  const dy = b.y - a.y
+  if (Math.abs(dy) > 1e-9) {
+    let ta = (lo - a.y) / dy, tb = (hi - a.y) / dy
+    if (ta > tb) [ta, tb] = [tb, ta]
+    t0 = Math.max(0, ta); t1 = Math.min(1, tb)
+    if (t0 > t1) return null
+  }
+  const xa = a.x + (b.x - a.x) * t0, xb = a.x + (b.x - a.x) * t1
+  return { x0: Math.min(xa, xb) - s.t, y0, x1: Math.max(xa, xb) + s.t, y1 }
 }
 
 const swap = (p: PlanPoint): PlanPoint => ({ x: p.y, y: p.x })
@@ -141,7 +160,8 @@ function layoutRegion(plan: Plan, size: RackModuleSize, opt: LayoutOptions, area
   let poly = outlinePolygon(plan.outline, 100)
   let obstacles = obstacleBoxes(plan, opt.obstacleGap)
   let aisles: Box[] = (plan.aisles ?? []).map((a) => ({ x0: a.x, y0: a.y, x1: a.x + a.w, y1: a.y + a.d }))
-  if (flip) { poly = poly.map(swap); obstacles = obstacles.map(swapBox); aisles = aisles.map(swapBox); if (area) area = swapBox(area) }
+  let segs: Seg[] = plan.walls.map((w) => ({ a: w.a, b: w.b, t: w.thickness / 2 + opt.obstacleGap }))
+  if (flip) { poly = poly.map(swap); obstacles = obstacles.map(swapBox); aisles = aisles.map(swapBox); segs = segs.map((q) => ({ ...q, a: swap(q.a), b: swap(q.b) })); if (area) area = swapBox(area) }
 
   const halfWall = plan.wallThickness / 2
   const ys = poly.map((p) => p.y)
@@ -193,7 +213,8 @@ function layoutRegion(plan: Plan, size: RackModuleSize, opt: LayoutOptions, area
   const placements: RackPlacement[] = []
   const uw = size.upright
   bands.forEach((band, bi) => {
-    freeIntervals(poly, obstacles, band.y, band.y + band.depth).forEach((iv, ii) => {
+    const walls = segs.map((q) => segBox(q, band.y, band.y + band.depth)).filter((b): b is Box => !!b)
+    freeIntervals(poly, walls.length ? [...obstacles, ...walls] : obstacles, band.y, band.y + band.depth).forEach((iv, ii) => {
       // contra la pared queda el pasillo de cabecera; en el borde de la zona, la fila llega justo
       const a = Math.max(iv.a + (iv.wallA ? halfWall + opt.endGap : 0), x0)
       const b = Math.min(iv.b - (iv.wallB ? halfWall + opt.endGap : 0), x1)
