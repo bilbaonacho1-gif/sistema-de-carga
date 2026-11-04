@@ -35,13 +35,34 @@ export function setSag(plan: Plan, i: number, sag: number): Plan {
   return { ...plan, outline: { ...plan.outline, sags } }
 }
 
-/** Cambia el largo de una pared recta moviendo su punto final (como en un CAD). */
+/**
+ * Cambia el largo de una pared recta moviendo su punto final (como en un CAD). Si la pared siguiente
+ * es perpendicular, se corre entera (paralela a sí misma): así un rectángulo sigue siendo rectángulo.
+ */
 export function setEdgeLength(plan: Plan, i: number, length: number): Plan {
   const e = edges(plan.outline)[i]
+  const n = plan.outline.points.length
   const L = Math.hypot(e.b.x - e.a.x, e.b.y - e.a.y) || 1
-  const k = length / L
-  const end = { x: Math.round(e.a.x + (e.b.x - e.a.x) * k), y: Math.round(e.a.y + (e.b.y - e.a.y) * k) }
-  return moveVertex(plan, (i + 1) % plan.outline.points.length, end)
+  const ux = (e.b.x - e.a.x) / L, uy = (e.b.y - e.a.y) / L
+  const dx = Math.round(ux * (length - L)), dy = Math.round(uy * (length - L))
+  const j = (i + 1) % n, k = (i + 2) % n
+  const next = plan.outline.points[k], b = plan.outline.points[j]
+  const nl = Math.hypot(next.x - b.x, next.y - b.y) || 1
+  const perpendicular = n > 3 && Math.abs(((next.x - b.x) * ux + (next.y - b.y) * uy) / nl) < 0.02 && !plan.outline.sags[j]
+  const points = plan.outline.points.map((p, m) => (m === j || (perpendicular && m === k) ? { x: p.x + dx, y: p.y + dy } : p))
+  return { ...plan, outline: { ...plan.outline, points } }
+}
+
+/** Cambia el largo o el ancho total del depósito (estira el contorno desde el lado izquierdo o de arriba). */
+export function setTotal(plan: Plan, axis: 'x' | 'y', value: number): Plan {
+  const pts = plan.outline.points
+  if (pts.length < 3 || value < 1000) return plan
+  const vs = pts.map((p) => p[axis])
+  const lo = Math.min(...vs), hi = Math.max(...vs)
+  if (hi - lo < 1) return plan
+  const k = value / (hi - lo)
+  const points = pts.map((p) => ({ ...p, [axis]: Math.round(lo + (p[axis] - lo) * k) }))
+  return { ...plan, outline: { ...plan.outline, points } }
 }
 
 /** Parte la pared i en dos con un punto nuevo en su medio (si es curva, quedan dos arcos). */

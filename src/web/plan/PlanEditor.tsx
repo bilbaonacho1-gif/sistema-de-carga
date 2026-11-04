@@ -12,9 +12,9 @@
  * Rueda o pellizco: zoom. Arrastrar el fondo: mover. Ctrl+Z / Ctrl+Y: deshacer / rehacer.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { drawnRect, itemsOutside, moveVertex, newId, pointAtLength, removeItem, removeVertex, sagFromPoint, setOutline, splitEdge, updateRect } from '../../shared/plan/edit'
+import { drawnRect, itemsOutside, setEdgeLength, setTotal, moveVertex, newId, pointAtLength, removeItem, removeVertex, sagFromPoint, setOutline, splitEdge, updateRect } from '../../shared/plan/edit'
 import { rectanglePlan } from '../../shared/plan/geometry'
-import { parseMetros } from '../../shared/units'
+import { metrosNum, parseMetros } from '../../shared/units'
 import { apex, arcOf, edgeLength, edges, nearestOnEdge, planBounds, pointOnEdge, tangentOnEdge, type Edge } from '../../shared/plan/geometry'
 import type { Plan, PlanPoint } from '../../shared/plan/types'
 import type { RackModuleSize, RackPlacement } from '../../shared/plan/layout'
@@ -83,6 +83,9 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
   const typedRef = useRef('')
   const setTyped = (t: string) => { typedRef.current = t; setTypedState(t) }
   /** Zona de racks o pasillo que se está dibujando (de a hasta b). */
+  /** Medida que se está escribiendo sobre el plano (tocando una cota). */
+  const [inline, setInline] = useState<{ edit: { kind: 'edge'; index: number } | { kind: 'total'; axis: 'x' | 'y' }; at: PlanPoint; text: string } | null>(null)
+  const inlineCancel = useRef(false)
   const [rectDraft, setRectDraft] = useState<{ kind: 'area' | 'aisle'; a: PlanPoint; b: PlanPoint } | null>(null)
   const drag = useRef<Drag | null>(null)
   const pointers = useRef(new Map<number, { x: number; y: number }>())
@@ -542,7 +545,16 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
 
         {/* cotas (o, si están apagadas, el largo de cada pared) */}
         {showCotas && tool !== 'outline' && !empty && (
-          <PlanCotas plan={plan} px={px} column={selection?.kind === 'column' ? plan.columns.find((c) => c.id === selection.id) : null} />
+          <PlanCotas plan={plan} px={px} column={selection?.kind === 'column' ? plan.columns.find((c) => c.id === selection.id) : null}
+            onEditEdge={tool === 'select' ? (index, at) => {
+              const e = edges(plan.outline)[index]
+              select({ kind: 'edge', index })
+              setInline({ edit: { kind: 'edge', index }, at, text: metrosNum(Math.round(Math.hypot(e.b.x - e.a.x, e.b.y - e.a.y))) })
+            } : undefined}
+            onEditTotal={tool === 'select' ? (axis, at) => {
+              const vs = plan.outline.points.map((q) => q[axis])
+              setInline({ edit: { kind: 'total', axis }, at, text: metrosNum(Math.max(...vs) - Math.min(...vs)) })
+            } : undefined} />
         )}
         {!showCotas && tool !== 'outline' && es.map((e) => {
           const m = apex(e)
@@ -609,6 +621,25 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
               ? <>Largo <strong>{typed} m</strong> · Enter para ponerlo · apuntá con el mouse para la dirección</>
               : <>Escribí el largo de la pared (ej. <strong>40</strong>) y Enter, o hacé clic.{tool === 'outline' && draft.length >= 3 ? ' Enter solo o tocar el primer punto cierra el depósito.' : ''} Esc cancela.</>}
         </div>
+      )}
+      {inline && (
+        <input className="cota-input" autoFocus inputMode="decimal" value={inline.text} aria-label="Medida en metros"
+          style={{ left: ((inline.at.x - vb.x) / vb.w) * size.w, top: ((inline.at.y - vb.y) / vb.h) * size.h }}
+          onFocus={(e) => e.target.select()}
+          onChange={(e) => setInline({ ...inline, text: e.target.value.replace(/[^\d.,]/g, '') })}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') { inlineCancel.current = true; setInline(null) }
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+          }}
+          onBlur={() => {
+            const v = parseMetros(inline.text)
+            if (inlineCancel.current) { inlineCancel.current = false; return }
+            if (v >= 100) {
+              const ed = inline.edit
+              commit((p) => ed.kind === 'edge' ? setEdgeLength(p, ed.index, v) : setTotal(p, ed.axis, v))
+            }
+            setInline(null)
+          }} />
       )}
       <div className="zoom-btns" role="group" aria-label="Zoom">
         <button type="button" onClick={() => zoomBy(1 / 1.5)} aria-label="Acercar" title="Acercar">+</button>

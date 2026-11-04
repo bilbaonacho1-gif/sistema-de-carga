@@ -136,7 +136,7 @@ export function Selection() {
         </> : (
           <NumberStepper label="Largo" meters value={Math.round(chord)} min={100} max={500_000} step={1000} typedStep={10}
             onChange={(v) => commit((pl) => setEdgeLength(pl, selection.index, v))}
-            hint="Se mueve la esquina final; la pared siguiente se acomoda." />
+            hint="La pared siguiente se corre: si el depósito es rectangular, sigue siendo rectángulo. También podés tocar la medida en el plano y escribirla." />
         )}
         <Button size="sm" variant="ghost" onClick={() => { commit((pl) => splitEdge(pl, selection.index)); select({ kind: 'vertex', index: selection.index + 1 }) }}>Agregar esquina en el medio</Button>
       </div>
@@ -178,6 +178,12 @@ export function Selection() {
             const k = v / (len || 1)
             return { ...x, b: { x: Math.round(x.a.x + (x.b.x - x.a.x) * k), y: Math.round(x.a.y + (x.b.y - x.a.y) * k) } }
           }) }))} />
+        <div className="plan-xy">
+          <NumberStepper label="Desde X" meters value={w.a.x} min={-500_000} max={500_000} step={1000} typedStep={10}
+            onChange={(x) => commit((pl) => ({ ...pl, walls: pl.walls.map((q) => (q.id === w.id ? { ...q, a: { x, y: q.a.y }, b: { x: q.b.x + x - q.a.x, y: q.b.y } } : q)) }))} />
+          <NumberStepper label="Desde Y" meters value={w.a.y} min={-500_000} max={500_000} step={1000} typedStep={10}
+            onChange={(y) => commit((pl) => ({ ...pl, walls: pl.walls.map((q) => (q.id === w.id ? { ...q, a: { x: q.a.x, y }, b: { x: q.b.x, y: q.b.y + y - q.a.y } } : q)) }))} />
+        </div>
         <NumberStepper label="Espesor" meters value={w.thickness} min={50} max={600} step={10}
           onChange={(thickness) => commit((pl) => ({ ...pl, walls: pl.walls.map((x) => (x.id === w.id ? { ...x, thickness } : x)) }))} />
         <Button size="sm" variant="ghost" icon={Trash2} onClick={() => del((pl) => removeItem(pl, 'wall', w.id))}>Quitar tabique</Button>
@@ -193,6 +199,15 @@ export function Selection() {
       <div className="plan-sel">
         <h2 className="section-label">Portón</h2>
         <NumberStepper label="Ancho" meters value={d.width} min={800} max={12_000} step={500} typedStep={10} onChange={(width) => upd({ width })} />
+        {(() => {
+          const e = edges(plan.outline)[d.edge]
+          if (!e) return null
+          const L = edgeLength(e)
+          const from = Math.round(d.t * L - d.width / 2)
+          return <NumberStepper label="Distancia desde la esquina" meters value={Math.max(0, from)} min={0} max={Math.max(0, Math.round(L - d.width))} step={1000} typedStep={10}
+            onChange={(v) => upd({ t: Math.min(1, Math.max(0, (v + d.width / 2) / (L || 1))) })}
+            hint={`Desde la esquina ${d.edge + 1} hasta el borde del portón.`} />
+        })()}
         <NumberStepper label="Alto" meters value={d.height} min={2000} max={plan.wallHeight} step={500} typedStep={10} onChange={(height) => upd({ height })} />
         <Button size="sm" variant="ghost" icon={Trash2} onClick={() => del((pl) => removeItem(pl, 'door', d.id))}>Quitar portón</Button>
       </div>
@@ -257,6 +272,10 @@ export function Selection() {
       <Field label="Nombre">{(id) => <Input id={id} value={z.name} onChange={(e) => upd({ name: e.target.value })} />}</Field>
       <NumberStepper label="Ancho" meters value={z.w} min={500} max={200_000} step={1000} typedStep={10} onChange={(w) => upd({ w })} />
       <NumberStepper label="Fondo" meters value={z.d} min={500} max={200_000} step={1000} typedStep={10} onChange={(d) => upd({ d })} />
+      <div className="plan-xy">
+        <NumberStepper label="X" meters value={z.x} min={-500_000} max={500_000} step={1000} typedStep={10} onChange={(x) => upd({ x })} />
+        <NumberStepper label="Y" meters value={z.y} min={-500_000} max={500_000} step={1000} typedStep={10} onChange={(y) => upd({ y })} />
+      </div>
       <Button size="sm" variant="ghost" icon={Trash2} onClick={() => del((pl) => removeItem(pl, 'zone', z.id))}>Quitar zona</Button>
     </div>
   )

@@ -130,12 +130,12 @@ function DimensionsStep({ s }: { s: RackStructure }) {
   }
   return (
     <div className="cot-fields">
-      <NumberStepper label="Profundidad del bastidor" meters value={config.depth} min={L.depth.min} max={L.depth.max} step={50} slider onChange={(depth) => update({ depth })} />
+      <NumberStepper label="Profundidad del bastidor" meters value={config.depth} min={L.depth.min} max={L.depth.max} step={50} typedStep={10} slider onChange={(depth) => update({ depth })} />
       <Switch label="Tramos con medidas distintas" checked={multi} onChange={toggleSections}
         hint="Partes del rack con otra altura, otro largo de viga u otra cantidad de niveles." />
       {multi ? <Sections s={s} /> : <>
-        <NumberStepper label="Largo de viga (ancho del módulo)" meters value={config.width} min={L.width.min} max={L.width.max} step={50} slider onChange={(width) => update({ width })} />
-        <NumberStepper label="Altura" meters value={config.height} min={L.height.min} max={L.height.max} step={100} slider onChange={(height) => update({ height })}
+        <NumberStepper label="Largo de viga (ancho del módulo)" meters value={config.width} min={L.width.min} max={L.width.max} step={50} typedStep={10} slider onChange={(width) => update({ width })} />
+        <NumberStepper label="Altura" meters value={config.height} min={L.height.min} max={L.height.max} step={100} typedStep={10} slider onChange={(height) => update({ height })}
           hint={config.height > OFFICIAL_REFERENCE.maxHeight ? <span className="late">Supera los {mm(OFFICIAL_REFERENCE.maxHeight)} publicados.</span> : undefined} />
         <NumberStepper label="Cantidad de posiciones" value={config.positions} min={L.positions.min} max={L.positions.max} step={1} slider onChange={(positions) => update({ positions })}
           hint={`${plural(s.palletsPerModule * s.storageLevels, 'posición', 'posiciones')} por módulo · crece hacia la derecha`} />
@@ -175,8 +175,8 @@ function Sections({ s }: { s: RackStructure }) {
               </span>
             </div>
             <NumberStepper label="Módulos" value={sec.modules} min={L.sectionModules.min} max={L.sectionModules.max} step={1} onChange={(modules) => updateSection(i, { modules })} />
-            <NumberStepper label="Largo de viga" meters value={sec.width} min={L.width.min} max={L.width.max} step={50} onChange={(width) => updateSection(i, { width })} />
-            <NumberStepper label="Altura" meters value={sec.height} min={L.height.min} max={L.height.max} step={100} onChange={(height) => updateSection(i, { height })} />
+            <NumberStepper label="Largo de viga" meters value={sec.width} min={L.width.min} max={L.width.max} step={50} typedStep={10} onChange={(width) => updateSection(i, { width })} />
+            <NumberStepper label="Altura" meters value={sec.height} min={L.height.min} max={L.height.max} step={100} typedStep={10} onChange={(height) => updateSection(i, { height })} />
             <NumberStepper label="Niveles" value={sec.levels} min={minLevels} max={L.levels.max} step={1} onChange={(levels) => updateSection(i, { levels })} />
           </div>
         )
