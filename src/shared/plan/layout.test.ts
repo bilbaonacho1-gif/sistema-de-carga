@@ -24,9 +24,10 @@ describe('distribución automática', () => {
 
   it('una columna en el camino parte la fila en dos', () => {
     const plan = rectanglePlan(30_000, 10_000)
-    const libre = autoLayout(plan, rack, DEFAULT_LAYOUT)
+    const opt = { ...DEFAULT_LAYOUT, endGap: 1500 }
+    const libre = autoLayout(plan, rack, opt)
     plan.columns = [{ id: 'c1', x: 15_000, y: 900, shape: 'rect', w: 400, d: 400 }]
-    const conColumna = autoLayout(plan, rack, DEFAULT_LAYOUT)
+    const conColumna = autoLayout(plan, rack, opt)
     const primeraFila = (r: typeof libre) => r.placements.filter((p) => p.y === libre.placements[0].y)
     expect(primeraFila(libre)).toHaveLength(1)
     expect(primeraFila(conColumna)).toHaveLength(2)
@@ -59,6 +60,11 @@ describe('distribución automática', () => {
       expect(b.x + b.w > 10_000 && b.y + b.h > 10_000).toBe(false)
     }
   })
+})
+
+it('los pasillos arrancan en 3 m, entre filas y en las cabeceras', () => {
+  expect(DEFAULT_LAYOUT.aisle).toBe(3000)
+  expect(DEFAULT_LAYOUT.endGap).toBe(3000)
 })
 
 describe('zonas de racks y pasillos dibujados', () => {

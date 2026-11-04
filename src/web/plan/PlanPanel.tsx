@@ -251,7 +251,7 @@ export function Selection() {
         <h2 className="section-label">Pasillo {vertical ? 'vertical' : 'horizontal'}</h2>
         <NumberStepper label="Ancho del pasillo" meters value={width} min={800} max={20_000} step={500} typedStep={10}
           onChange={(v) => upd(vertical ? { w: v, x: Math.round(a.x + (a.w - v) / 2) } : { d: v, y: Math.round(a.y + (a.d - v) / 2) })}
-          hint="Para autoelevador contrapesado, unos 3,5 m; para retráctil, unos 2,8 m." />
+          hint={width === 3000 ? 'Lo habitual: 3 m.' : <>Lo habitual es 3 m. <button type="button" className="link-btn" onClick={() => upd(vertical ? { w: 3000, x: Math.round(a.x + (a.w - 3000) / 2) } : { d: 3000, y: Math.round(a.y + (a.d - 3000) / 2) })}>Volver a 3 m</button></>} />
         <NumberStepper label="Largo" meters value={length} min={1000} max={500_000} step={1000} typedStep={10} onChange={(v) => upd(vertical ? { d: v } : { w: v })} />
         <div className="plan-xy">
           <NumberStepper label="X" meters value={a.x} min={-500_000} max={500_000} step={1000} typedStep={10} onChange={(x) => upd({ x })} />

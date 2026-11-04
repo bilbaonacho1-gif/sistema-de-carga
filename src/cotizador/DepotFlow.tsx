@@ -248,12 +248,13 @@ function LayoutStep({ depot }: { depot: Depot }) {
         </button>
       )}
       <NumberStepper label="Ancho de pasillo" meters value={layout.aisle} min={1200} max={6000} step={500} typedStep={10} onChange={(aisle) => setLayout({ aisle })}
-        hint="Para autoelevador común se usan unos 3 m; para equipos de pasillo angosto, menos." />
+        hint={layout.aisle === 3000 ? 'Lo habitual: 3 m.' : <>Lo habitual es 3 m. <button type="button" className="link-btn" onClick={() => setLayout({ aisle: 3000 })}>Volver a 3 m</button></>} />
       <Switch label="Filas espalda con espalda" checked={layout.backToBack} onChange={(backToBack) => setLayout({ backToBack })}
         hint="Dos filas unidas por la espalda comparten un pasillo: entran más racks." />
       <details className="plan-more">
         <summary>Separaciones</summary>
-        <NumberStepper label="Pasillo de cabecera (contra las paredes)" meters value={layout.endGap} min={0} max={8000} step={500} typedStep={10} onChange={(endGap) => setLayout({ endGap })} />
+        <NumberStepper label="Pasillo de cabecera (contra las paredes)" meters value={layout.endGap} min={0} max={8000} step={500} typedStep={10} onChange={(endGap) => setLayout({ endGap })}
+          hint={layout.endGap === 3000 ? 'Lo habitual: 3 m, para dar la vuelta con el autoelevador.' : <>Lo habitual es 3 m. <button type="button" className="link-btn" onClick={() => setLayout({ endGap: 3000 })}>Volver a 3 m</button></>} />
         <NumberStepper label="Separación de la pared" meters value={layout.wallGap} min={0} max={2000} step={50} onChange={(wallGap) => setLayout({ wallGap })} />
         <NumberStepper label="Separación de columnas y zonas" meters value={layout.obstacleGap} min={0} max={2000} step={50} onChange={(obstacleGap) => setLayout({ obstacleGap })} />
       </details>
