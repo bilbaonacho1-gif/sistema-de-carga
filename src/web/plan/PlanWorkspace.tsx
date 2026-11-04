@@ -6,7 +6,7 @@ import { AlertTriangle, Box, Copy, Map as MapIcon, Maximize2, Minus, Package, Pl
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import type { PlacedRack } from '../../shared/plan/depot'
 import { removeItem, removeVertex } from '../../shared/plan/edit'
-import { duplicateRack, freezeRacks, rotateRack, setRackModules, setRackPair } from '../../shared/plan/racks'
+import { duplicateWithin, freezeRacks, guarded, rotateRack, setRackModules, setRackPair } from '../../shared/plan/racks'
 import type { Plan, PlanSelection } from '../../shared/plan/types'
 import { Segmented, Spinner } from '../components/ui'
 import { PlanEditor, type PlanRackLayer } from './PlanEditor'
@@ -41,7 +41,7 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
       </div>
       <div className="plan-stage__body">
         {view3d
-          ? <Suspense fallback={<Spinner />}><Plan3D plan={plan} racks={racks} showLoads={showLoads} issues={rackLayer?.issues} /></Suspense>
+          ? <Suspense fallback={<Spinner />}><Plan3D plan={plan} racks={racks} showLoads={showLoads} issues={rackLayer?.issues} size={rackLayer?.size} /></Suspense>
           : <PlanEditor fitRequest={fit} rackLayer={rackLayer} />}
         {view3d && <p className="plan-stage__hint">Tocá algo para elegirlo y arrastralo para moverlo · arrastrá el fondo para girar</p>}
       </div>
@@ -84,12 +84,23 @@ function useKeys3d(active: boolean, layer?: PlanRackLayer) {
  * Va en el panel de la izquierda (arriba de todo) mientras el rack está seleccionado.
  */
 export function RackEditor({ rackLayer }: { rackLayer: PlanRackLayer }) {
-  const { selection, commit, select, layout } = usePlan()
+  const { selection, commit, select, layout, plan } = usePlan()
   if (selection?.kind !== 'rack') return null
   const r = rackLayer.racks.find((x) => x.id === selection.id)
   if (!r) return null
   const placements = rackLayer.racks
-  const edit = (fn: (p: Plan) => Plan) => commit((p) => fn(freezeRacks(p, placements)))
+  const size = rackLayer.size
+  const base = freezeRacks(plan, placements)
+  // cada cambio se prueba antes: si el rack terminaría en una zona libre, un pasillo o fuera de la
+  // zona de racks, el botón queda apagado
+  const tryEdit = (fn: (p: Plan) => Plan) => { const after = guarded(base, fn(base), r.id, size); return after === base ? null : after }
+  const more = tryEdit((p) => setRackModules(p, r.id, r.modules + 1))
+  const less = r.modules > 1 ? tryEdit((p) => setRackModules(p, r.id, r.modules - 1)) : null
+  const pair = tryEdit((p) => setRackPair(p, r.id, !r.pair))
+  const rotated = tryEdit((p) => rotateRack(p, r.id))
+  const dup = duplicateWithin(base, r.id, layout.aisle, size)
+  const apply = (next: Plan | null) => { if (next) commit(() => next) }
+  const noRoom = 'No entra: pisaría una zona libre, un pasillo o saldría de la zona de racks'
   const issue = rackLayer.issues?.[r.id]
   return (
     <div className="plan-sel rack-editor">
@@ -98,22 +109,18 @@ export function RackEditor({ rackLayer }: { rackLayer: PlanRackLayer }) {
       <div className="rack-editor__row" aria-label="Módulos">
         <span>Módulos</span>
         <span className="rack-editor__num">
-          <button type="button" className="vp-btn vp-btn--icon" aria-label="Un módulo menos" disabled={r.modules <= 1} onClick={() => edit((p) => setRackModules(p, r.id, r.modules - 1))}><Minus size={14} aria-hidden /></button>
+          <button type="button" className="vp-btn vp-btn--icon" aria-label="Un módulo menos" disabled={!less} onClick={() => apply(less)}><Minus size={14} aria-hidden /></button>
           <strong>{r.modules}</strong>
-          <button type="button" className="vp-btn vp-btn--icon" aria-label="Un módulo más" onClick={() => edit((p) => setRackModules(p, r.id, r.modules + 1))}><Plus size={14} aria-hidden /></button>
+          <button type="button" className="vp-btn vp-btn--icon" aria-label="Un módulo más" disabled={!more} title={more ? undefined : noRoom} onClick={() => apply(more)}><Plus size={14} aria-hidden /></button>
         </span>
       </div>
       <div className="rack-editor__actions">
-        <button type="button" className="vp-btn" onClick={() => edit((p) => setRackPair(p, r.id, !r.pair))}>{r.pair ? 'Hacer simple' : 'Hacer doble'}</button>
-        <button type="button" className="vp-btn" onClick={() => edit((p) => rotateRack(p, r.id))}><RotateCw size={14} aria-hidden /> Girar</button>
-        <button type="button" className="vp-btn" onClick={() => {
-          let nid = ''
-          edit((p) => { const d = duplicateRack(p, r.id, layout.aisle); nid = d.id; return d.plan })
-          if (nid) select({ kind: 'rack', id: nid })
-        }}><Copy size={14} aria-hidden /> Duplicar</button>
+        <button type="button" className="vp-btn" disabled={!pair} title={pair ? undefined : noRoom} onClick={() => apply(pair)}>{r.pair ? 'Hacer simple' : 'Hacer doble'}</button>
+        <button type="button" className="vp-btn" disabled={!rotated} title={rotated ? undefined : noRoom} onClick={() => apply(rotated)}><RotateCw size={14} aria-hidden /> Girar</button>
+        <button type="button" className="vp-btn" disabled={!dup} title={dup ? undefined : 'No hay lugar al lado para otro rack igual'} onClick={() => { if (dup) { commit(() => dup.plan); select({ kind: 'rack', id: dup.id }) } }}><Copy size={14} aria-hidden /> Duplicar</button>
         <button type="button" className="vp-btn" onClick={() => { commit((p) => removeSelection(p, selection, rackLayer)); select(null) }}><Trash2 size={14} aria-hidden /> Borrar</button>
       </div>
-      <p className="muted small">Arrastralo en el plano o en el 3D para moverlo. Supr lo borra, Esc termina.</p>
+      <p className="muted small">Arrastralo en el plano o en el 3D para moverlo: no entra en zonas libres ni pasillos{plan.rackAreas?.length ? ' y no sale de la zona de racks' : ''}. Supr lo borra, Esc termina.</p>
     </div>
   )
 }

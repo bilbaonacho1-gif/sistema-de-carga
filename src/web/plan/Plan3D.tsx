@@ -6,13 +6,13 @@
  */
 import { Grid, OrbitControls } from '@react-three/drei'
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import * as THREE from 'three'
 import { edges, nearestOnEdge, outlinePolygon, planBounds, pointOnEdge, tangentOnEdge } from '../../shared/plan/geometry'
 import type { PlacedRack } from '../../shared/plan/depot'
 import { moveVertex, updateRect } from '../../shared/plan/edit'
-import { placementRect } from '../../shared/plan/layout'
-import { freezeRacks, moveRack } from '../../shared/plan/racks'
+import { placementRect, type RackModuleSize } from '../../shared/plan/layout'
+import { freezeRacks, moveRack, moveRackWithin } from '../../shared/plan/racks'
 import type { Plan, PlanPoint, PlanSelection, RackPlacement } from '../../shared/plan/types'
 import { fmt } from '../lib/format'
 import { RackModel } from '../three/RackModel'
@@ -147,7 +147,7 @@ const PlacedRackModel = memo(function PlacedRackModel({ rack, showLoads }: { rac
 
 /* ------------------------------ Escena ------------------------------ */
 
-interface Props { plan: Plan; racks?: PlacedRack[]; showLoads?: boolean; issues?: Record<string, string> }
+interface Props { plan: Plan; racks?: PlacedRack[]; showLoads?: boolean; issues?: Record<string, string>; size?: RackModuleSize }
 
 /** A partir de esta cantidad de racks se dibujan en lote (InstancedMesh) en vez de pieza por pieza. */
 const MANY_RACKS = 30
@@ -162,6 +162,7 @@ export function Plan3D(props: Props) {
   })
   const { center, span } = view
   const [stats, setStats] = useState<InstanceStats | null>(null)
+  const zoomRef = useRef<((k: number) => void) | null>(null)
   const many = (props.racks?.length ?? 0) > MANY_RACKS
   useEffect(() => { if (!many) setStats(null) }, [many])
   return (
@@ -176,7 +177,12 @@ export function Plan3D(props: Props) {
       <Grid position={[0, -0.002, 0]} infiniteGrid cellSize={1} sectionSize={5} cellColor="#dfe2e6" sectionColor="#c9cdd2" fadeDistance={span * 4} />
       <Scene {...props} span={span} onStats={setStats} />
       <OrbitControls makeDefault target={center} enableDamping maxPolarAngle={Math.PI / 2 - 0.02} minDistance={2} maxDistance={span * 6} />
+      <ZoomBridge zoomRef={zoomRef} min={2} max={span * 6} />
     </Canvas>
+    <div className="zoom-btns" role="group" aria-label="Zoom">
+      <button type="button" onClick={() => zoomRef.current?.(1 / 1.4)} aria-label="Acercar" title="Acercar">+</button>
+      <button type="button" onClick={() => zoomRef.current?.(1.4)} aria-label="Alejar" title="Alejar">−</button>
+    </div>
     {stats && (
       <div className="plan3d__stats" aria-live="polite">
         {fmt(stats.racks)} racks · {fmt(stats.pieces)} piezas{stats.detail !== 'completo' && <> · vista {stats.detail === 'medio' ? 'simplificada' : 'sólo estructura'} para que no se trabe</>}
@@ -186,7 +192,7 @@ export function Plan3D(props: Props) {
   )
 }
 
-function Scene({ plan, racks = [], showLoads = true, issues = {}, span, onStats }: Props & { span: number; onStats(s: InstanceStats): void }) {
+function Scene({ plan, racks = [], showLoads = true, issues = {}, size, span, onStats }: Props & { span: number; onStats(s: InstanceStats): void }) {
   const selection = usePlan((s) => s.selection)
   const drag = useDrag()
   const live = usePlan((s) => s.live)
@@ -293,7 +299,7 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, span, onStats 
       {racks.length > MANY_RACKS && <>
         <RackInstances racks={racks} showLoads={showLoads} onStats={onStats} />
         <RackHitInstances racks={racks} placements={placements}
-          onDown={(e, p) => drag({ kind: 'rack', id: p.id }, (dx, dy, free) => live((pl) => moveRack(freezeRacks(pl, placements), p.id, snapTo(p.x + dx, free), snapTo(p.y + dy, free)))).onPointerDown(e)} />
+          onDown={(e, p) => drag({ kind: 'rack', id: p.id }, (dx, dy, free) => live((pl) => (size ? moveRackWithin(freezeRacks(pl, placements), p.id, snapTo(p.x + dx, free), snapTo(p.y + dy, free), size) : moveRack(freezeRacks(pl, placements), p.id, snapTo(p.x + dx, free), snapTo(p.y + dy, free))))).onPointerDown(e)} />
         {racks.filter(({ placement: p }) => isSel('rack', p.id) || issues[p.id]).map(({ placement: p, structure }) => {
           const b = placementRect(p)
           const H = m(structure.config.height) + 0.02
@@ -313,7 +319,7 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, span, onStats 
         const mat = isSel('rack', p.id) ? MAT.rackSelected : issues[p.id] ? MAT.rackIssue : MAT.rackHit
         return (
           <mesh key={`hit-${p.id}`} material={mat} position={[m(b.x + b.w / 2), H / 2, m(b.y + b.h / 2)]}
-            {...drag({ kind: 'rack', id: p.id }, (dx, dy, free) => live((pl) => moveRack(freezeRacks(pl, placements), p.id, snapTo(p.x + dx, free), snapTo(p.y + dy, free))))}>
+            {...drag({ kind: 'rack', id: p.id }, (dx, dy, free) => live((pl) => (size ? moveRackWithin(freezeRacks(pl, placements), p.id, snapTo(p.x + dx, free), snapTo(p.y + dy, free), size) : moveRack(freezeRacks(pl, placements), p.id, snapTo(p.x + dx, free), snapTo(p.y + dy, free)))))}>
             <boxGeometry args={[m(b.w) + 0.04, H, m(b.h) + 0.04]} />
           </mesh>
         )
@@ -347,4 +353,23 @@ function RackHitInstances({ racks, placements, onDown }: {
       onPointerOver={(e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); gl.domElement.style.cursor = 'grab' }}
       onPointerOut={() => { gl.domElement.style.cursor = '' }} />
   )
+}
+
+/** Conecta los botones + y − (fuera del lienzo) con la cámara: la acerca o aleja hacia donde mira. */
+function ZoomBridge({ zoomRef, min, max }: { zoomRef: MutableRefObject<((k: number) => void) | null>; min: number; max: number }) {
+  const camera = useThree((s) => s.camera)
+  const controls = useThree((s) => s.controls) as unknown as { target: THREE.Vector3; update(): void } | null
+  const invalidate = useThree((s) => s.invalidate)
+  useEffect(() => {
+    zoomRef.current = (k) => {
+      if (!controls) return
+      const off = camera.position.clone().sub(controls.target)
+      const d = Math.min(max, Math.max(min, off.length() * k))
+      camera.position.copy(controls.target).add(off.setLength(d))
+      controls.update()
+      invalidate()
+    }
+    return () => { zoomRef.current = null }
+  }, [camera, controls, invalidate, zoomRef, min, max])
+  return null
 }

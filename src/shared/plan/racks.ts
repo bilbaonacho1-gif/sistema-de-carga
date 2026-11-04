@@ -69,14 +69,110 @@ export function setRackPair(plan: Plan, id: string, pair: boolean): Plan {
   return mapRack(plan, id, (r) => ({ ...r, pair }))
 }
 
-/** Rack nuevo en el centro del depósito. */
+/**
+ * Rack nuevo: en el primer lugar libre más cerca del centro de la zona de racks (o del depósito si no
+ * hay zonas), sin pisar zonas libres, pasillos ni otros racks.
+ */
 export function addRack(plan: Plan, size: RackModuleSize, modules = 5): { plan: Plan; id: string } {
+  const id = newId('r')
+  const base = fitPlacement({ id, x: 0, y: 0, orientation: 'x', modules, length: 0, depth: 0, pair: false }, size)
+  const spot = findSpot(plan, base, size)
+  const r = spot ?? { ...base, ...centerOf(plan, base) }
+  return { plan: { ...plan, racks: [...(plan.racks ?? []), r] }, id }
+}
+
+function centerOf(plan: Plan, r: RackPlacement): { x: number; y: number } {
   const pts = plan.outline.points
   const cx = pts.reduce((n, p) => n + p.x, 0) / Math.max(1, pts.length)
   const cy = pts.reduce((n, p) => n + p.y, 0) / Math.max(1, pts.length)
-  const id = newId('r')
-  const r = fitPlacement({ id, x: 0, y: 0, orientation: 'x', modules, length: 0, depth: 0, pair: false }, size)
-  return { plan: { ...plan, racks: [...(plan.racks ?? []), { ...r, x: Math.round(cx - r.length / 2), y: Math.round(cy - r.depth / 2) }] }, id }
+  const b = placementRect(r)
+  return { x: Math.round(cx - b.w / 2), y: Math.round(cy - b.h / 2) }
+}
+
+/** Primer lugar donde el rack entra (sin pisar nada ni a otro rack), buscando desde el centro. */
+function findSpot(plan: Plan, r: RackPlacement, size: RackModuleSize): RackPlacement | null {
+  const pts = plan.outline.points
+  if (pts.length < 3) return null
+  const regions = plan.rackAreas?.length
+    ? plan.rackAreas.map((a) => ({ x0: a.x, y0: a.y, x1: a.x + a.w, y1: a.y + a.d }))
+    : [{ x0: Math.min(...pts.map((p) => p.x)), y0: Math.min(...pts.map((p) => p.y)), x1: Math.max(...pts.map((p) => p.x)), y1: Math.max(...pts.map((p) => p.y)) }]
+  const others = (plan.racks ?? []).map((o) => placementRect(fitPlacement(o, size)))
+  for (const g of regions) {
+    const b = placementRect(r)
+    const step = Math.max(500, Math.round(Math.max(g.x1 - g.x0, g.y1 - g.y0) / 60))
+    const cands: { x: number; y: number; d: number }[] = []
+    const cx = (g.x0 + g.x1 - b.w) / 2, cy = (g.y0 + g.y1 - b.h) / 2
+    for (let x = g.x0; x + b.w <= g.x1; x += step)
+      for (let y = g.y0; y + b.h <= g.y1; y += step) cands.push({ x, y, d: Math.hypot(x - cx, y - cy) })
+    cands.sort((a, c) => a.d - c.d)
+    for (const c of cands.slice(0, 4000)) {
+      const cand = { ...r, x: Math.round(c.x), y: Math.round(c.y) }
+      const cb = placementRect(cand)
+      if (!blockedReason(plan, cand) && !others.some((o) => overlap(cb, o))) return cand
+    }
+  }
+  return null
+}
+
+/* ------------------------------ Dónde puede ir un rack ------------------------------ */
+
+/**
+ * Por qué un rack NO puede ir donde está (o null si puede): tiene que quedar adentro del depósito,
+ * fuera de las zonas libres y de los pasillos y, si hay zonas de racks, adentro de una.
+ */
+export function blockedReason(plan: Plan, r: RackPlacement, poly = plan.outline.points.length >= 3 ? outlinePolygon(plan.outline, 200) : null): string | null {
+  const b = placementRect(r)
+  if (poly && !rectInside(b, poly)) return 'Queda fuera del depósito'
+  if (plan.zones.some((z) => overlap(b, { x: z.x, y: z.y, w: z.w, h: z.d }))) return 'Pisa una zona libre'
+  if ((plan.aisles ?? []).some((a) => overlap(b, { x: a.x, y: a.y, w: a.w, h: a.d }))) return 'Pisa un pasillo'
+  const areas = plan.rackAreas ?? []
+  if (areas.length && !areas.some((a) => b.x >= a.x - TOL && b.y >= a.y - TOL && b.x + b.w <= a.x + a.w + TOL && b.y + b.h <= a.y + a.d + TOL))
+    return 'Fuera de la zona de racks'
+  return null
+}
+
+/**
+ * Cambio de un rack que sólo se acepta si el rack sigue pudiendo ir donde queda (si ya estaba mal
+ * ubicado, se acepta igual, para poder sacarlo de ahí). Devuelve el plano sin cambios si no.
+ */
+export function guarded(before: Plan, after: Plan, id: string, size: RackModuleSize): Plan {
+  const a = after.racks?.find((r) => r.id === id)
+  if (!a || !blockedReason(after, fitPlacement(a, size))) return after
+  const b = before.racks?.find((r) => r.id === id)
+  return b && !blockedReason(before, fitPlacement(b, size)) ? before : after
+}
+
+/**
+ * Mover un rack sin dejarlo entrar en zonas libres, pasillos ni salir de la zona de racks: si el
+ * lugar pedido no se puede, se desliza por el borde (sólo en X o sólo en Y) o se queda donde estaba.
+ */
+export function moveRackWithin(plan: Plan, id: string, x: number, y: number, size: RackModuleSize): Plan {
+  const r = plan.racks?.find((q) => q.id === id)
+  if (!r) return plan
+  const cur = fitPlacement(r, size)
+  if (blockedReason(plan, cur)) return moveRack(plan, id, x, y)
+  for (const [tx, ty] of [[x, y], [x, r.y], [r.x, y]]) {
+    if (!blockedReason(plan, { ...cur, x: Math.round(tx), y: Math.round(ty) })) return moveRack(plan, id, tx, ty)
+  }
+  return plan
+}
+
+/** Duplicar al lado donde entre (de un lado, del otro, o a continuación); null si no entra en ningún lado. */
+export function duplicateWithin(plan: Plan, id: string, aisle: number, size: RackModuleSize): { plan: Plan; id: string } | null {
+  const r = plan.racks?.find((x) => x.id === id)
+  if (!r) return null
+  const cur = fitPlacement(r, size)
+  const across = cur.depth + aisle, along = cur.length + 200
+  const offs = cur.orientation === 'x'
+    ? [[0, across], [0, -across], [along, 0], [-along, 0]]
+    : [[across, 0], [-across, 0], [0, along], [0, -along]]
+  const others = (plan.racks ?? []).map((o) => placementRect(fitPlacement(o, size)))
+  for (const [dx, dy] of offs) {
+    const cand = { ...r, id: newId('r'), x: r.x + dx, y: r.y + dy }
+    const cb = placementRect(fitPlacement(cand, size))
+    if (!blockedReason(plan, fitPlacement(cand, size)) && !others.some((o) => overlap(cb, o))) return { plan: { ...plan, racks: [...(plan.racks ?? []), cand] }, id: cand.id }
+  }
+  return null
 }
 
 /* ------------------------------ Interferencias ------------------------------ */
@@ -140,6 +236,8 @@ export function rackIssues(plan: Plan, racks: RackPlacement[]): Record<string, s
   racks.forEach((r, i) => {
     const b = rects[i]
     if (!rectInside(b, poly)) { out[r.id] = 'Queda fuera del depósito'; return }
+    const why = blockedReason(plan, r, poly)
+    if (why) { out[r.id] = why; return }
     if (plan.columns.some((c) => overlap(b, { x: c.x - c.w / 2, y: c.y - c.d / 2, w: c.w, h: c.d }))) { out[r.id] = 'Choca con una columna'; return }
     const hitsWall = plan.walls.some((w) => {
       const half = w.thickness / 2
@@ -149,8 +247,6 @@ export function rackIssues(plan: Plan, racks: RackPlacement[]): Record<string, s
       return false
     })
     if (hitsWall) { out[r.id] = 'Choca con un tabique'; return }
-    if (plan.zones.some((z) => overlap(b, { x: z.x, y: z.y, w: z.w, h: z.d }))) { out[r.id] = 'Pisa una zona libre'; return }
-    if ((plan.aisles ?? []).some((a) => overlap(b, { x: a.x, y: a.y, w: a.w, h: a.d }))) { out[r.id] = 'Pisa un pasillo'; return }
     for (const j of neighbours(b, i)) if (overlap(b, rects[j])) { out[r.id] = 'Se pisa con otro rack'; break }
   })
   return out

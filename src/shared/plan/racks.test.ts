@@ -92,3 +92,46 @@ describe('depósitos grandes', () => {
     expect(performance.now() - t0).toBeLessThan(5000)
   })
 })
+
+describe('zonas libres y zonas de racks mandan', () => {
+  it('un rack no se deja arrastrar a una zona libre: se queda en el borde', async () => {
+    const { moveRackWithin } = await import('./racks')
+    const plan = { ...rectanglePlan(40_000, 20_000), zones: [{ id: 'z', x: 20_000, y: 0, w: 10_000, d: 20_000, name: 'Oficinas' }], racks: [rack({ x: 2000, y: 5000 })] }
+    // hacia la derecha, adentro de la zona libre: no se mueve
+    const r1 = moveRackWithin(plan, 'a', 21_000, 5000, size).racks![0]
+    expect(r1.x).toBe(2000)
+    // en diagonal: se desliza en Y, sin entrar a la zona
+    const r2 = moveRackWithin(plan, 'a', 21_000, 9000, size).racks![0]
+    expect(r2).toMatchObject({ x: 2000, y: 9000 })
+    // a un lugar libre, sí
+    expect(moveRackWithin(plan, 'a', 5000, 8000, size).racks![0]).toMatchObject({ x: 5000, y: 8000 })
+  })
+
+  it('con zona de racks, los racks no salen de ahí y los nuevos van adentro', async () => {
+    const { moveRackWithin, blockedReason, guarded } = await import('./racks')
+    const area = { id: 'a1', x: 10_000, y: 5000, w: 20_000, d: 10_000, name: 'Zona A' }
+    const plan = { ...rectanglePlan(40_000, 20_000), rackAreas: [area], racks: [rack({ x: 12_000, y: 6000 })] }
+    expect(blockedReason(plan, plan.racks[0])).toBeNull()
+    expect(moveRackWithin(plan, 'a', 2000, 6000, size).racks![0].x).toBe(12_000)
+    expect(blockedReason(plan, rack({ x: 2000, y: 6000 }))).toBe('Fuera de la zona de racks')
+    // agregar: cae adentro de la zona
+    const added = addRack(plan, size)
+    const nuevo = added.plan.racks!.find((r) => r.id === added.id)!
+    const b = placementRect(fitPlacement(nuevo, size))
+    expect(b.x >= area.x && b.y >= area.y && b.x + b.w <= area.x + area.w && b.y + b.h <= area.y + area.d).toBe(true)
+    // un módulo más que lo sacaría de la zona no se acepta
+    const largo = { ...plan, racks: [rack({ x: 12_000, y: 6000, modules: 6 })] }
+    expect(guarded(largo, setRackModules(largo, 'a', 7), 'a', size)).toBe(largo)
+  })
+
+  it('marcar una zona libre vuelve a acomodar los racks movidos a mano', async () => {
+    const { usePlan } = await import('../../web/plan/planStore')
+    const s = usePlan.getState()
+    s.commit(() => ({ ...rectanglePlan(40_000, 20_000), racks: [rack()] }))
+    expect(usePlan.getState().plan.racks).toBeDefined()
+    usePlan.getState().commit((p) => ({ ...p, zones: [...p.zones, { id: 'z', x: 0, y: 0, w: 5000, d: 5000, name: 'Libre' }] }))
+    expect(usePlan.getState().plan.racks).toBeUndefined()
+    usePlan.getState().undo()
+    expect(usePlan.getState().plan.racks).toHaveLength(1)
+  })
+})

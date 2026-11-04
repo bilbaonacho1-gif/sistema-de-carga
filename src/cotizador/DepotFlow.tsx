@@ -226,7 +226,7 @@ function LayoutStep({ depot }: { depot: Depot }) {
     <div className="cot-fields">
       <p className="note note--blue">
         Racks ubicados a mano: tocá uno en el plano o en el 3D para moverlo, girarlo, cambiarle los módulos, duplicarlo o borrarlo.
-        {(plan.rackAreas?.length || plan.aisles?.length) ? ' Las zonas de racks y los pasillos marcados se aplican al volver a la distribución automática.' : ''}
+ Si marcás o cambiás una zona libre, una zona de racks o un pasillo, los racks se vuelven a acomodar solos.
       </p>
       {results}
       <Button variant="ghost" icon={RotateCcw} block onClick={() => { commit((p) => ({ ...p, racks: undefined })); select(null) }}>

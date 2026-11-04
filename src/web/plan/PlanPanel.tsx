@@ -35,7 +35,6 @@ export function PlanTools({ showSelection = true }: { showSelection?: boolean } 
   const { tool, setTool, plan, commit, undo, redo, past, future, snap, setSnap, snapStep, setSnapStep, showCotas, setShowCotas } = usePlan()
   const current = TOOLS.find((t) => t.id === tool)!
   const outside = itemsOutside(plan).size
-  const hasMarks = !!(plan.rackAreas?.length || plan.aisles?.length)
   return (
     <>
       <div className="plan-tools" role="toolbar" aria-label="Herramientas">
@@ -66,7 +65,6 @@ export function PlanTools({ showSelection = true }: { showSelection?: boolean } 
       {plan.outline.points.length < 3 && tool !== 'outline'
         ? <p className="note note--blue">Empezá escribiendo el largo y el ancho del depósito en el plano, o dibujalo a mano con "Dibujar contorno" (clic en cada esquina y escribís el largo de cada pared).</p>
         : showSelection && <Selection />}
-      {hasMarks && plan.racks && <ManualRacksNote />}
 
       <h2 className="section-label">Depósito</h2>
       <KeyValue items={[
@@ -295,17 +293,6 @@ function ColumnGrid() {
       <NumberStepper label="Medida de la columna" meters value={size} min={150} max={1500} step={50} onChange={setSize} />
       <Button size="sm" onClick={() => commit((p) => columnGrid(p, dx, dy, size))} block>Generar columnas (reemplaza las actuales)</Button>
     </details>
-  )
-}
-
-/** Con racks movidos a mano, las zonas de racks y los pasillos no reubican nada hasta volver a lo automático. */
-export function ManualRacksNote() {
-  const { commit, select } = usePlan()
-  return (
-    <div className="note note--amber plan-outside">
-      <span>Moviste racks a mano: las zonas de racks y los pasillos se aplican al volver a la distribución automática.</span>
-      <Button size="sm" icon={RotateCcw} onClick={() => { commit((p) => ({ ...p, racks: undefined })); select(null) }}>Volver a la distribución automática</Button>
-    </div>
   )
 }
 
