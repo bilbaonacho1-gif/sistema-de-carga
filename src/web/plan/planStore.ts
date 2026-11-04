@@ -133,11 +133,14 @@ export const usePlan = create<PlanState>()(
     }),
     {
       name: 'sdc-plan',
-      version: 2,
+      version: 3,
       // v2: el plano arranca vacío; si quedó guardado el depósito de ejemplo sin tocar, se vacía
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<PlanState>
-        return (version < 2 && isOldSample(p.plan) ? { ...p, plan: emptyPlan() } : p) as PlanState
+        let out = version < 2 && isOldSample(p.plan) ? { ...p, plan: emptyPlan() } : p
+        // v3: el pasillo de cabecera pasa a 3 m por defecto (era 1,5 m)
+        if (version < 3 && out.layout?.endGap === 1500) out = { ...out, layout: { ...out.layout, endGap: 3000 } }
+        return out as PlanState
       },
       storage: createJSONStorage(() => safeStorage),
       partialize: (s) => ({ plan: s.plan, snap: s.snap, snapStep: s.snapStep, showCotas: s.showCotas, workspace: s.workspace, view3d: s.view3d, flowStep: s.flowStep, layout: s.layout }),

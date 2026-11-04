@@ -32,7 +32,8 @@ export interface LayoutOptions {
 }
 
 export const DEFAULT_LAYOUT: LayoutOptions = {
-  orientation: 'x', aisle: 3000, backToBack: true, wallGap: 200, endGap: 1500, obstacleGap: 150,
+  // los pasillos casi siempre son de 3 m: entre filas y en las cabeceras
+  orientation: 'x', aisle: 3000, backToBack: true, wallGap: 200, endGap: 3000, obstacleGap: 150,
 }
 
 export interface RackModuleSize {
