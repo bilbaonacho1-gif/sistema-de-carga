@@ -18,7 +18,7 @@ import { parseMetros } from '../../shared/units'
 import { apex, arcOf, edgeLength, edges, nearestOnEdge, planBounds, pointOnEdge, tangentOnEdge, type Edge } from '../../shared/plan/geometry'
 import type { Plan, PlanPoint } from '../../shared/plan/types'
 import type { RackModuleSize, RackPlacement } from '../../shared/plan/layout'
-import { freezeRacks, moveRack } from '../../shared/plan/racks'
+import { freezeRacks, moveRack, moveRackWithin } from '../../shared/plan/racks'
 import { PlanCotas } from './PlanCotas'
 import { PlanRacks } from './PlanRacks'
 import { usePlan } from './planStore'
@@ -109,6 +109,13 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
+  /** Botones + y −: acercan o alejan desde el centro de la vista. */
+  const zoomBy = (k: number) => setVb((v) => {
+    const w = Math.min(600_000, Math.max(1500, v.w * k))
+    const f = w / v.w
+    const cx = v.x + v.w / 2, cy = v.y + v.h / 2
+    return { x: cx - (v.w * f) / 2, y: cy - (v.h * f) / 2, w, h: v.h * f }
+  })
   const fit = useCallback(() => setVb(fitView(usePlan.getState().plan, size.w / size.h)), [size.w, size.h])
   useEffect(() => { fit() }, [fitRequest]) // eslint-disable-line react-hooks/exhaustive-deps -- encuadra al pedirlo
 
@@ -340,7 +347,13 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         live((pl) => updateRect(pl, kind, id, (r) => ({ w: Math.max(500, p.x - r.x), d: Math.max(500, p.y - r.y) })))
         break
       }
-      case 'rack': live((pl) => moveRack(freezeRacks(pl, layerRef.current?.racks ?? []), d.id, sn(raw.x - d.dx, e.altKey), sn(raw.y - d.dy, e.altKey))); break
+      case 'rack': {
+        const layer = layerRef.current
+        const nx = sn(raw.x - d.dx, e.altKey), ny = sn(raw.y - d.dy, e.altKey)
+        // no se deja entrar en zonas libres ni pasillos, ni salir de la zona de racks
+        live((pl) => layer ? moveRackWithin(freezeRacks(pl, layer.racks), d.id, nx, ny, layer.size) : moveRack(pl, d.id, nx, ny))
+        break
+      }
       case 'door': live((pl) => ({
         ...pl, doors: pl.doors.map((dr) => {
           if (dr.id !== d.id) return dr
@@ -597,6 +610,10 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
               : <>Escribí el largo de la pared (ej. <strong>40</strong>) y Enter, o hacé clic.{tool === 'outline' && draft.length >= 3 ? ' Enter solo o tocar el primer punto cierra el depósito.' : ''} Esc cancela.</>}
         </div>
       )}
+      <div className="zoom-btns" role="group" aria-label="Zoom">
+        <button type="button" onClick={() => zoomBy(1 / 1.5)} aria-label="Acercar" title="Acercar">+</button>
+        <button type="button" onClick={() => zoomBy(1.5)} aria-label="Alejar" title="Alejar">−</button>
+      </div>
       <div className="plan-editor__coords" aria-hidden>
         <span className="plan-editor__square" />{` cuadro = ${meters(grid.step)}`}
         {cursor ? ` · x ${meters(snapPt(cursor).x)} · y ${meters(snapPt(cursor).y)}` : snap ? ` · imán ${meters(snapStep)} (Alt: libre)` : ''}

@@ -38,6 +38,18 @@ function isOldSample(p?: Plan): boolean {
 }
 const HISTORY = 80
 
+/**
+ * Si cambian las zonas libres, las zonas de racks o los pasillos, los racks vuelven a ubicarse solos
+ * (también si estaban movidos a mano): así nunca quedan racks en una zona libre o fuera de la zona
+ * de racks. Ctrl+Z vuelve a como estaba.
+ */
+function withMarks(prev: Plan, next: Plan): Plan {
+  if (!next.racks) return next
+  if (prev.zones === next.zones && prev.rackAreas === next.rackAreas && prev.aisles === next.aisles) return next
+  const key = (p: Plan) => JSON.stringify([p.zones, p.rackAreas ?? [], p.aisles ?? []])
+  return key(prev) === key(next) ? next : { ...next, racks: undefined }
+}
+
 interface PlanState {
   plan: Plan
   past: Plan[]
@@ -96,9 +108,9 @@ export const usePlan = create<PlanState>()(
       workspace: 'rack',
       flowStep: 'deposito',
       layout: DEFAULT_LAYOUT,
-      commit: (fn) => set((s) => ({ plan: fn(s.plan), past: [...s.past, s.plan].slice(-HISTORY), future: [] })),
+      commit: (fn) => set((s) => ({ plan: withMarks(s.plan, fn(s.plan)), past: [...s.past, s.plan].slice(-HISTORY), future: [] })),
       begin: () => set((s) => ({ past: [...s.past, s.plan].slice(-HISTORY), future: [] })),
-      live: (fn) => set((s) => ({ plan: fn(s.plan) })),
+      live: (fn) => set((s) => ({ plan: withMarks(s.plan, fn(s.plan)) })),
       undo: () => set((s) => {
         const prev = s.past[s.past.length - 1]
         return prev ? { plan: prev, past: s.past.slice(0, -1), future: [s.plan, ...s.future], selection: null } : s
