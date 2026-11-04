@@ -629,3 +629,7 @@
 .zoom-btns button { width: 40px; height: 40px; border: 0; background: #fff; color: var(--ink); font: 600 22px/1 var(--f-body); cursor: pointer; }
 .zoom-btns button + button { border-top: 1px solid var(--line); }
 .zoom-btns button:hover { background: var(--red-tint); color: var(--red); }
+/* escribir una medida tocando la cota */
+.cota-edit:hover { fill: var(--red); }
+.cota-input { position: absolute; z-index: 4; width: 96px; transform: translate(-50%, -50%); padding: 6px 8px; border: 2px solid var(--red); border-radius: 8px; background: #fff; font: 700 15px var(--f-mono); text-align: center; color: var(--ink); box-shadow: 0 6px 18px rgba(20, 24, 30, .18); outline: 0; }
+.rack-editor__fields { display: flex; flex-direction: column; gap: 8px; }

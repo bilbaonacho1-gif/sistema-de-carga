@@ -70,5 +70,14 @@ describe('edición del contorno', () => {
     const libre = pointAtLength({ x: 0, y: 0 }, { x: 3000, y: 4000 }, undefined, 10_000, false)
     expect(libre).toEqual({ x: 6000, y: 8000 })
   })
+
+  it('cambiar el largo de una pared de un rectángulo lo deja rectángulo', async () => {
+    const { setEdgeLength, setTotal } = await import('./edit')
+    const { rectanglePlan } = await import('./geometry')
+    const r = setEdgeLength(rectanglePlan(32_000, 22_000), 0, 40_000)
+    expect(r.outline.points).toEqual([{ x: 0, y: 0 }, { x: 40_000, y: 0 }, { x: 40_000, y: 22_000 }, { x: 0, y: 22_000 }])
+    const t = setTotal(rectanglePlan(32_000, 22_000), 'y', 30_000)
+    expect(t.outline.points[2]).toEqual({ x: 32_000, y: 30_000 })
+  })
 })
 

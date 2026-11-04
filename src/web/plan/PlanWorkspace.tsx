@@ -2,11 +2,13 @@
  * Visor del depósito: el plano (2D, editable) o el depósito en 3D (también editable: se toca y
  * se arrastra), con los racks ubicados si los hay. Lo seleccionado tiene su barra de acciones.
  */
-import { AlertTriangle, Box, Copy, Map as MapIcon, Maximize2, Minus, Package, Plus, RotateCw, Trash2 } from 'lucide-react'
+import { AlertTriangle, Box, Copy, Map as MapIcon, Maximize2, Package, RotateCw, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import type { PlacedRack } from '../../shared/plan/depot'
 import { removeItem, removeVertex } from '../../shared/plan/edit'
-import { duplicateWithin, freezeRacks, guarded, rotateRack, setRackModules, setRackPair } from '../../shared/plan/racks'
+import { duplicateWithin, fitPlacement, freezeRacks, guarded, moveRack, rotateRack, setRackModules, setRackPair } from '../../shared/plan/racks'
+import { metros } from '../../shared/units'
+import { NumberStepper } from '../components/fields'
 import type { Plan, PlanSelection } from '../../shared/plan/types'
 import { Segmented, Spinner } from '../components/ui'
 import { PlanEditor, type PlanRackLayer } from './PlanEditor'
@@ -85,6 +87,8 @@ function useKeys3d(active: boolean, layer?: PlanRackLayer) {
  */
 export function RackEditor({ rackLayer }: { rackLayer: PlanRackLayer }) {
   const { selection, commit, select, layout, plan } = usePlan()
+  /** Medida escrita que no se pudo aplicar (el rack quedaría en un lugar prohibido). */
+  const [rejected, setRejected] = useState<{ n: number; why: string } | null>(null)
   if (selection?.kind !== 'rack') return null
   const r = rackLayer.racks.find((x) => x.id === selection.id)
   if (!r) return null
@@ -94,8 +98,6 @@ export function RackEditor({ rackLayer }: { rackLayer: PlanRackLayer }) {
   // cada cambio se prueba antes: si el rack terminaría en una zona libre, un pasillo o fuera de la
   // zona de racks, el botón queda apagado
   const tryEdit = (fn: (p: Plan) => Plan) => { const after = guarded(base, fn(base), r.id, size); return after === base ? null : after }
-  const more = tryEdit((p) => setRackModules(p, r.id, r.modules + 1))
-  const less = r.modules > 1 ? tryEdit((p) => setRackModules(p, r.id, r.modules - 1)) : null
   const pair = tryEdit((p) => setRackPair(p, r.id, !r.pair))
   const rotated = tryEdit((p) => rotateRack(p, r.id))
   const dup = duplicateWithin(base, r.id, layout.aisle, size)
@@ -105,15 +107,21 @@ export function RackEditor({ rackLayer }: { rackLayer: PlanRackLayer }) {
   return (
     <div className="plan-sel rack-editor">
       <h2 className="section-label">Rack {r.pair ? 'doble (espalda con espalda)' : 'simple'}</h2>
+      <span className="muted small">{metros(fitPlacement(r, size).length)} × {metros(fitPlacement(r, size).depth)}</span>
       {issue && <p className="rack-editor__issue"><AlertTriangle size={14} aria-hidden /> {issue}</p>}
-      <div className="rack-editor__row" aria-label="Módulos">
-        <span>Módulos</span>
-        <span className="rack-editor__num">
-          <button type="button" className="vp-btn vp-btn--icon" aria-label="Un módulo menos" disabled={!less} onClick={() => apply(less)}><Minus size={14} aria-hidden /></button>
-          <strong>{r.modules}</strong>
-          <button type="button" className="vp-btn vp-btn--icon" aria-label="Un módulo más" disabled={!more} title={more ? undefined : noRoom} onClick={() => apply(more)}><Plus size={14} aria-hidden /></button>
-        </span>
+      {/* todo escrito a mano: si el rack no entra ahí, no se aplica y se avisa */}
+      <div key={`${r.id}-${rejected?.n ?? 0}`} className="rack-editor__fields">
+        <NumberStepper label="Módulos" value={r.modules} min={1} max={120} step={1}
+          onChange={(v) => { const next = tryEdit((p) => setRackModules(p, r.id, v)); if (next) { commit(() => next); setRejected(null) } else setRejected({ n: (rejected?.n ?? 0) + 1, why: noRoom }) }}
+          />
+        <div className="plan-xy">
+          <NumberStepper label="X" meters value={r.x} min={-500_000} max={500_000} step={1000} typedStep={10}
+            onChange={(x) => { const next = tryEdit((p) => moveRack(p, r.id, x, r.y)); if (next) { commit(() => next); setRejected(null) } else setRejected({ n: (rejected?.n ?? 0) + 1, why: 'Ahí no entra: pisaría una zona libre o un pasillo, o saldría de la zona de racks.' }) }} />
+          <NumberStepper label="Y" meters value={r.y} min={-500_000} max={500_000} step={1000} typedStep={10}
+            onChange={(y) => { const next = tryEdit((p) => moveRack(p, r.id, r.x, y)); if (next) { commit(() => next); setRejected(null) } else setRejected({ n: (rejected?.n ?? 0) + 1, why: 'Ahí no entra: pisaría una zona libre o un pasillo, o saldría de la zona de racks.' }) }} />
+        </div>
       </div>
+      {rejected && <p className="rack-editor__issue"><AlertTriangle size={14} aria-hidden /> {rejected.why}</p>}
       <div className="rack-editor__actions">
         <button type="button" className="vp-btn" disabled={!pair} title={pair ? undefined : noRoom} onClick={() => apply(pair)}>{r.pair ? 'Hacer simple' : 'Hacer doble'}</button>
         <button type="button" className="vp-btn" disabled={!rotated} title={rotated ? undefined : noRoom} onClick={() => apply(rotated)}><RotateCw size={14} aria-hidden /> Girar</button>

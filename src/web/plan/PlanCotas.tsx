@@ -12,11 +12,18 @@ import type { Plan, PlanColumn, PlanPoint } from '../../shared/plan/types'
 const INK = '#1f5f8b'
 const meters = (mm: number) => `${(Math.round(mm / 10) / 100 + 0).toLocaleString('es-AR', { maximumFractionDigits: 2 })} m`
 
-interface Props { plan: Plan; px: (n: number) => number; column?: PlanColumn | null }
+interface Props {
+  plan: Plan; px: (n: number) => number; column?: PlanColumn | null
+  /** Tocar la cota de una pared recta o una medida total para escribirla. */
+  onEditEdge?: (index: number, at: PlanPoint) => void
+  onEditTotal?: (axis: 'x' | 'y', at: PlanPoint) => void
+}
 
 /** Una cota entre a y b, desplazada `off` mm según la normal n, con su texto. */
-function Dim({ a, b, n, off, text, px, k, color = INK }: {
+function Dim({ a, b, n, off, text, px, k, color = INK, onEdit }: {
   a: PlanPoint; b: PlanPoint; n: PlanPoint; off: number; text: string; px: (v: number) => number; k: string; color?: string
+  /** Si está, tocar la medida la deja escribir (recibe dónde está el texto). */
+  onEdit?: (at: PlanPoint) => void
 }) {
   const A = { x: a.x + n.x * off, y: a.y + n.y * off }
   const B = { x: b.x + n.x * off, y: b.y + n.y * off }
@@ -40,12 +47,15 @@ function Dim({ a, b, n, off, text, px, k, color = INK }: {
       {tick(A)}{tick(B)}
       <text x={mid.x} y={mid.y} fontSize={px(11.5)} textAnchor="middle" dominantBaseline="middle" fill={color}
         stroke="#fff" strokeWidth={px(4)} transform={`rotate(${ang} ${mid.x} ${mid.y})`}
-        style={{ paintOrder: 'stroke', fontFamily: 'var(--f-mono)', fontWeight: 600 }}>{text}</text>
+        pointerEvents={onEdit ? 'all' : 'none'} className={onEdit ? 'cota-edit' : undefined}
+        onPointerDown={onEdit ? (e) => { e.stopPropagation(); onEdit(mid) } : undefined}
+        style={{ paintOrder: 'stroke', fontFamily: 'var(--f-mono)', fontWeight: 600, cursor: onEdit ? 'text' : undefined }}>
+        {onEdit && <title>Tocá para escribir la medida</title>}{text}</text>
     </g>
   )
 }
 
-export function PlanCotas({ plan, px, column }: Props) {
+export function PlanCotas({ plan, px, column, onEditEdge, onEditTotal }: Props) {
   if (plan.outline.points.length < 3) return null
   const poly = outlinePolygon(plan.outline, 100)
   const es = edges(plan.outline)
@@ -69,14 +79,15 @@ export function PlanCotas({ plan, px, column }: Props) {
             </text>
           )
         }
-        return <Dim key={`c${e.index}`} k={`c${e.index}`} a={e.a} b={e.b} n={n} off={px(26)} text={meters(edgeLength(e))} px={px} />
+        return <Dim key={`c${e.index}`} k={`c${e.index}`} a={e.a} b={e.b} n={n} off={px(26)} text={meters(edgeLength(e))} px={px}
+          onEdit={onEditEdge && ((at) => onEditEdge(e.index, at))} />
       })}
 
       {/* medidas totales */}
       <Dim k="total-x" a={{ x: box.minX, y: box.maxY }} b={{ x: box.maxX, y: box.maxY }} n={{ x: 0, y: 1 }} off={px(62)}
-        text={`TOTAL ${meters(box.maxX - box.minX)}`} px={px} color="#1f2328" />
+        text={`TOTAL ${meters(box.maxX - box.minX)}`} px={px} color="#1f2328" onEdit={onEditTotal && ((at) => onEditTotal('x', at))} />
       <Dim k="total-y" a={{ x: box.minX, y: box.minY }} b={{ x: box.minX, y: box.maxY }} n={{ x: -1, y: 0 }} off={px(62)}
-        text={`TOTAL ${meters(box.maxY - box.minY)}`} px={px} color="#1f2328" />
+        text={`TOTAL ${meters(box.maxY - box.minY)}`} px={px} color="#1f2328" onEdit={onEditTotal && ((at) => onEditTotal('y', at))} />
 
       {/* columna seleccionada: luz libre hasta cada pared */}
       {column && ([[1, 0], [-1, 0], [0, 1], [0, -1]] as const).map(([dx, dy]) => {

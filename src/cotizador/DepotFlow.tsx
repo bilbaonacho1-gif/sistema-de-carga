@@ -155,10 +155,10 @@ function RackStep({ s }: { s: RackStructure }) {
   const autoBeam = !config.beamId || config.beamId === 'auto'
   return (
     <div className="cot-fields">
-      <NumberStepper label="Largo de viga (ancho del módulo)" meters value={config.width} min={L.width.min} max={L.width.max} step={50} slider onChange={(width) => update({ width })}
+      <NumberStepper label="Largo de viga (ancho del módulo)" meters value={config.width} min={L.width.min} max={L.width.max} step={50} typedStep={10} slider onChange={(width) => update({ width })}
         hint={`${plural(s.palletsPerModule, 'pallet', 'pallets')} por nivel en cada módulo`} />
-      <NumberStepper label="Profundidad del bastidor" meters value={config.depth} min={L.depth.min} max={L.depth.max} step={50} slider onChange={(depth) => update({ depth })} />
-      <NumberStepper label="Altura" meters value={config.height} min={L.height.min} max={L.height.max} step={100} slider onChange={(height) => update({ height })}
+      <NumberStepper label="Profundidad del bastidor" meters value={config.depth} min={L.depth.min} max={L.depth.max} step={50} typedStep={10} slider onChange={(depth) => update({ depth })} />
+      <NumberStepper label="Altura" meters value={config.height} min={L.height.min} max={L.height.max} step={100} typedStep={10} slider onChange={(height) => update({ height })}
         hint={config.height > OFFICIAL_REFERENCE.maxHeight ? <span className="late">Supera los {mm(OFFICIAL_REFERENCE.maxHeight)} publicados.</span> : undefined} />
       <Field label="Niveles de almacenamiento">{() => (
         <Segmented label="Niveles" value={String(config.levels)} onChange={(v) => update({ levels: Number(v) })}
