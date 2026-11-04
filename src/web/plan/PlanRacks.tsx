@@ -13,7 +13,8 @@ interface Props {
   racks: RackPlacement[]
   size: RackModuleSize
   px: (n: number) => number
-  selectedId?: string
+  /** Racks seleccionados (uno o varios). */
+  selected?: Set<string>
   /** Racks con problemas (se pisan, chocan o quedan afuera): van en rojo. */
   issues?: Record<string, string>
   /** Si está, los racks se pueden tocar y arrastrar. */
@@ -21,6 +22,7 @@ interface Props {
 }
 
 const ORANGE = '#e07b1f', RED = '#be1e30'
+const NONE = new Set<string>()
 
 /** Rectángulos de las filas de un rack y las líneas de sus bastidores (en coordenadas del plano). */
 function rackShapes(r: RackPlacement, size: RackModuleSize, withFrames: boolean): { rows: string; frames: string } {
@@ -41,22 +43,21 @@ function rackShapes(r: RackPlacement, size: RackModuleSize, withFrames: boolean)
   return { rows, frames }
 }
 
-export const PlanRacks = memo(function PlanRacks({ racks, size, px, selectedId, issues = {}, onDown }: Props) {
+export const PlanRacks = memo(function PlanRacks({ racks, size, px, selected = NONE, issues = {}, onDown }: Props) {
   // con más de ~60 mm por pixel los bastidores serían una mancha: se muestran al acercarse
   const detail = px(1) < 60
   const paths = useMemo(() => {
-    let ok = '', bad = '', okFrames = '', badFrames = ''
+    let ok = '', bad = '', okFrames = '', badFrames = '', selRows = '', selFrames = ''
     for (const r of racks) {
-      if (r.id === selectedId) continue
-      const s = rackShapes(r, size, detail)
-      if (issues[r.id]) { bad += s.rows; badFrames += s.frames } else { ok += s.rows; okFrames += s.frames }
+      const s = rackShapes(r, size, detail || selected.has(r.id))
+      if (selected.has(r.id)) { selRows += s.rows; selFrames += s.frames } else if (issues[r.id]) { bad += s.rows; badFrames += s.frames } else { ok += s.rows; okFrames += s.frames }
     }
-    return { ok, bad, okFrames, badFrames }
-  }, [racks, size, detail, selectedId, issues])
-  const selected = racks.find((r) => r.id === selectedId)
-  const sel = selected && rackShapes(selected, size, true)
-  const selBad = selected && !!issues[selected.id]
-  const selBox = selected && placementRect(selected)
+    return { ok, bad, okFrames, badFrames, selRows, selFrames }
+  }, [racks, size, detail, selected, issues])
+  // un solo rack elegido: con su recuadro punteado
+  const single = selected.size === 1 ? racks.find((r) => selected.has(r.id)) : undefined
+  const selBad = single && !!issues[single.id]
+  const selBox = single && placementRect(single)
 
   return (
     <g>
@@ -65,9 +66,11 @@ export const PlanRacks = memo(function PlanRacks({ racks, size, px, selectedId, 
         {paths.okFrames && <path d={paths.okFrames} stroke="#c2651a" strokeWidth={1.4} vectorEffect="non-scaling-stroke" />}
         {paths.bad && <path d={paths.bad} fill="#f8d4d8" stroke={RED} strokeWidth={1.4} vectorEffect="non-scaling-stroke" />}
         {paths.badFrames && <path d={paths.badFrames} stroke="#a3192a" strokeWidth={1.4} vectorEffect="non-scaling-stroke" />}
-        {sel && <>
-          <path d={sel.rows} fill={selBad ? '#f8d4d8' : '#ffe2c4'} stroke={RED} strokeWidth={2.5} vectorEffect="non-scaling-stroke" />
-          <path d={sel.frames} stroke={selBad ? '#a3192a' : '#c2651a'} strokeWidth={Math.max(1.4, size.upright / px(1))} vectorEffect="non-scaling-stroke" />
+        {paths.selRows && <>
+          <path d={paths.selRows} fill={selBad ? '#f8d4d8' : '#ffe2c4'} stroke={RED} strokeWidth={2.5} vectorEffect="non-scaling-stroke" />
+          <path d={paths.selFrames} stroke={selBad ? '#a3192a' : '#c2651a'} strokeWidth={Math.max(1.4, size.upright / px(1))} vectorEffect="non-scaling-stroke" />
+        </>}
+        {selBox && <>
           <rect x={selBox!.x - px(4)} y={selBox!.y - px(4)} width={selBox!.w + px(8)} height={selBox!.h + px(8)} fill="none" stroke={RED} strokeWidth={px(1.5)} strokeDasharray={`${px(6)} ${px(4)}`} />
         </>}
       </g>

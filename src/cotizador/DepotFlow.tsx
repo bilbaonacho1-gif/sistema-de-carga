@@ -5,12 +5,12 @@
  * cuántos racks entran en ESE depósito (filas, pasillos, columnas y zonas) y todo lo demás
  * (materiales, presupuesto) sale del depósito completo.
  */
-import { AlertTriangle, Calculator, ChevronLeft, ChevronRight, Download, Lightbulb, Mail, Phone, Plus, RotateCcw } from 'lucide-react'
-import { useMemo } from 'react'
+import { AlertTriangle, Calculator, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Download, GripHorizontal, Lightbulb, Mail, Move, PanelLeft, Phone, Plus, RotateCcw } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { buildDepot, moduleSize, type Depot } from '../shared/plan/depot'
 import { planArea } from '../shared/plan/geometry'
 import { placementRect } from '../shared/plan/layout'
-import { addRack, freezeRacks } from '../shared/plan/racks'
+import { addRack, freezeRacks, rackSelection } from '../shared/plan/racks'
 import { calculateRackStructure } from '../shared/rack/calculateRackStructure'
 import { beamCapacityForSpan } from '../shared/rack/rules'
 import { BEAM_PROFILES, CONTACT, DESIGN_RULES, OFFICIAL_REFERENCE, UPRIGHT_PROFILES } from '../shared/rack/technicalSpecs'
@@ -23,7 +23,7 @@ import { Viewport, Warnings } from '../web/pages/designer/CotizadorView'
 import { useDesigner } from '../web/pages/designer/designerStore'
 import { MarkTools, PlanTools, Selection } from '../web/plan/PlanPanel'
 import { FLOW, usePlan, type FlowStep } from '../web/plan/planStore'
-import { PlanStage, RackEditor } from '../web/plan/PlanWorkspace'
+import { MultiRackEditor, PlanStage, RackEditor } from '../web/plan/PlanWorkspace'
 import { metros, metrosNum } from '../shared/units'
 
 const L = DESIGN_RULES.limits
@@ -67,15 +67,21 @@ export function DepotFlow({ onQuote }: { onQuote(): void }) {
   const rackLayer = showRacks ? { racks: depot.layout.placements, size, issues: depot.issues } : undefined
   // lo que se está editando en el plano va arriba de todo en el panel (en lugar de la ayuda del paso)
   const selection = usePlan((s) => s.selection)
-  const editing = !rackView && !!selection && (selection.kind !== 'rack' || !!rackLayer)
+  const editing = !rackView && !!selection && ((selection.kind !== 'rack' && selection.kind !== 'racks') || !!rackLayer)
+  const defaults = { height: config.height, levels: config.levels }
   const area = planArea(plan.outline)
+  const [dock, setDock] = usePanelDock()
 
   return (
-    <div className="designer depot">
-      <section className="designer__panel cotizador" aria-label="Cotizador de depósitos">
+    <div className={`designer depot${dock.floating ? ' depot--float' : ''}`}>
+      <section className={`designer__panel cotizador${dock.floating ? ' is-floating' : ''}${dock.collapsed ? ' is-collapsed' : ''}`} aria-label="Cotizador de depósitos"
+        style={dock.floating ? { left: dock.x, top: dock.y, maxHeight: `calc(100dvh - ${dock.y}px - 12px)` } : undefined}>
+        <PanelBar dock={dock} setDock={setDock} />
+        {!dock.collapsed && <>
         <Steps />
         {editing
-          ? <div className="cot-editing">{selection?.kind === 'rack' && rackLayer ? <RackEditor rackLayer={rackLayer} /> : <Selection />}</div>
+          ? <div className="cot-editing">{selection?.kind === 'rack' && rackLayer ? <RackEditor rackLayer={rackLayer} defaults={defaults} />
+            : selection?.kind === 'racks' && rackLayer ? <MultiRackEditor rackLayer={rackLayer} defaults={defaults} /> : <Selection />}</div>
           : <p className="cot-help"><Lightbulb size={16} aria-hidden /><span>{META[flowStep].help}</span></p>}
         <StepBody step={flowStep} depot={depot} preview={preview} onQuote={onQuote} />
         {rackView && <Warnings warnings={preview.warnings.filter((w) => w.code !== 'free-positions')} />}
@@ -89,11 +95,60 @@ export function DepotFlow({ onQuote }: { onQuote(): void }) {
           </div>
         </>}
         <StepNav />
+        </>}
       </section>
       {rackView
         ? <Viewport s={preview} />
         : <PlanStage rackLayer={rackLayer} racks={showRacks ? depot.racks : undefined}
             summary={area > 0 && <DepotStrip depot={depot} area={area} />} />}
+    </div>
+  )
+}
+
+/* ------------------------------ Panel suelto o fijo ------------------------------ */
+
+interface Dock { floating: boolean; collapsed: boolean; x: number; y: number }
+const DOCK_KEY = 'sdc-panel'
+
+/** Dónde está el panel: fijo a la izquierda o suelto (y dónde), abierto o achicado. Se recuerda. */
+function usePanelDock(): [Dock, (d: Dock) => void] {
+  const [dock, set] = useState<Dock>(() => {
+    try { return { floating: false, collapsed: false, x: 24, y: 140, ...JSON.parse(localStorage.getItem(DOCK_KEY) ?? '{}') } }
+    catch { return { floating: false, collapsed: false, x: 24, y: 140 } }
+  })
+  const save = (d: Dock) => { set(d); try { localStorage.setItem(DOCK_KEY, JSON.stringify(d)) } catch { /* sin memoria */ } }
+  return [dock, save]
+}
+
+/** Barra de arriba del panel: arrastrarla lo mueve (si está suelto); achicar y soltar / fijar. */
+function PanelBar({ dock, setDock }: { dock: Dock; setDock(d: Dock): void }) {
+  const onDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dock.floating || (e.target as HTMLElement).closest('button')) return
+    e.preventDefault()
+    const el = e.currentTarget
+    el.setPointerCapture(e.pointerId)
+    const sx = e.clientX - dock.x, sy = e.clientY - dock.y
+    let cur = dock
+    const move = (ev: PointerEvent) => {
+      cur = { ...dock, x: Math.max(0, Math.min(window.innerWidth - 160, ev.clientX - sx)), y: Math.max(0, Math.min(window.innerHeight - 48, ev.clientY - sy)) }
+      const panel = el.parentElement!
+      panel.style.left = `${cur.x}px`; panel.style.top = `${cur.y}px`
+      panel.style.maxHeight = `calc(100dvh - ${cur.y}px - 12px)`
+    }
+    const up = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); setDock(cur) }
+    el.addEventListener('pointermove', move)
+    el.addEventListener('pointerup', up)
+  }
+  return (
+    <div className="cot-panelbar" onPointerDown={onDown} title={dock.floating ? 'Arrastrá esta barra para mover el panel' : undefined}>
+      {dock.floating ? <span className="cot-panelbar__grip" aria-hidden><GripHorizontal size={16} /></span> : null}
+      <span className="cot-panelbar__t">{dock.floating ? 'Arrastrá para moverlo' : 'Panel'}</span>
+      <button type="button" className="vp-btn" onClick={() => setDock({ ...dock, collapsed: !dock.collapsed })} aria-expanded={!dock.collapsed}>
+        {dock.collapsed ? <><ChevronDown size={14} aria-hidden /> Abrir</> : <><ChevronUp size={14} aria-hidden /> Achicar</>}
+      </button>
+      <button type="button" className="vp-btn" onClick={() => setDock({ ...dock, floating: !dock.floating, collapsed: false })}>
+        {dock.floating ? <><PanelLeft size={14} aria-hidden /> Fijar</> : <><Move size={14} aria-hidden /> Soltar</>}
+      </button>
     </div>
   )
 }
@@ -189,7 +244,7 @@ function RackStep({ s }: { s: RackStructure }) {
 /* ------------------------------ 4. Distribución ------------------------------ */
 
 function LayoutStep({ depot }: { depot: Depot }) {
-  const { layout, setLayout, plan, commit, select } = usePlan()
+  const { layout, setLayout, plan, commit, select, multi, setMulti } = usePlan()
   const config = useDesigner((s) => s.config)
   // la otra orientación, para comparar
   const other = useMemo(() => buildDepot(plan, config, { ...layout, orientation: layout.orientation === 'x' ? 'y' : 'x' }), [plan, config, layout])
@@ -218,6 +273,11 @@ function LayoutStep({ depot }: { depot: Depot }) {
           ))}</ul>
         </div>
       )}
+      <div className="multi-pick">
+        <label className="plan-snap"><input type="checkbox" checked={multi} onChange={(e) => setMulti(e.target.checked)} /> Elegir varios racks</label>
+        <button type="button" className="link-btn" onClick={() => select(rackSelection(depot.layout.placements.map((p) => p.id)))}>Elegir todos</button>
+      </div>
+      <p className="muted small">{multi ? 'Tocá cada rack para sumarlo, o arrastrá un recuadro sobre el plano.' : 'Para elegir varios: Shift + clic en cada rack, o Shift + arrastrar un recuadro.'} Después cambiás módulos, altura o niveles de todos juntos, o de cada uno por separado.</p>
       <Button icon={Plus} onClick={add} block>Agregar un rack</Button>
     </>
   )

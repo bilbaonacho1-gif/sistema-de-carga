@@ -6,7 +6,7 @@
 import { newId } from './edit'
 import { outlinePolygon, pointInPolygon } from './geometry'
 import { placementRect, type LayoutResult, type RackModuleSize } from './layout'
-import type { Plan, PlanPoint, RackPlacement } from './types'
+import type { Plan, PlanPoint, PlanSelection, RackPlacement } from './types'
 
 type Rect = { x: number; y: number; w: number; h: number }
 
@@ -250,4 +250,54 @@ export function rackIssues(plan: Plan, racks: RackPlacement[]): Record<string, s
     for (const j of neighbours(b, i)) if (overlap(b, rects[j])) { out[r.id] = 'Se pisa con otro rack'; break }
   })
   return out
+}
+
+/* ------------------------------ Varios racks a la vez ------------------------------ */
+
+/** Los racks seleccionados (uno o varios). */
+export function selectedRackIds(sel: PlanSelection): string[] {
+  if (!sel) return []
+  if (sel.kind === 'rack') return [sel.id]
+  if (sel.kind === 'racks') return sel.ids
+  return []
+}
+
+/** Selección de racks a partir de una lista (uno solo queda como selección simple). */
+export function rackSelection(ids: string[]): PlanSelection {
+  return ids.length === 0 ? null : ids.length === 1 ? { kind: 'rack', id: ids[0] } : { kind: 'racks', ids }
+}
+
+export function removeRacks(plan: Plan, ids: string[]): Plan {
+  const drop = new Set(ids)
+  return { ...plan, racks: (plan.racks ?? []).filter((r) => !drop.has(r.id)) }
+}
+
+/** Cambia varios racks a la vez con la misma función. */
+export function mapRacks(plan: Plan, ids: string[], fn: (r: RackPlacement) => RackPlacement): Plan {
+  const set = new Set(ids)
+  return { ...plan, racks: (plan.racks ?? []).map((r) => (set.has(r.id) ? fn(r) : r)) }
+}
+
+/**
+ * Mueve varios racks juntos (la misma distancia). Si alguno quedaría en un lugar prohibido, se
+ * prueba sólo en X o sólo en Y; si tampoco, no se mueven.
+ */
+export function moveRacksBy(plan: Plan, ids: string[], dx: number, dy: number, size: RackModuleSize): Plan {
+  const set = new Set(ids)
+  const racks = (plan.racks ?? []).filter((r) => set.has(r.id))
+  const poly = plan.outline.points.length >= 3 ? outlinePolygon(plan.outline, 200) : null
+  const ok = (ddx: number, ddy: number) => racks.every((r) => {
+    const cur = fitPlacement(r, size)
+    return !!blockedReason(plan, cur, poly) || !blockedReason(plan, { ...cur, x: r.x + ddx, y: r.y + ddy }, poly)
+  })
+  for (const [tx, ty] of [[dx, dy], [dx, 0], [0, dy]]) {
+    if (ok(tx, ty)) return mapRacks(plan, ids, (r) => ({ ...r, x: Math.round(r.x + tx), y: Math.round(r.y + ty) }))
+  }
+  return plan
+}
+
+/** Racks cuyo rectángulo toca el recuadro [x0,y0]–[x1,y1] (selección arrastrando). */
+export function racksInBox(racks: RackPlacement[], x0: number, y0: number, x1: number, y1: number): string[] {
+  const bx = Math.min(x0, x1), by = Math.min(y0, y1), bw = Math.abs(x1 - x0), bh = Math.abs(y1 - y0)
+  return racks.filter((r) => overlap(placementRect(r), { x: bx, y: by, w: bw, h: bh })).map((r) => r.id)
 }

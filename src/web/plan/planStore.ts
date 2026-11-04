@@ -83,6 +83,9 @@ interface PlanState {
   setDraft(d: PlanPoint[]): void
   setSnap(v: boolean): void
   setSnapStep(v: number): void
+  /** Modo "elegir varios": tocar un rack lo suma a la selección (como Shift + clic). */
+  multi: boolean
+  setMulti(v: boolean): void
   setShowCotas(v: boolean): void
   setView3d(v: boolean): void
   setWorkspace(w: 'rack' | 'deposito'): void
@@ -124,6 +127,8 @@ export const usePlan = create<PlanState>()(
       setDraft: (draft) => set({ draft }),
       setSnap: (snap) => set({ snap }),
       setSnapStep: (snapStep) => set({ snapStep }),
+      multi: false,
+      setMulti: (multi) => set({ multi }),
       setShowCotas: (showCotas) => set({ showCotas }),
       setView3d: (view3d) => set({ view3d }),
       setWorkspace: (workspace) => set({ workspace }),

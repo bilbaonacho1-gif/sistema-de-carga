@@ -135,3 +135,27 @@ describe('zonas libres y zonas de racks mandan', () => {
     expect(usePlan.getState().plan.racks).toHaveLength(1)
   })
 })
+
+describe('varios racks y medidas propias', () => {
+  it('elegir con un recuadro, mover juntos y frenar si uno no entra', async () => {
+    const { racksInBox, moveRacksBy } = await import('./racks')
+    const plan = { ...rectanglePlan(40_000, 20_000), zones: [{ id: 'z', x: 0, y: 15_000, w: 40_000, d: 5000, name: 'Libre' }],
+      racks: [rack({ id: 'a', x: 2000, y: 2000 }), rack({ id: 'b', x: 2000, y: 6000 }), rack({ id: 'c', x: 20_000, y: 2000 })] }
+    expect(racksInBox(plan.racks, 0, 0, 12_000, 10_000).sort()).toEqual(['a', 'b'])
+    const moved = moveRacksBy(plan, ['a', 'b'], 1000, 1000, size)
+    expect(moved.racks!.filter((r) => r.id !== 'c').map((r) => [r.x, r.y])).toEqual([[3000, 3000], [3000, 7000]])
+    // 'b' entraría en la zona libre: se mueven sólo en X
+    const frenado = moveRacksBy(plan, ['a', 'b'], 1000, 9000, size)
+    expect(frenado.racks!.find((r) => r.id === 'b')).toMatchObject({ x: 3000, y: 6000 })
+  })
+
+  it('un rack con altura y niveles propios suma sus posiciones', () => {
+    const plan = { ...rectanglePlan(40_000, 20_000), racks: [rack({ id: 'a' }), rack({ id: 'b', y: 6000 })] }
+    const config = { ...DEFAULT_CONFIGURATION, levels: 3 }
+    const antes = buildDepot(plan, config, DEFAULT_LAYOUT).positions
+    const alto = { ...plan, racks: [plan.racks[0], { ...plan.racks[1], levels: 5, height: 8000 }] }
+    const despues = buildDepot(alto, config, DEFAULT_LAYOUT)
+    expect(despues.positions).toBeGreaterThan(antes)
+    expect(despues.racks[1].structure.config.height).toBe(8000)
+  })
+})
