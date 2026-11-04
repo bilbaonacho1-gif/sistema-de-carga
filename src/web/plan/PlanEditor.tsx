@@ -20,6 +20,7 @@ import type { Plan, PlanPoint } from '../../shared/plan/types'
 import type { RackModuleSize, RackPlacement } from '../../shared/plan/layout'
 import { freezeRacks, moveRack, moveRackWithin } from '../../shared/plan/racks'
 import { PlanCotas } from './PlanCotas'
+import { Legend, PlanRackNotes, ScaleBar } from './PlanNotes'
 import { PlanRacks } from './PlanRacks'
 import { usePlan } from './planStore'
 
@@ -499,6 +500,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         {rackLayer && <PlanRacks racks={rackLayer.racks} size={rackLayer.size} px={px} issues={rackLayer.issues}
           selectedId={selection?.kind === 'rack' ? selection.id : undefined}
           onDown={tool === 'select' ? (e, r) => { select({ kind: 'rack', id: r.id }); const p = toPlan(e.clientX, e.clientY); startDrag(e, { type: 'rack', id: r.id, dx: p.x - r.x, dy: p.y - r.y, started: false }) } : undefined} />}
+        {rackLayer && showCotas && <PlanRackNotes racks={rackLayer.racks} px={px} />}
 
         {/* tabiques */}
         {plan.walls.map((w) => (
@@ -641,6 +643,8 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
             setInline(null)
           }} />
       )}
+      {!empty && <Legend plan={plan} racks={!!rackLayer?.racks.length} issues={!!rackLayer?.issues && Object.keys(rackLayer.issues).length > 0} />}
+      {!empty && <ScaleBar mmPerPx={scale} />}
       <div className="zoom-btns" role="group" aria-label="Zoom">
         <button type="button" onClick={() => zoomBy(1 / 1.5)} aria-label="Acercar" title="Acercar">+</button>
         <button type="button" onClick={() => zoomBy(1.5)} aria-label="Alejar" title="Alejar">−</button>

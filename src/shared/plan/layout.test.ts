@@ -114,6 +114,20 @@ describe('zonas de racks y pasillos dibujados', () => {
   })
 })
 
+describe('tabiques en diagonal', () => {
+  it('un tabique en diagonal sólo tapa por donde pasa (no todo el rectángulo que lo encierra)', async () => {
+    const { rackIssues } = await import('./racks')
+    const plan = rectanglePlan(60_000, 40_000)
+    const libre = autoLayout(plan, rack, DEFAULT_LAYOUT)
+    plan.walls = [{ id: 'w', a: { x: 0, y: 40_000 }, b: { x: 30_000, y: 0 }, thickness: 150 }]
+    const r = autoLayout(plan, rack, DEFAULT_LAYOUT)
+    // antes quedaba casi nada (la caja del tabique tapaba media planta); ahora entra la mayor parte
+    expect(r.modules).toBeGreaterThan(libre.modules * 0.6)
+    // y ningún rack queda atravesado por el tabique
+    expect(Object.values(rackIssues(plan, r.placements))).not.toContain('Choca con un tabique')
+  })
+})
+
 describe('depósito completo', () => {
   it('suma posiciones y materiales de todos los racks', async () => {
     const { buildDepot } = await import('./depot')
