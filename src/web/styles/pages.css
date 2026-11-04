@@ -633,3 +633,24 @@
 .cota-edit:hover { fill: var(--red); }
 .cota-input { position: absolute; z-index: 4; width: 96px; transform: translate(-50%, -50%); padding: 6px 8px; border: 2px solid var(--red); border-radius: 8px; background: #fff; font: 700 15px var(--f-mono); text-align: center; color: var(--ink); box-shadow: 0 6px 18px rgba(20, 24, 30, .18); outline: 0; }
 .rack-editor__fields { display: flex; flex-direction: column; gap: 8px; }
+/* referencias y escala del plano */
+.plan-legend { position: absolute; left: 10px; top: 10px; z-index: 3; max-width: 230px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255, 255, 255, .94); box-shadow: 0 4px 14px rgba(20, 24, 30, .08); font-size: 12.5px; color: var(--ink-2); }
+.plan-legend__head { display: block; width: 100%; padding: 7px 12px; border: 0; background: none; text-align: left; font: 700 11px var(--f-body); text-transform: uppercase; letter-spacing: .08em; color: var(--ink); cursor: pointer; }
+.plan-legend ul { margin: 0; padding: 0 12px 10px; list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.plan-legend li { display: flex; align-items: center; gap: 8px; }
+.plan-legend__sw { flex: none; width: 22px; height: 12px; border-radius: 2px; }
+.plan-legend__sw--rack { background: #fdebd3; border: 1.5px solid #e07b1f; }
+.plan-legend__sw--rack-bad { background: #f8d4d8; border: 1.5px solid #be1e30; }
+.plan-legend__sw--area { background: rgba(47, 111, 184, .08); border: 1.5px dashed #2f6fb8; }
+.plan-legend__sw--aisle { background: repeating-linear-gradient(45deg, #fff6cc 0 3px, #f0c94d 3px 5px); border: 1px solid #d9a400; }
+.plan-legend__sw--zone { background: repeating-linear-gradient(45deg, #fff 0 3px, rgba(190, 30, 48, .45) 3px 4.5px); border: 1.5px dashed #c98a93; }
+.plan-legend__sw--column { width: 12px; margin: 0 5px; background: #3b3f45; }
+.plan-legend__sw--wall { height: 4px; background: #4b5058; }
+.plan-legend__sw--door { height: 6px; background: #e0a100; }
+.plan-legend__sw--cota { height: 1px; background: #1f5f8b; position: relative; }
+.plan-legend__sw--cota::before, .plan-legend__sw--cota::after { content: ''; position: absolute; top: -4px; width: 1px; height: 9px; background: #1f5f8b; }
+.plan-legend__sw--cota::before { left: 0; } .plan-legend__sw--cota::after { right: 0; }
+.scale-bar { position: absolute; left: 14px; bottom: 40px; z-index: 2; height: 26px; pointer-events: none; }
+.scale-bar__bar { position: absolute; left: 0; top: 0; height: 6px; border: 1.5px solid #1f2328; background: linear-gradient(90deg, #1f2328 50%, #fff 50%); }
+.scale-bar__bar i { display: none; }
+.scale-bar__t { position: absolute; top: 9px; transform: translateX(-50%); font: 600 11px var(--f-mono); color: #1f2328; white-space: nowrap; }
