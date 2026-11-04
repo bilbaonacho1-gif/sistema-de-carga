@@ -92,6 +92,9 @@ export interface RackPlacement {
   /** Profundidad que ocupa (mm): una fila, o las dos del par más su separación. */
   depth: number
   pair: boolean
+  /** Medidas propias de este rack (si no están, las del rack elegido para todo el depósito). */
+  levels?: number
+  height?: number
 }
 
 export interface Plan {
@@ -124,4 +127,6 @@ export type PlanSelection =
   | { kind: 'area'; id: string }
   | { kind: 'aisle'; id: string }
   | { kind: 'rack'; id: string }
+  /** Varios racks a la vez (Shift + clic, o Shift + arrastrar un recuadro). */
+  | { kind: 'racks'; ids: string[] }
   | null

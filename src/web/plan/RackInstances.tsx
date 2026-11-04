@@ -26,7 +26,8 @@ export type Detail = 'completo' | 'medio' | 'mínimo'
 const LEVEL: Record<Detail, Kind[]> = {
   completo: ['upright', 'brace', 'beam', 'pallet', 'load'],
   medio: ['upright', 'beam', 'unit'],
-  mínimo: ['upright', 'beam'],
+  // aun en el mínimo, cada pallet con su carga queda como una caja (que se vean las cajas)
+  mínimo: ['upright', 'beam', 'unit'],
 }
 /** Piezas a partir de las cuales se baja el detalle. */
 const LIMIT_FULL = 90_000

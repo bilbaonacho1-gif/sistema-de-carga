@@ -6,10 +6,10 @@ import { AlertTriangle, Box, Copy, Map as MapIcon, Maximize2, Package, RotateCw,
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import type { PlacedRack } from '../../shared/plan/depot'
 import { removeItem, removeVertex } from '../../shared/plan/edit'
-import { duplicateWithin, fitPlacement, freezeRacks, guarded, moveRack, rotateRack, setRackModules, setRackPair } from '../../shared/plan/racks'
+import { duplicateWithin, fitPlacement, freezeRacks, mapRacks, removeRacks, selectedRackIds, guarded, moveRack, rotateRack, setRackModules, setRackPair } from '../../shared/plan/racks'
 import { metros } from '../../shared/units'
 import { NumberStepper } from '../components/fields'
-import type { Plan, PlanSelection } from '../../shared/plan/types'
+import type { Plan, PlanSelection, RackPlacement } from '../../shared/plan/types'
 import { Segmented, Spinner } from '../components/ui'
 import { PlanEditor, type PlanRackLayer } from './PlanEditor'
 import { PlanPanel } from './PlanPanel'
@@ -28,7 +28,8 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
   const [fit, setFit] = useState(0)
   const pallets = (racks ?? []).reduce((n, r) => n + r.structure.pallets.length, 0)
   const [loads, setLoads] = useState<boolean | null>(null)
-  const showLoads = loads ?? pallets <= MANY_PALLETS
+  // con muchos racks el 3D va en lote y las cajas no pesan: se ven siempre; con pocos racks muy largos, sólo si no son demasiadas
+  const showLoads = loads ?? ((racks?.length ?? 0) > 30 || pallets <= MANY_PALLETS)
   useKeys3d(view3d, rackLayer)
   return (
     <section className="plan-stage" aria-label={view3d ? 'Depósito en 3D' : 'Plano del depósito'}>
@@ -55,7 +56,7 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
 function removeSelection(p: Plan, sel: PlanSelection, layer?: PlanRackLayer): Plan {
   if (!sel || sel.kind === 'edge') return p
   if (sel.kind === 'vertex') return removeVertex(p, sel.index)
-  if (sel.kind === 'rack') return removeItem(freezeRacks(p, layer?.racks ?? []), 'rack', sel.id)
+  if (sel.kind === 'rack' || sel.kind === 'racks') return removeRacks(freezeRacks(p, layer?.racks ?? []), selectedRackIds(sel))
   return removeItem(p, sel.kind, sel.id)
 }
 
@@ -85,7 +86,7 @@ function useKeys3d(active: boolean, layer?: PlanRackLayer) {
  * Lo que se puede hacer con el rack seleccionado: módulos, simple o doble, girar, duplicar y borrar.
  * Va en el panel de la izquierda (arriba de todo) mientras el rack está seleccionado.
  */
-export function RackEditor({ rackLayer }: { rackLayer: PlanRackLayer }) {
+export function RackEditor({ rackLayer, defaults }: { rackLayer: PlanRackLayer; defaults: RackDefaults }) {
   const { selection, commit, select, layout, plan } = usePlan()
   /** Medida escrita que no se pudo aplicar (el rack quedaría en un lugar prohibido). */
   const [rejected, setRejected] = useState<{ n: number; why: string } | null>(null)
@@ -122,6 +123,7 @@ export function RackEditor({ rackLayer }: { rackLayer: PlanRackLayer }) {
         </div>
       </div>
       {rejected && <p className="rack-editor__issue"><AlertTriangle size={14} aria-hidden /> {rejected.why}</p>}
+      <RackOverrides racks={[r]} defaults={defaults} onChange={(patch) => commit(() => mapRacks(base, [r.id], (q) => ({ ...q, ...patch })))} />
       <div className="rack-editor__actions">
         <button type="button" className="vp-btn" disabled={!pair} title={pair ? undefined : noRoom} onClick={() => apply(pair)}>{r.pair ? 'Hacer simple' : 'Hacer doble'}</button>
         <button type="button" className="vp-btn" disabled={!rotated} title={rotated ? undefined : noRoom} onClick={() => apply(rotated)}><RotateCw size={14} aria-hidden /> Girar</button>
@@ -129,6 +131,66 @@ export function RackEditor({ rackLayer }: { rackLayer: PlanRackLayer }) {
         <button type="button" className="vp-btn" onClick={() => { commit((p) => removeSelection(p, selection, rackLayer)); select(null) }}><Trash2 size={14} aria-hidden /> Borrar</button>
       </div>
       <p className="muted small">Arrastralo en el plano o en el 3D para moverlo: no entra en zonas libres ni pasillos{plan.rackAreas?.length ? ' y no sale de la zona de racks' : ''}. Supr lo borra, Esc termina.</p>
+    </div>
+  )
+}
+
+/** Altura y niveles del rack elegido para todo el depósito (lo que tiene un rack sin medidas propias). */
+export interface RackDefaults { height: number; levels: number }
+
+/**
+ * Altura y niveles propios de uno o varios racks. Si muestran "como el resto", usan los del rack
+ * elegido para todo el depósito.
+ */
+function RackOverrides({ racks, defaults, onChange }: { racks: RackPlacement[]; defaults: RackDefaults; onChange(patch: Partial<RackPlacement>): void }) {
+  const same = <K extends 'levels' | 'height'>(k: K) => (racks.every((r) => r[k] === racks[0][k]) ? racks[0][k] : undefined)
+  const levels = same('levels'), height = same('height')
+  const own = racks.some((r) => r.levels !== undefined || r.height !== undefined)
+  return (
+    <div className="rack-editor__fields">
+      <NumberStepper label={racks.length > 1 ? 'Niveles (todos los elegidos)' : 'Niveles de este rack'} value={levels ?? defaults.levels} min={1} max={10} step={1}
+        onChange={(v) => onChange({ levels: v === defaults.levels ? undefined : v })}
+        hint={levels === undefined ? `Como el resto (${defaults.levels})` : `Propio · el resto tiene ${defaults.levels}`} />
+      <NumberStepper label={racks.length > 1 ? 'Altura (todos los elegidos)' : 'Altura de este rack'} meters value={height ?? defaults.height} min={2000} max={16_000} step={500} typedStep={10}
+        onChange={(v) => onChange({ height: v === defaults.height ? undefined : v })}
+        hint={height === undefined ? `Como el resto (${metros(defaults.height)})` : `Propia · el resto tiene ${metros(defaults.height)}`} />
+      {own && <button type="button" className="link-btn rack-editor__reset" onClick={() => onChange({ levels: undefined, height: undefined })}>Volver a las medidas de todos</button>}
+    </div>
+  )
+}
+
+/** Varios racks elegidos a la vez: lo mismo que con uno, aplicado a todos (cada uno sólo si entra). */
+export function MultiRackEditor({ rackLayer, defaults }: { rackLayer: PlanRackLayer; defaults: RackDefaults }) {
+  const { selection, commit, select, plan } = usePlan()
+  const [note, setNote] = useState<string | null>(null)
+  const ids = selectedRackIds(selection)
+  const racks = rackLayer.racks.filter((r) => ids.includes(r.id))
+  if (racks.length < 2) return null
+  const size = rackLayer.size
+  const base = freezeRacks(plan, rackLayer.racks)
+  /** Aplica el cambio rack por rack; los que quedarían en un lugar prohibido no se cambian. */
+  const each = (fn: (p: Plan, id: string) => Plan) => {
+    let p = base, skipped = 0
+    for (const id of ids) { const next = guarded(p, fn(p, id), id, size); if (next === p) skipped++; p = next }
+    commit(() => p)
+    setNote(skipped ? `${skipped} ${skipped === 1 ? 'rack no entraba y quedó' : 'racks no entraban y quedaron'} como estaba${skipped === 1 ? '' : 'n'}.` : null)
+  }
+  const modules = racks.every((r) => r.modules === racks[0].modules) ? racks[0].modules : undefined
+  return (
+    <div className="plan-sel rack-editor">
+      <h2 className="section-label">{racks.length} racks elegidos</h2>
+      <span className="muted small">Shift + clic suma o saca un rack · arrastrá uno para moverlos juntos</span>
+      <NumberStepper label="Módulos (todos)" value={modules ?? racks[0].modules} min={1} max={120} step={1}
+        onChange={(v) => each((p, id) => setRackModules(p, id, v))} hint={modules === undefined ? 'Ahora tienen distintos módulos' : undefined} />
+      <RackOverrides racks={racks} defaults={defaults} onChange={(patch) => commit(() => mapRacks(base, ids, (q) => ({ ...q, ...patch })))} />
+      <div className="rack-editor__actions">
+        <button type="button" className="vp-btn" onClick={() => each((p, id) => setRackPair(p, id, false))}>Todos simples</button>
+        <button type="button" className="vp-btn" onClick={() => each((p, id) => setRackPair(p, id, true))}>Todos dobles</button>
+        <button type="button" className="vp-btn" onClick={() => each((p, id) => rotateRack(p, id))}><RotateCw size={14} aria-hidden /> Girar cada uno</button>
+        <button type="button" className="vp-btn" onClick={() => { commit(() => removeRacks(base, ids)); select(null) }}><Trash2 size={14} aria-hidden /> Borrar los {racks.length}</button>
+      </div>
+      {note && <p className="rack-editor__issue"><AlertTriangle size={14} aria-hidden /> {note}</p>}
+      <button type="button" className="link-btn" onClick={() => select(null)}>Terminar (deseleccionar)</button>
     </div>
   )
 }

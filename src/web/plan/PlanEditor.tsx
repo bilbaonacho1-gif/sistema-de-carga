@@ -18,7 +18,7 @@ import { metrosNum, parseMetros } from '../../shared/units'
 import { apex, arcOf, edgeLength, edges, nearestOnEdge, planBounds, pointOnEdge, tangentOnEdge, type Edge } from '../../shared/plan/geometry'
 import type { Plan, PlanPoint } from '../../shared/plan/types'
 import type { RackModuleSize, RackPlacement } from '../../shared/plan/layout'
-import { freezeRacks, moveRack, moveRackWithin } from '../../shared/plan/racks'
+import { freezeRacks, moveRack, moveRackWithin, moveRacksBy, rackSelection, racksInBox, removeRacks, selectedRackIds } from '../../shared/plan/racks'
 import { PlanCotas } from './PlanCotas'
 import { Legend, PlanRackNotes, ScaleBar } from './PlanNotes'
 import { PlanRacks } from './PlanRacks'
@@ -27,6 +27,8 @@ import { usePlan } from './planStore'
 type VB = { x: number; y: number; w: number; h: number }
 type Drag =
   | { type: 'pan'; cx: number; cy: number; vb: VB; moved: boolean }
+  | { type: 'racks'; ids: string[]; start: PlanPoint; done: PlanPoint; started: boolean }
+  | { type: 'box'; a: PlanPoint }
   | { type: 'vertex'; index: number; started: boolean }
   | { type: 'sag'; index: number; started: boolean }
   | { type: 'column' | 'zone'; id: string; dx: number; dy: number; started: boolean }
@@ -87,6 +89,9 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
   /** Medida que se está escribiendo sobre el plano (tocando una cota). */
   const [inline, setInline] = useState<{ edit: { kind: 'edge'; index: number } | { kind: 'total'; axis: 'x' | 'y' }; at: PlanPoint; text: string } | null>(null)
   const inlineCancel = useRef(false)
+  /** Recuadro para elegir varios racks (Shift + arrastrar). */
+  const [boxDraft, setBoxDraft] = useState<{ a: PlanPoint; b: PlanPoint } | null>(null)
+  const selectedSet = useMemo(() => new Set(selectedRackIds(selection)), [selection])
   const [rectDraft, setRectDraft] = useState<{ kind: 'area' | 'aisle'; a: PlanPoint; b: PlanPoint } | null>(null)
   const drag = useRef<Drag | null>(null)
   const pointers = useRef(new Map<number, { x: number; y: number }>())
@@ -180,7 +185,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         if (!sel) return
         e.preventDefault()
         if (sel.kind === 'vertex') s.commit((p) => removeVertex(p, sel.index))
-        else if (sel.kind === 'rack') s.commit((p) => removeItem(freezeRacks(p, layerRef.current?.racks ?? []), 'rack', sel.id))
+        else if (sel.kind === 'rack' || sel.kind === 'racks') s.commit((p) => removeRacks(freezeRacks(p, layerRef.current?.racks ?? []), selectedRackIds(sel)))
         else if (sel.kind !== 'edge') s.commit((p) => removeItem(p, sel.kind, sel.id))
         s.select(null)
       }
@@ -245,6 +250,12 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
       return
     }
     const raw = toPlan(e.clientX, e.clientY)
+    // Shift + arrastrar el fondo: recuadro para elegir varios racks
+    if (tool === 'select' && (e.shiftKey || usePlan.getState().multi) && rackLayer) {
+      drag.current = { type: 'box', a: raw }
+      setBoxDraft({ a: raw, b: raw })
+      return
+    }
     if (e.button === 1 || tool === 'select') {
       drag.current = { type: 'pan', cx: e.clientX, cy: e.clientY, vb, moved: false }
       return
@@ -318,6 +329,23 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
     cursorRef.current = raw
     const d = drag.current
     if (!d) return
+    if (d.type === 'box') { setBoxDraft({ a: d.a, b: raw }); return }
+    if (d.type === 'racks') {
+      // varios racks juntos: se aplica sólo lo que falta del movimiento (si alguno no entra, frenan)
+      const layer = layerRef.current
+      if (!layer) return
+      const tx = sn(raw.x - d.start.x, e.altKey), ty = sn(raw.y - d.start.y, e.altKey)
+      const stepX = tx - d.done.x, stepY = ty - d.done.y
+      if (!stepX && !stepY) return
+      if (!d.started) { begin(); d.started = true }
+      const base = freezeRacks(usePlan.getState().plan, layer.racks)
+      const next = moveRacksBy(base, d.ids, stepX, stepY, layer.size)
+      if (next === base) return
+      const a = base.racks!.find((r) => r.id === d.ids[0])!, b = next.racks!.find((r) => r.id === d.ids[0])!
+      d.done = { x: d.done.x + (b.x - a.x), y: d.done.y + (b.y - a.y) }
+      live(() => next)
+      return
+    }
     if (d.type === 'pan') {
       const dx = (e.clientX - d.cx) * scale, dy = (e.clientY - d.cy) * scale
       if (Math.abs(e.clientX - d.cx) + Math.abs(e.clientY - d.cy) > 3) d.moved = true
@@ -372,6 +400,13 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
     if (pointers.current.size < 2) pinch.current = null
     const d = drag.current
     if (d?.type === 'pan' && !d.moved && tool === 'select') select(null)
+    if (d?.type === 'box') {
+      const b = toPlan(e.clientX, e.clientY)
+      const ids = racksInBox(layerRef.current?.racks ?? [], d.a.x, d.a.y, b.x, b.y)
+      const prev = selectedRackIds(usePlan.getState().selection)
+      select(rackSelection([...new Set([...prev, ...ids])]))
+      setBoxDraft(null)
+    }
     if (d?.type === 'draw') {
       const s = usePlan.getState()
       const r = drawnRect(d.kind, d.a, snapPt(toPlan(e.clientX, e.clientY), e.altKey), s.plan, s.layout.aisle)
@@ -409,7 +444,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
     const L = Math.hypot(dir.x, dir.y) || 1
     return { x: c.x + (dir.x / L) * px(pixels), y: c.y + (dir.y / L) * px(pixels) }
   }
-  const isSel = (kind: string, key: string | number) => selection && selection.kind === kind && ('id' in selection ? selection.id : selection.index) === key
+  const isSel = (kind: string, key: string | number) => selection && selection.kind === kind && ('id' in selection ? selection.id : 'index' in selection ? selection.index : undefined) === key
 
   const label = (at: PlanPoint, text: string, key: string, color = '#1f2328') => (
     <text key={key} x={at.x} y={at.y} fontSize={px(12)} textAnchor="middle" dominantBaseline="middle" fill={color}
@@ -498,8 +533,21 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
 
         {/* racks ubicados */}
         {rackLayer && <PlanRacks racks={rackLayer.racks} size={rackLayer.size} px={px} issues={rackLayer.issues}
-          selectedId={selection?.kind === 'rack' ? selection.id : undefined}
-          onDown={tool === 'select' ? (e, r) => { select({ kind: 'rack', id: r.id }); const p = toPlan(e.clientX, e.clientY); startDrag(e, { type: 'rack', id: r.id, dx: p.x - r.x, dy: p.y - r.y, started: false }) } : undefined} />}
+          selected={selectedSet}
+          onDown={tool === 'select' ? (e, r) => {
+            const p = toPlan(e.clientX, e.clientY)
+            const current = selectedRackIds(usePlan.getState().selection)
+            // Shift / Ctrl + clic: suma o saca este rack de la selección
+            if (e.shiftKey || e.ctrlKey || e.metaKey || usePlan.getState().multi) {
+              e.stopPropagation()
+              select(rackSelection(current.includes(r.id) ? current.filter((x) => x !== r.id) : [...current, r.id]))
+              return
+            }
+            // si es uno de varios elegidos, se mueven todos juntos
+            if (current.length > 1 && current.includes(r.id)) { startDrag(e, { type: 'racks', ids: current, start: p, done: { x: 0, y: 0 }, started: false }); return }
+            select({ kind: 'rack', id: r.id })
+            startDrag(e, { type: 'rack', id: r.id, dx: p.x - r.x, dy: p.y - r.y, started: false })
+          } : undefined} />}
         {rackLayer && showCotas && <PlanRackNotes racks={rackLayer.racks} px={px} />}
 
         {/* tabiques */}
@@ -612,6 +660,8 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
             </g>
           )
         })()}
+        {boxDraft && <rect x={Math.min(boxDraft.a.x, boxDraft.b.x)} y={Math.min(boxDraft.a.y, boxDraft.b.y)} width={Math.abs(boxDraft.b.x - boxDraft.a.x)} height={Math.abs(boxDraft.b.y - boxDraft.a.y)}
+          fill={RED} fillOpacity={0.06} stroke={RED} strokeWidth={px(1.5)} strokeDasharray={`${px(6)} ${px(4)}`} pointerEvents="none" />}
         {cursor && tool !== 'select' && <circle cx={snapPt(cursor).x} cy={snapPt(cursor).y} r={px(3)} fill={RED} pointerEvents="none" />}
       </svg>
       {empty && draft.length === 0 && tool !== 'outline' && <StartCard onCreate={createRect} onDraw={() => setTool('outline')} />}

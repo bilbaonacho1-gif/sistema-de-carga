@@ -12,7 +12,7 @@ import { edges, nearestOnEdge, outlinePolygon, planBounds, pointOnEdge, tangentO
 import type { PlacedRack } from '../../shared/plan/depot'
 import { moveVertex, updateRect } from '../../shared/plan/edit'
 import { placementRect, type RackModuleSize } from '../../shared/plan/layout'
-import { freezeRacks, moveRack, moveRackWithin } from '../../shared/plan/racks'
+import { freezeRacks, moveRack, moveRackWithin, rackSelection, selectedRackIds } from '../../shared/plan/racks'
 import type { Plan, PlanPoint, PlanSelection, RackPlacement } from '../../shared/plan/types'
 import { fmt } from '../lib/format'
 import { RackModel } from '../three/RackModel'
@@ -90,6 +90,12 @@ function useDrag() {
       if (e.button !== 0) return
       e.stopPropagation()
       const s = usePlan.getState()
+      // Shift / Ctrl + clic en un rack: lo suma o lo saca de la selección (sin moverlo)
+      if (select?.kind === 'rack' && (e.shiftKey || e.ctrlKey || e.metaKey || s.multi)) {
+        const cur = selectedRackIds(s.selection)
+        s.select(rackSelection(cur.includes(select.id) ? cur.filter((x) => x !== select.id) : [...cur, select.id]))
+        return
+      }
       s.select(select)
       if (!apply) return
       const ctrl = controls as unknown as { enabled: boolean } | null
@@ -204,7 +210,9 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, size, span, on
     return new THREE.ShapeGeometry(shape)
   }, [poly])
   const placements: RackPlacement[] = useMemo(() => racks.map((r) => r.placement), [racks])
-  const isSel = (kind: string, id: string | number) => !!selection && selection.kind === kind && ('id' in selection ? selection.id : selection.index) === id
+  const isSel = (kind: string, id: string | number) => !!selection && selection.kind === kind && ('id' in selection ? selection.id : 'index' in selection ? selection.index : undefined) === id
+  const selRacks = useMemo(() => new Set(selectedRackIds(selection)), [selection])
+  const isRackSel = (id: string) => selRacks.has(id)
   const es = edges(plan.outline)
   const handle = Math.max(0.18, span * 0.006)
 
@@ -300,11 +308,11 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, size, span, on
         <RackInstances racks={racks} showLoads={showLoads} onStats={onStats} />
         <RackHitInstances racks={racks} placements={placements}
           onDown={(e, p) => drag({ kind: 'rack', id: p.id }, (dx, dy, free) => live((pl) => (size ? moveRackWithin(freezeRacks(pl, placements), p.id, snapTo(p.x + dx, free), snapTo(p.y + dy, free), size) : moveRack(freezeRacks(pl, placements), p.id, snapTo(p.x + dx, free), snapTo(p.y + dy, free))))).onPointerDown(e)} />
-        {racks.filter(({ placement: p }) => isSel('rack', p.id) || issues[p.id]).map(({ placement: p, structure }) => {
+        {racks.filter(({ placement: p }) => isRackSel(p.id) || issues[p.id]).map(({ placement: p, structure }) => {
           const b = placementRect(p)
           const H = m(structure.config.height) + 0.02
           return (
-            <mesh key={`mark-${p.id}`} material={isSel('rack', p.id) ? MAT.rackSelected : MAT.rackIssue} position={[m(b.x + b.w / 2), H / 2, m(b.y + b.h / 2)]} raycast={() => null}>
+            <mesh key={`mark-${p.id}`} material={isRackSel(p.id) ? MAT.rackSelected : MAT.rackIssue} position={[m(b.x + b.w / 2), H / 2, m(b.y + b.h / 2)]} raycast={() => null}>
               <boxGeometry args={[m(b.w) + 0.04, H, m(b.h) + 0.04]} />
             </mesh>
           )
@@ -316,7 +324,7 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, size, span, on
       {racks.length <= MANY_RACKS && racks.map(({ placement: p, structure }) => {
         const b = placementRect(p)
         const H = m(structure.config.height) + 0.02
-        const mat = isSel('rack', p.id) ? MAT.rackSelected : issues[p.id] ? MAT.rackIssue : MAT.rackHit
+        const mat = isRackSel(p.id) ? MAT.rackSelected : issues[p.id] ? MAT.rackIssue : MAT.rackHit
         return (
           <mesh key={`hit-${p.id}`} material={mat} position={[m(b.x + b.w / 2), H / 2, m(b.y + b.h / 2)]}
             {...drag({ kind: 'rack', id: p.id }, (dx, dy, free) => live((pl) => (size ? moveRackWithin(freezeRacks(pl, placements), p.id, snapTo(p.x + dx, free), snapTo(p.y + dy, free), size) : moveRack(freezeRacks(pl, placements), p.id, snapTo(p.x + dx, free), snapTo(p.y + dy, free)))))}>

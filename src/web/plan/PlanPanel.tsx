@@ -263,6 +263,7 @@ export function Selection() {
     )
   }
 
+  if (selection.kind !== 'zone') return null
   const z = plan.zones.find((x) => x.id === selection.id)
   if (!z) return null
   const upd = (patch: Partial<typeof z>) => commit((pl) => ({ ...pl, zones: pl.zones.map((x) => (x.id === z.id ? { ...x, ...patch } : x)) }))

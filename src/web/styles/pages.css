@@ -654,3 +654,21 @@
 .scale-bar__bar { position: absolute; left: 0; top: 0; height: 6px; border: 1.5px solid #1f2328; background: linear-gradient(90deg, #1f2328 50%, #fff 50%); }
 .scale-bar__bar i { display: none; }
 .scale-bar__t { position: absolute; top: 9px; transform: translateX(-50%); font: 600 11px var(--f-mono); color: #1f2328; white-space: nowrap; }
+.multi-pick { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rack-editor__reset { align-self: flex-start; padding-left: 0; }
+/* panel del cotizador: fijo a la izquierda (con su propio scroll) o suelto donde uno quiera */
+.depot .designer__panel.cotizador { position: sticky; top: calc(var(--topbar) + 12px); max-height: calc(100dvh - var(--topbar) - 24px); overflow-y: auto; overscroll-behavior: contain; padding-top: 0; }
+.depot .cot-nav { position: sticky; bottom: -16px; margin: 0 -16px -16px; padding: 12px 16px; background: #fff; z-index: 2; }
+.cot-panelbar { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 6px; margin: 0 -16px; padding: 8px 10px 8px 16px; background: #fff; border-bottom: 1px solid var(--line-2); user-select: none; }
+.cot-panelbar__t { flex: 1; font: 700 11px var(--f-body); text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); }
+.cot-panelbar__grip { display: inline-flex; color: var(--ink-2); }
+.cot-panelbar .vp-btn { background: #fff; }
+.depot--float { grid-template-columns: minmax(0, 1fr) !important; }
+.depot .designer__panel.cotizador.is-floating { position: fixed; z-index: 60; width: 360px; box-shadow: 0 16px 48px rgba(20, 24, 30, .22); }
+.depot .designer__panel.cotizador.is-floating .cot-panelbar { cursor: grab; background: #1f2328; border-radius: 12px 12px 0 0; margin-top: -1px; }
+.depot .designer__panel.cotizador.is-floating .cot-panelbar__t, .depot .designer__panel.cotizador.is-floating .cot-panelbar__grip { color: #fff; }
+.depot .designer__panel.cotizador.is-collapsed { padding-bottom: 0; }
+.depot .designer__panel.cotizador.is-collapsed .cot-panelbar { border-bottom: 0; }
+@media (max-width: 900px) {
+  .depot .designer__panel.cotizador, .depot .designer__panel.cotizador.is-floating { position: static; width: auto; max-height: none; overflow: visible; }
+}
