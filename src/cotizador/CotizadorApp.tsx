@@ -17,11 +17,13 @@ import { MaterialsList, downloadMaterials } from '../web/pages/designer/Cotizado
 import { useDesigner } from '../web/pages/designer/designerStore'
 import { usePlan } from '../web/plan/planStore'
 import { DepotFlow, DepotPlate, useDepot } from './DepotFlow'
+import { Intro, useIntro } from './Intro'
 
 export function CotizadorApp() {
   const resetRack = useDesigner((x) => x.reset)
   const resetPlan = usePlan((x) => x.resetAll)
   const [quote, setQuote] = useState(false)
+  const [intro, closeIntro] = useIntro()
   const reset = () => {
     if (!window.confirm('¿Empezar de nuevo? Se borran el plano y el rack.')) return
     resetRack()
@@ -44,6 +46,7 @@ export function CotizadorApp() {
         <DepotFlow onQuote={() => setQuote(true)} />
       </main>
       {quote && <QuoteDialog onClose={() => setQuote(false)} />}
+      {intro && <Intro onStart={closeIntro} />}
     </div>
   )
 }

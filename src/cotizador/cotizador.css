@@ -36,3 +36,24 @@
   .cz-top__actions .btn--primary { padding-inline: 12px; }
   .plan-editor__coords { display: none; }
 }
+
+/* ------------------------------ Intro de entrada ------------------------------ */
+.intro { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 16px; background: rgba(245, 246, 248, .96); animation: intro-in .35s ease-out both; }
+.intro__card { width: min(560px, 100%); display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 32px 28px 28px; text-align: center; background: #fff; border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 24px 60px rgba(20, 24, 30, .14); }
+.intro__brand { display: flex; align-items: center; gap: 10px; font: 700 12px var(--f-body); text-transform: uppercase; letter-spacing: .14em; color: var(--red); }
+.intro__t { margin: 0; font: 800 clamp(26px, 5vw, 36px)/1.05 var(--f-display, var(--f-body)); text-transform: uppercase; color: var(--ink); }
+.intro__p { margin: 0; max-width: 42ch; color: var(--ink-2); font-size: 15px; }
+.intro__rack { width: min(340px, 100%); height: auto; margin: 4px 0; }
+.intro__line { stroke-linecap: square; stroke-dasharray: 200; stroke-dashoffset: 200; animation: intro-draw .6s ease-out forwards; }
+.intro__upright { stroke: #8d949b; stroke-width: 6; }
+.intro__beam { stroke: var(--red); stroke-width: 6; }
+.intro__box { fill: #d39b5f; stroke: #a8733d; stroke-width: 1.5; opacity: 0; transform-box: fill-box; transform-origin: bottom; animation: intro-box .35s ease-out forwards; }
+.intro__steps { display: grid; gap: 8px; width: 100%; max-width: 360px; margin: 0; padding: 0; list-style: none; text-align: left; font-size: 14.5px; color: var(--ink); }
+.intro__steps li { display: flex; align-items: center; gap: 10px; }
+.intro__steps b { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--ink); color: #fff; font-size: 12.5px; }
+.intro__go { display: inline-flex; align-items: center; gap: 8px; margin-top: 6px; padding: 13px 28px; border: 0; border-radius: 12px; background: var(--red); color: #fff; font: 700 16px var(--f-body); cursor: pointer; box-shadow: 0 8px 20px rgba(190, 30, 48, .3); }
+.intro__go:hover { filter: brightness(1.06); }
+@keyframes intro-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes intro-draw { to { stroke-dashoffset: 0 } }
+@keyframes intro-box { from { opacity: 0; transform: translateY(-8px) } to { opacity: 1; transform: none } }
+@media (prefers-reduced-motion: reduce) { .intro, .intro__line, .intro__box { animation: none; opacity: 1; stroke-dashoffset: 0 } }
