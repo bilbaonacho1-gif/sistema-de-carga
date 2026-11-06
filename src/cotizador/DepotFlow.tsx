@@ -5,8 +5,8 @@
  * cuántos racks entran en ESE depósito (filas, pasillos, columnas y zonas) y todo lo demás
  * (materiales, presupuesto) sale del depósito completo.
  */
-import { AlertTriangle, Calculator, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Download, GripHorizontal, Lightbulb, Mail, Move, PanelLeft, Phone, Plus, RotateCcw } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { AlertTriangle, Calculator, ChevronLeft, ChevronRight, Download, Lightbulb, Mail, Phone, Plus, RotateCcw } from 'lucide-react'
+import { useMemo } from 'react'
 import { buildDepot, moduleSize, type Depot } from '../shared/plan/depot'
 import { planArea } from '../shared/plan/geometry'
 import { placementRect } from '../shared/plan/layout'
@@ -21,7 +21,8 @@ import { fmt, plural } from '../web/lib/format'
 import { AccessoriesStep, LoadStep, MaterialsList, downloadMaterials } from '../web/pages/designer/CotizadorPanel'
 import { Viewport, Warnings } from '../web/pages/designer/CotizadorView'
 import { useDesigner } from '../web/pages/designer/designerStore'
-import { MarkTools, PlanTools, Selection } from '../web/plan/PlanPanel'
+import { MarkTools, PlanDepotData, PlanToolbar, Selection } from '../web/plan/PlanPanel'
+import { DockPanel, useAnyDocked, useDock } from '../web/components/dock'
 import { FLOW, usePlan, type FlowStep } from '../web/plan/planStore'
 import { MultiRackEditor, PlanStage, RackEditor } from '../web/plan/PlanWorkspace'
 import { metros, metrosNum } from '../shared/units'
@@ -70,33 +71,47 @@ export function DepotFlow({ onQuote }: { onQuote(): void }) {
   const editing = !rackView && !!selection && ((selection.kind !== 'rack' && selection.kind !== 'racks') || !!rackLayer)
   const defaults = { height: config.height, levels: config.levels }
   const area = planArea(plan.outline)
-  const [dock, setDock] = usePanelDock()
+  // módulos del panel en este paso (como en Photoshop: cada uno se achica o se saca por separado)
+  const modules = MODULES[flowStep]
+  const ids = ['pasos', ...(editing ? ['editar'] : []), ...modules.map((m) => m.id)]
+  const anyDocked = useAnyDocked(ids)
+  const anyFloating = useDock((st) => Object.values(st.panels).some((p) => p.floating))
 
   return (
-    <div className={`designer depot${dock.floating ? ' depot--float' : ''}`}>
-      <section className={`designer__panel cotizador${dock.floating ? ' is-floating' : ''}${dock.collapsed ? ' is-collapsed' : ''}`} aria-label="Cotizador de depósitos"
-        style={dock.floating ? { left: dock.x, top: dock.y, maxHeight: `calc(100dvh - ${dock.y}px - 12px)` } : undefined}>
-        <PanelBar dock={dock} setDock={setDock} />
-        {!dock.collapsed && <>
-        <Steps />
-        {editing
-          ? <div className="cot-editing">{selection?.kind === 'rack' && rackLayer ? <RackEditor rackLayer={rackLayer} defaults={defaults} />
-            : selection?.kind === 'racks' && rackLayer ? <MultiRackEditor rackLayer={rackLayer} defaults={defaults} /> : <Selection />}</div>
-          : <p className="cot-help"><Lightbulb size={16} aria-hidden /><span>{META[flowStep].help}</span></p>}
-        <StepBody step={flowStep} depot={depot} preview={preview} onQuote={onQuote} />
-        {rackView && <Warnings warnings={preview.warnings.filter((w) => w.code !== 'free-positions')} />}
-        {flowStep === 'resumen' && <>
-          <p className="disclaimer">Simulación de referencia: no reemplaza el cálculo estructural. Toda configuración la valida el departamento técnico.</p>
-          <div className="cz-contact">
-            <strong>{CONTACT.company}</strong>
-            <a href={`tel:${CONTACT.phone.replace(/\D/g, '')}`}><Phone size={14} aria-hidden /> {CONTACT.phone}</a>
-            <a href={`mailto:${CONTACT.email}`}><Mail size={14} aria-hidden /> {CONTACT.email}</a>
-            <span>{CONTACT.address}</span>
-          </div>
-        </>}
-        <StepNav />
-        </>}
-      </section>
+    <div className={`designer depot${anyDocked ? '' : ' depot--float'}`}>
+      <aside className="dock-col" aria-label="Cotizador de depósitos">
+        <DockPanel id="pasos" title={`Paso ${FLOW.indexOf(flowStep) + 1} · ${META[flowStep].title}`}>
+          <Steps />
+          <StepNav />
+          {anyFloating && <button type="button" className="link-btn dock-reset" onClick={() => useDock.getState().reset()}>Volver a ordenar los paneles</button>}
+        </DockPanel>
+        {editing && (
+          <DockPanel id="editar" title="Editando">
+            {selection?.kind === 'rack' && rackLayer ? <RackEditor rackLayer={rackLayer} defaults={defaults} />
+              : selection?.kind === 'racks' && rackLayer ? <MultiRackEditor rackLayer={rackLayer} defaults={defaults} /> : <Selection />}
+          </DockPanel>
+        )}
+        {modules.map((m) => (
+          <DockPanel key={m.id} id={m.id} title={m.title}>
+            {m.id === 'herramientas' && <div className="plan-panel"><PlanToolbar showSelection={false} /></div>}
+            {m.id === 'deposito-datos' && <div className="plan-panel"><PlanDepotData /></div>}
+            {m.id === 'marcar' && <MarkTools />}
+            {m.id === 'paso' && <>
+              <StepBody step={flowStep} depot={depot} preview={preview} onQuote={onQuote} />
+              {rackView && <Warnings warnings={preview.warnings.filter((w) => w.code !== 'free-positions')} />}
+              {flowStep === 'resumen' && <>
+                <p className="disclaimer">Simulación de referencia: no reemplaza el cálculo estructural. Toda configuración la valida el departamento técnico.</p>
+                <div className="cz-contact">
+                  <strong>{CONTACT.company}</strong>
+                  <a href={`tel:${CONTACT.phone.replace(/\D/g, '')}`}><Phone size={14} aria-hidden /> {CONTACT.phone}</a>
+                  <a href={`mailto:${CONTACT.email}`}><Mail size={14} aria-hidden /> {CONTACT.email}</a>
+                  <span>{CONTACT.address}</span>
+                </div>
+              </>}
+            </>}
+          </DockPanel>
+        ))}
+      </aside>
       {rackView
         ? <Viewport s={preview} />
         : <PlanStage rackLayer={rackLayer} racks={showRacks ? depot.racks : undefined}
@@ -105,52 +120,14 @@ export function DepotFlow({ onQuote }: { onQuote(): void }) {
   )
 }
 
-/* ------------------------------ Panel suelto o fijo ------------------------------ */
-
-interface Dock { floating: boolean; collapsed: boolean; x: number; y: number }
-const DOCK_KEY = 'sdc-panel'
-
-/** Dónde está el panel: fijo a la izquierda o suelto (y dónde), abierto o achicado. Se recuerda. */
-function usePanelDock(): [Dock, (d: Dock) => void] {
-  const [dock, set] = useState<Dock>(() => {
-    try { return { floating: false, collapsed: false, x: 24, y: 140, ...JSON.parse(localStorage.getItem(DOCK_KEY) ?? '{}') } }
-    catch { return { floating: false, collapsed: false, x: 24, y: 140 } }
-  })
-  const save = (d: Dock) => { set(d); try { localStorage.setItem(DOCK_KEY, JSON.stringify(d)) } catch { /* sin memoria */ } }
-  return [dock, save]
-}
-
-/** Barra de arriba del panel: arrastrarla lo mueve (si está suelto); achicar y soltar / fijar. */
-function PanelBar({ dock, setDock }: { dock: Dock; setDock(d: Dock): void }) {
-  const onDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dock.floating || (e.target as HTMLElement).closest('button')) return
-    e.preventDefault()
-    const el = e.currentTarget
-    el.setPointerCapture(e.pointerId)
-    const sx = e.clientX - dock.x, sy = e.clientY - dock.y
-    let cur = dock
-    const move = (ev: PointerEvent) => {
-      cur = { ...dock, x: Math.max(0, Math.min(window.innerWidth - 160, ev.clientX - sx)), y: Math.max(0, Math.min(window.innerHeight - 48, ev.clientY - sy)) }
-      const panel = el.parentElement!
-      panel.style.left = `${cur.x}px`; panel.style.top = `${cur.y}px`
-      panel.style.maxHeight = `calc(100dvh - ${cur.y}px - 12px)`
-    }
-    const up = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); setDock(cur) }
-    el.addEventListener('pointermove', move)
-    el.addEventListener('pointerup', up)
-  }
-  return (
-    <div className="cot-panelbar" onPointerDown={onDown} title={dock.floating ? 'Arrastrá esta barra para mover el panel' : undefined}>
-      {dock.floating ? <span className="cot-panelbar__grip" aria-hidden><GripHorizontal size={16} /></span> : null}
-      <span className="cot-panelbar__t">{dock.floating ? 'Arrastrá para moverlo' : 'Panel'}</span>
-      <button type="button" className="vp-btn" onClick={() => setDock({ ...dock, collapsed: !dock.collapsed })} aria-expanded={!dock.collapsed}>
-        {dock.collapsed ? <><ChevronDown size={14} aria-hidden /> Abrir</> : <><ChevronUp size={14} aria-hidden /> Achicar</>}
-      </button>
-      <button type="button" className="vp-btn" onClick={() => setDock({ ...dock, floating: !dock.floating, collapsed: false })}>
-        {dock.floating ? <><PanelLeft size={14} aria-hidden /> Fijar</> : <><Move size={14} aria-hidden /> Soltar</>}
-      </button>
-    </div>
-  )
+/** Los módulos de cada paso (además de "Pasos" y, si hay algo elegido, "Editando"). */
+const MODULES: Record<FlowStep, { id: string; title: string }[]> = {
+  deposito: [{ id: 'herramientas', title: 'Herramientas' }, { id: 'deposito-datos', title: 'Datos del depósito' }],
+  rack: [{ id: 'paso', title: 'El rack' }],
+  carga: [{ id: 'paso', title: 'Pallet y carga' }],
+  distribucion: [{ id: 'marcar', title: 'Dónde van los racks' }, { id: 'paso', title: 'Distribución' }],
+  accesorios: [{ id: 'paso', title: 'Accesorios' }],
+  resumen: [{ id: 'paso', title: 'Resumen y materiales' }],
 }
 
 /* ------------------------------ Pasos ------------------------------ */
@@ -170,10 +147,7 @@ function Steps() {
           </li>
         ))}
       </ol>
-      <div className="cot-head">
-        <span className="cot-head__k">Paso {i + 1} de {FLOW.length}</span>
-        <h2 className="cot-head__t">{META[flowStep].title}</h2>
-      </div>
+      <p className="cot-help"><Lightbulb size={16} aria-hidden /><span>{META[flowStep].help}</span></p>
     </>
   )
 }
@@ -192,7 +166,7 @@ function StepNav() {
 
 function StepBody({ step, depot, preview, onQuote }: { step: FlowStep; depot: Depot; preview: RackStructure; onQuote(): void }) {
   switch (step) {
-    case 'deposito': return <div className="cot-fields plan-panel"><PlanTools showSelection={false} /></div>
+    case 'deposito': return null
     case 'rack': return <RackStep s={preview} />
     case 'carga': return <LoadStep s={preview} />
     case 'distribucion': return <LayoutStep depot={depot} />
@@ -297,7 +271,6 @@ function LayoutStep({ depot }: { depot: Depot }) {
 
   return (
     <div className="cot-fields">
-      <MarkTools />
       <Field label={plan.rackAreas?.length ? 'Filas (de las zonas sin orientación propia)' : 'Filas'}>{() => (
         <Segmented label="Orientación de las filas" value={layout.orientation} onChange={(orientation) => setLayout({ orientation })}
           options={[{ value: 'x', label: 'Horizontales' }, { value: 'y', label: 'Verticales' }]} />

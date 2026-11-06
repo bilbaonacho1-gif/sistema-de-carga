@@ -32,9 +32,19 @@ export function PlanPanel() {
 /** Herramientas, instructivo, lo seleccionado y los datos del depósito (sin el marco). */
 /** `showSelection`: las medidas de lo seleccionado van acá (si no, las muestra quien lo usa, arriba de todo). */
 export function PlanTools({ showSelection = true }: { showSelection?: boolean } = {}) {
-  const { tool, setTool, plan, commit, undo, redo, past, future, snap, setSnap, snapStep, setSnapStep, showCotas, setShowCotas } = usePlan()
+  return (
+    <>
+      <PlanToolbar showSelection={showSelection} />
+      <h2 className="section-label">Depósito</h2>
+      <PlanDepotData />
+    </>
+  )
+}
+
+/** Herramientas de dibujo, su instructivo, deshacer, imán y cotas. */
+export function PlanToolbar({ showSelection = true }: { showSelection?: boolean } = {}) {
+  const { tool, setTool, plan, undo, redo, past, future, snap, setSnap, snapStep, setSnapStep, showCotas, setShowCotas } = usePlan()
   const current = TOOLS.find((t) => t.id === tool)!
-  const outside = itemsOutside(plan).size
   return (
     <>
       <div className="plan-tools" role="toolbar" aria-label="Herramientas">
@@ -66,7 +76,16 @@ export function PlanTools({ showSelection = true }: { showSelection?: boolean } 
         ? <p className="note note--blue">Empezá escribiendo el largo y el ancho del depósito en el plano, o dibujalo a mano con "Dibujar contorno" (clic en cada esquina y escribís el largo de cada pared).</p>
         : showSelection && <Selection />}
 
-      <h2 className="section-label">Depósito</h2>
+    </>
+  )
+}
+
+/** Datos del depósito: superficie, paredes, arranque rápido y grilla de columnas. */
+export function PlanDepotData() {
+  const { plan, commit } = usePlan()
+  const outside = itemsOutside(plan).size
+  return (
+    <>
       <KeyValue items={[
         ['Superficie', `${fmt(Math.round(planArea(plan.outline)))} m²`],
         ['Perímetro', `${(planPerimeter(plan.outline) / 1000).toLocaleString('es-AR', { maximumFractionDigits: 2 })} m`],
