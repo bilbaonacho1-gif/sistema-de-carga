@@ -1,0 +1,25 @@
+/* Paneles por módulos (como en Photoshop): ver dock.tsx */
+/* panel del cotizador por módulos (como en Photoshop): en columna o sueltos donde uno quiera */
+.dock-col { position: sticky; top: calc(var(--topbar) + 12px); align-self: start; display: flex; flex-direction: column; gap: 10px; max-height: calc(100dvh - var(--topbar) - 24px); overflow-y: auto; overscroll-behavior: contain; min-width: 0; }
+.depot--float .dock-col { display: none; }
+.dock { flex: none; display: flex; flex-direction: column; background: #fff; border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
+.dock__bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 6px; background: #fff; border-bottom: 1px solid var(--line-2); border-radius: 12px 12px 0 0; user-select: none; }
+.dock.is-collapsed .dock__bar { border-bottom: 0; border-radius: 12px; }
+.dock__toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; padding: 6px; border: 0; background: none; color: var(--ink); font: 700 11.5px var(--f-body); text-transform: uppercase; letter-spacing: .07em; text-align: left; cursor: pointer; }
+.dock__toggle span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dock__btn { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 8px; background: none; color: var(--ink-2); cursor: pointer; }
+.dock__btn:hover, .dock__toggle:hover { color: var(--red); }
+.dock__btn:hover { background: var(--red-tint); }
+.dock__body { display: flex; flex-direction: column; gap: 14px; padding: 14px 16px 16px; min-width: 0; }
+.dock__body .section-label { margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--line-2); }
+.dock__body .section-label:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.dock--float { position: fixed; overflow-y: auto; overscroll-behavior: contain; box-shadow: 0 16px 48px rgba(20, 24, 30, .22); }
+.dock--float .dock__bar { cursor: grab; background: #1f2328; }
+.dock--float .dock__toggle, .dock--float .dock__btn { color: #fff; }
+.dock--float .dock__btn:hover { background: rgba(255, 255, 255, .12); color: #fff; }
+.dock-reset { align-self: flex-start; padding-left: 0; }
+.dock .cot-nav { position: static; margin: 0; padding: 12px 0 0; }
+@media (max-width: 900px) {
+  .dock-col { position: static; max-height: none; overflow: visible; }
+}
+.dock__body .plan-panel { display: flex; flex-direction: column; }

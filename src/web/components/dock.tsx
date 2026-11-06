@@ -8,6 +8,7 @@ import { useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
+import './dock.css'
 
 export interface DockState { floating: boolean; collapsed: boolean; x: number; y: number; w: number; z: number }
 
