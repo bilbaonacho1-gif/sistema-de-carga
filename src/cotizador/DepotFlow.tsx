@@ -22,7 +22,7 @@ import { AccessoriesStep, LoadStep, MaterialsList, downloadMaterials } from '../
 import { Viewport, Warnings } from '../web/pages/designer/CotizadorView'
 import { useDesigner } from '../web/pages/designer/designerStore'
 import { MarkTools, PlanDepotData, PlanToolbar, Selection } from '../web/plan/PlanPanel'
-import { DockPanel, useAnyDocked, useDock } from '../web/components/dock'
+import { ColumnResizer, DockPanel, DropZones, useDock, useDockLayout } from '../web/components/dock'
 import { CalcoPanel, ChecksPanel, ExportPanel, LayersPanel } from '../web/plan/PlanModules'
 import { planChecks } from '../shared/plan/checks'
 import { FLOW, usePlan, type FlowStep } from '../web/plan/planStore'
@@ -97,53 +97,61 @@ export function DepotFlow({ onQuote }: { onQuote(): void }) {
   }
   // módulos del panel en este paso (como en Photoshop: cada uno se achica o se saca por separado)
   const modules = MODULES[flowStep]
-  const ids = ['pasos', ...(editing ? ['editar'] : []), ...modules.map((m) => m.id)]
-  const anyDocked = useAnyDocked(ids)
-  const anyFloating = useDock((st) => Object.values(st.panels).some((p) => p.floating))
+  const defs: { id: string; title: string; collapsed?: boolean; body: React.ReactNode }[] = [
+    { id: 'pasos', title: `Paso ${FLOW.indexOf(flowStep) + 1} · ${META[flowStep].title}`, body: <>
+      <Steps />
+      <StepNav />
+      <button type="button" className="link-btn dock-reset" onClick={() => useDock.getState().reset()}>Volver a ordenar los paneles</button>
+    </> },
+    ...(editing ? [{ id: 'editar', title: 'Editando', body: selection?.kind === 'rack' && rackLayer ? <RackEditor rackLayer={rackLayer} defaults={defaults} />
+      : selection?.kind === 'racks' && rackLayer ? <MultiRackEditor rackLayer={rackLayer} defaults={defaults} /> : <Selection /> }] : []),
+    ...modules.map((m) => ({ ...m, body: <>
+      {m.id === 'herramientas' && <div className="plan-panel"><PlanToolbar showSelection={false} /></div>}
+      {m.id === 'deposito-datos' && <div className="plan-panel"><PlanDepotData /></div>}
+      {m.id === 'marcar' && <MarkTools />}
+      {m.id === 'capas' && <LayersPanel />}
+      {m.id === 'calco' && <CalcoPanel />}
+      {m.id === 'revision' && <ChecksPanel checks={checks} />}
+      {m.id === 'exportar' && <ExportPanel racks={showRacks ? depot.layout.placements : []} size={size} sheet={sheet} />}
+      {m.id === 'paso' && <>
+        <StepBody step={flowStep} depot={depot} preview={preview} onQuote={onQuote} />
+        {rackView && <Warnings warnings={preview.warnings.filter((w) => w.code !== 'free-positions')} />}
+        {flowStep === 'resumen' && <>
+          <p className="disclaimer">Simulación de referencia: no reemplaza el cálculo estructural. Toda configuración la valida el departamento técnico.</p>
+          <div className="cz-contact">
+            <strong>{CONTACT.company}</strong>
+            <a href={`tel:${CONTACT.phone.replace(/\D/g, '')}`}><Phone size={14} aria-hidden /> {CONTACT.phone}</a>
+            <a href={`mailto:${CONTACT.email}`}><Mail size={14} aria-hidden /> {CONTACT.email}</a>
+            <span>{CONTACT.address}</span>
+          </div>
+        </>}
+      </>}
+    </> })),
+  ]
+  // como en Adobe: cada módulo va en la columna de la izquierda, en la de la derecha o suelto
+  const place = useDockLayout(defs.map((d) => d.id))
+  const cols = useDock((st) => st.cols)
+  const byId = new Map(defs.map((d) => [d.id, d]))
+  const panel = (id: string) => { const d = byId.get(id)!; return <DockPanel key={id} id={id} title={d.title} defaultCollapsed={d.collapsed}>{d.body}</DockPanel> }
+  const hasL = place.left.length > 0, hasR = place.right.length > 0
 
   return (
-    <div className={`designer depot${anyDocked ? '' : ' depot--float'}`}>
-      <aside className="dock-col" aria-label="Cotizador de depósitos">
-        <DockPanel id="pasos" title={`Paso ${FLOW.indexOf(flowStep) + 1} · ${META[flowStep].title}`}>
-          <Steps />
-          <StepNav />
-          {anyFloating && <button type="button" className="link-btn dock-reset" onClick={() => useDock.getState().reset()}>Volver a ordenar los paneles</button>}
-        </DockPanel>
-        {editing && (
-          <DockPanel id="editar" title="Editando">
-            {selection?.kind === 'rack' && rackLayer ? <RackEditor rackLayer={rackLayer} defaults={defaults} />
-              : selection?.kind === 'racks' && rackLayer ? <MultiRackEditor rackLayer={rackLayer} defaults={defaults} /> : <Selection />}
-          </DockPanel>
-        )}
-        {modules.map((m) => (
-          <DockPanel key={m.id} id={m.id} title={m.title} defaultCollapsed={m.collapsed}>
-            {m.id === 'herramientas' && <div className="plan-panel"><PlanToolbar showSelection={false} /></div>}
-            {m.id === 'deposito-datos' && <div className="plan-panel"><PlanDepotData /></div>}
-            {m.id === 'marcar' && <MarkTools />}
-            {m.id === 'capas' && <LayersPanel />}
-            {m.id === 'calco' && <CalcoPanel />}
-            {m.id === 'revision' && <ChecksPanel checks={checks} />}
-            {m.id === 'exportar' && <ExportPanel racks={showRacks ? depot.layout.placements : []} size={size} sheet={sheet} />}
-            {m.id === 'paso' && <>
-              <StepBody step={flowStep} depot={depot} preview={preview} onQuote={onQuote} />
-              {rackView && <Warnings warnings={preview.warnings.filter((w) => w.code !== 'free-positions')} />}
-              {flowStep === 'resumen' && <>
-                <p className="disclaimer">Simulación de referencia: no reemplaza el cálculo estructural. Toda configuración la valida el departamento técnico.</p>
-                <div className="cz-contact">
-                  <strong>{CONTACT.company}</strong>
-                  <a href={`tel:${CONTACT.phone.replace(/\D/g, '')}`}><Phone size={14} aria-hidden /> {CONTACT.phone}</a>
-                  <a href={`mailto:${CONTACT.email}`}><Mail size={14} aria-hidden /> {CONTACT.email}</a>
-                  <span>{CONTACT.address}</span>
-                </div>
-              </>}
-            </>}
-          </DockPanel>
-        ))}
-      </aside>
+    <div className={`designer depot depot--cols${hasL ? ' has-left' : ''}${hasR ? ' has-right' : ''}`}
+      style={{ '--dock-l': `${cols.left}px`, '--dock-r': `${cols.right}px` } as React.CSSProperties}>
+      {hasL && <aside className="dock-col dock-col--left" data-dock-col="left" aria-label="Paneles de la izquierda">
+        <div className="dock-col__scroll">{place.left.map(panel)}</div>
+        <ColumnResizer side="left" />
+      </aside>}
       {rackView
         ? <Viewport s={preview} />
         : <PlanStage rackLayer={rackLayer} racks={showRacks ? depot.racks : undefined}
             summary={area > 0 && <DepotStrip depot={depot} area={area} />} />}
+      {hasR && <aside className="dock-col dock-col--right" data-dock-col="right" aria-label="Paneles de la derecha">
+        <div className="dock-col__scroll">{place.right.map(panel)}</div>
+        <ColumnResizer side="right" />
+      </aside>}
+      {place.float.map(panel)}
+      <DropZones />
     </div>
   )
 }
