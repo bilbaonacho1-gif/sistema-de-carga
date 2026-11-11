@@ -38,7 +38,7 @@ import { usePlan } from './planStore'
 type VB = { x: number; y: number; w: number; h: number }
 type Drag =
   | { type: 'pan'; cx: number; cy: number; vb: VB; moved: boolean }
-  | { type: 'racks'; ids: string[]; start: PlanPoint; done: PlanPoint; started: boolean }
+  | { type: 'racks'; ids: string[]; start: PlanPoint; done: PlanPoint; started: boolean; clicked: string }
   | { type: 'box'; a: PlanPoint }
   | { type: 'anno'; kind: 'text' | 'symbol' | 'dim'; id: string; start: PlanPoint; started: boolean }
   | { type: 'calco'; start: PlanPoint; x: number; y: number }
@@ -123,7 +123,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
   /** Fila de racks que se está dibujando (de a hasta b). */
   const [rackDraft, setRackDraft] = useState<{ a: PlanPoint; b: PlanPoint } | null>(null)
   const rackDrawPair = usePlan((st) => st.rackDrawPair)
-  const { osnap, hidden, symbolKind } = usePlan()
+  const { osnap, hidden, symbolKind, focusRack } = usePlan()
   const calco = useCalco((st) => st.calco)
   // al cambiar de herramienta se descarta lo que estaba a medio hacer
   useEffect(() => { setMeasure(null); setTwoPoint(null); setCalib(null); setHoverSnap(null) }, [tool])
@@ -571,6 +571,8 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
     const d = drag.current
     if (d?.type === 'pan' && !d.moved && tool === 'select') select(null)
     if (guides.length) setGuides([])
+    // con varios elegidos, tocar uno (sin arrastrar) lo abre para editarlo por separado
+    if (d?.type === 'racks' && !d.started) usePlan.getState().setFocusRack(d.clicked)
     if (d?.type === 'rackdraw') {
       const b = snapPt(toPlan(e.clientX, e.clientY), e.altKey)
       const layer = layerRef.current
@@ -731,10 +733,16 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
               return
             }
             // si es uno de varios elegidos, se mueven todos juntos
-            if (current.length > 1 && current.includes(r.id)) { startDrag(e, { type: 'racks', ids: current, start: p, done: { x: 0, y: 0 }, started: false }); return }
+            if (current.length > 1 && current.includes(r.id)) { startDrag(e, { type: 'racks', ids: current, start: p, done: { x: 0, y: 0 }, started: false, clicked: r.id }); return }
             select({ kind: 'rack', id: r.id })
             startDrag(e, { type: 'rack', id: r.id, dx: p.x - r.x, dy: p.y - r.y, started: false })
           } : undefined} />}
+        {rackLayer && selection?.kind === 'racks' && focusRack && selection.ids.includes(focusRack) && (() => {
+          const r = rackLayer.racks.find((x) => x.id === focusRack)
+          if (!r) return null
+          const b = placementRect(r)
+          return <rect className="no-export" x={b.x - px(6)} y={b.y - px(6)} width={b.w + px(12)} height={b.h + px(12)} fill="none" stroke={BLUE} strokeWidth={px(2.5)} strokeDasharray={`${px(8)} ${px(4)}`} pointerEvents="none" />
+        })()}
         {rackLayer && showCotas && !hidden.numeros && !hidden.racks && <PlanRackNotes racks={rackLayer.racks} px={px} />}
 
         {/* tabiques */}

@@ -92,6 +92,9 @@ interface PlanState {
   /** Capas apagadas. */
   hidden: Partial<Record<PlanLayer, boolean>>
   toggleLayer(l: PlanLayer): void
+  /** Entre varios racks elegidos, el que se está editando (se marca en el plano). */
+  focusRack: string | null
+  setFocusRack(id: string | null): void
   /** Símbolo que pone la herramienta Símbolos. */
   symbolKind: SymbolKind
   /** Dibujar fila de racks: simple o doble (espalda con espalda). */
@@ -146,6 +149,8 @@ export const usePlan = create<PlanState>()(
       setOsnap: (osnap) => set({ osnap }),
       hidden: {},
       toggleLayer: (l) => set((s) => ({ hidden: { ...s.hidden, [l]: !s.hidden[l] } })),
+      focusRack: null,
+      setFocusRack: (focusRack) => set({ focusRack }),
       symbolKind: 'matafuego',
       rackDrawPair: true,
       setRackDrawPair: (rackDrawPair) => set({ rackDrawPair }),

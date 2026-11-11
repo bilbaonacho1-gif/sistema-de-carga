@@ -4,11 +4,11 @@
  * zonas de racks, pasillos, columnas, tabiques, textos, símbolos, cotas, racks y el depósito entero
  * (tocando una de sus paredes).
  */
-import { Copy, Maximize, Minus, Plus, RotateCw, Trash2 } from 'lucide-react'
+import { AlignStartHorizontal, AlignStartVertical, Copy, Maximize, Minus, Plus, RotateCw, Trash2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { removeItem, removeVertex, setTotal } from '../../shared/plan/edit'
 import { placementRect, type RackModuleSize } from '../../shared/plan/layout'
-import { duplicateWithin, fitPlacement, freezeRacks, guarded, removeRacks, rotateRack, selectedRackIds, setRackModules, setRackPair } from '../../shared/plan/racks'
+import { duplicateWithin, fitPlacement, freezeRacks, guarded, mapRacks, removeRacks, rotateRack, selectedRackIds, setRackModules, setRackPair } from '../../shared/plan/racks'
 import { fitToDepot, growRect, growWall, rotatePlan, rotateRect, rotateWall, type Rect } from '../../shared/plan/transform'
 import type { Plan, RackPlacement } from '../../shared/plan/types'
 import { metros } from '../../shared/units'
@@ -152,9 +152,28 @@ export function ObjectBar({ vb, size, layer, onFit }: Props) {
       const bs = rs.map(placementRect)
       const x0 = Math.min(...bs.map((b) => b.x)), y0 = Math.min(...bs.map((b) => b.y))
       box = { x: x0, y: y0, w: Math.max(...bs.map((b) => b.x + b.w)) - x0, h: Math.max(...bs.map((b) => b.y + b.h)) - y0 }
+      // a todos los elegidos, cada uno sólo si entra donde queda
+      const base = freezeRacks(plan, layer.racks)
+      const each = (fn: (p: Plan, id: string) => Plan) => {
+        let p = base
+        for (const id of ids) p = guarded(p, fn(p, id), id, layer.size)
+        commit(() => p)
+      }
+      const allPair = rs.every((r) => r.pair)
+      // alinear: todos con el borde izquierdo (o de arriba) del primero
+      const align = (axis: 'x' | 'y') => {
+        const v = Math.min(...bs.map((b) => b[axis]))
+        commit(() => mapRacks(base, [...ids], (r) => ({ ...r, [axis]: v })))
+      }
       body = <>
         <span className="obar__v obar__v--info">{rs.length} racks</span>
-        <Btn title={`Borrar los ${rs.length}`} onClick={() => del(() => removeRacks(freezeRacks(plan, layer.racks), [...ids]))}><Trash2 size={15} aria-hidden /></Btn>
+        <Btn title="Girar cada uno" onClick={() => each((p, id) => rotateRack(p, id))}><RotateCw size={15} aria-hidden /></Btn>
+        <Step label="Módulos" value="±1" onMinus={() => each((p, id) => { const r = p.racks?.find((x) => x.id === id); return r && r.modules > 1 ? setRackModules(p, id, r.modules - 1) : p })}
+          onPlus={() => each((p, id) => { const r = p.racks?.find((x) => x.id === id); return r ? setRackModules(p, id, r.modules + 1) : p })} />
+        <button type="button" className="obar__t" onClick={() => each((p, id) => setRackPair(p, id, !allPair))}>{allPair ? 'Todos simples' : 'Todos dobles'}</button>
+        <Btn title="Alinear a la izquierda" onClick={() => align('x')}><AlignStartVertical size={15} aria-hidden /></Btn>
+        <Btn title="Alinear arriba" onClick={() => align('y')}><AlignStartHorizontal size={15} aria-hidden /></Btn>
+        <Btn title={`Borrar los ${rs.length}`} onClick={() => del(() => removeRacks(base, [...ids]))}><Trash2 size={15} aria-hidden /></Btn>
       </>
       break
     }

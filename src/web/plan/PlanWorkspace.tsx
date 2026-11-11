@@ -2,7 +2,8 @@
  * Visor del depósito: el plano (2D, editable) o el depósito en 3D (también editable: se toca y
  * se arrastra), con los racks ubicados si los hay. Lo seleccionado tiene su barra de acciones.
  */
-import { AlertTriangle, Box, Copy, Map as MapIcon, Maximize2, Package, RotateCw, Trash2 } from 'lucide-react'
+import { AlertTriangle, Box, ChevronDown, ChevronRight, Copy, Map as MapIcon, Maximize2, Package, RotateCw, Trash2 } from 'lucide-react'
+import { rackNames } from './PlanNotes'
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import type { PlacedRack } from '../../shared/plan/depot'
 import { removeItem, removeVertex } from '../../shared/plan/edit'
@@ -176,9 +177,11 @@ export function MultiRackEditor({ rackLayer, defaults }: { rackLayer: PlanRackLa
     setNote(skipped ? `${skipped} ${skipped === 1 ? 'rack no entraba y quedó' : 'racks no entraban y quedaron'} como estaba${skipped === 1 ? '' : 'n'}.` : null)
   }
   const modules = racks.every((r) => r.modules === racks[0].modules) ? racks[0].modules : undefined
+  const names = rackNames(rackLayer.racks)
   return (
     <div className="plan-sel rack-editor">
       <h2 className="section-label">{racks.length} racks elegidos</h2>
+      <h3 className="rack-list__t">Todos juntos</h3>
       <span className="muted small">Shift + clic suma o saca un rack · arrastrá uno para moverlos juntos</span>
       <NumberStepper label="Módulos (todos)" value={modules ?? racks[0].modules} min={1} max={120} step={1}
         onChange={(v) => each((p, id) => setRackModules(p, id, v))} hint={modules === undefined ? 'Ahora tienen distintos módulos' : undefined} />
@@ -190,8 +193,50 @@ export function MultiRackEditor({ rackLayer, defaults }: { rackLayer: PlanRackLa
         <button type="button" className="vp-btn" onClick={() => { commit(() => removeRacks(base, ids)); select(null) }}><Trash2 size={14} aria-hidden /> Borrar los {racks.length}</button>
       </div>
       {note && <p className="rack-editor__issue"><AlertTriangle size={14} aria-hidden /> {note}</p>}
+
+      {/* cada uno por separado: tocás uno, se abre y lo cambiás sin tocar a los demás */}
+      <h3 className="rack-list__t">Cada uno por separado</h3>
+      <ul className="rack-list">
+        {racks.map((r) => <RackItem key={r.id} r={r} name={names.get(r.id)} rackLayer={rackLayer} defaults={defaults} ids={ids} />)}
+      </ul>
       <button type="button" className="link-btn" onClick={() => select(null)}>Terminar (deseleccionar)</button>
     </div>
+  )
+}
+
+/** Un rack de la selección, editable por separado (se abre tocándolo). */
+function RackItem({ r, name, rackLayer, defaults, ids }: { r: RackPlacement; name?: string; rackLayer: PlanRackLayer; defaults: RackDefaults; ids: string[] }) {
+  const { plan, commit, select, layout, focusRack, setFocusRack } = usePlan()
+  const open = focusRack === r.id
+  const size = rackLayer.size
+  const base = freezeRacks(plan, rackLayer.racks)
+  const tryEdit = (fn: (p: Plan) => Plan) => { const after = guarded(base, fn(base), r.id, size); return after === base ? null : after }
+  const rot = open ? tryEdit((p) => rotateRack(p, r.id)) : null
+  const pair = open ? tryEdit((p) => setRackPair(p, r.id, !r.pair)) : null
+  const dup = open ? duplicateWithin(base, r.id, layout.aisle, size) : null
+  const len = fitPlacement(r, size).length
+  return (
+    <li className={`rack-list__i${open ? ' is-open' : ''}`}>
+      <button type="button" className="rack-list__h" onClick={() => setFocusRack(open ? null : r.id)} aria-expanded={open}>
+        {open ? <ChevronDown size={15} aria-hidden /> : <ChevronRight size={15} aria-hidden />}
+        <strong>{name ? `Fila ${name}` : 'Rack'}</strong>
+        <span>{r.modules} mód. · {r.pair ? 'doble' : 'simple'} · {metros(len)}{r.levels !== undefined || r.height !== undefined ? ' · medidas propias' : ''}</span>
+      </button>
+      {open && (
+        <div className="rack-list__b">
+          <NumberStepper label="Módulos" value={r.modules} min={1} max={120} step={1}
+            onChange={(v) => { const next = tryEdit((p) => setRackModules(p, r.id, v)); if (next) commit(() => next) }} />
+          <RackOverrides racks={[r]} defaults={defaults} onChange={(patch) => commit(() => mapRacks(base, [r.id], (q) => ({ ...q, ...patch })))} />
+          <div className="rack-editor__actions">
+            <button type="button" className="vp-btn" disabled={!rot} onClick={() => rot && commit(() => rot)}><RotateCw size={14} aria-hidden /> Girar</button>
+            <button type="button" className="vp-btn" disabled={!pair} onClick={() => pair && commit(() => pair)}>{r.pair ? 'Hacer simple' : 'Hacer doble'}</button>
+            <button type="button" className="vp-btn" disabled={!dup} onClick={() => { if (dup) { commit(() => dup.plan); select({ kind: 'racks', ids: [...ids, dup.id] }); setFocusRack(dup.id) } }}><Copy size={14} aria-hidden /> Duplicar</button>
+            <button type="button" className="vp-btn" onClick={() => { const rest = ids.filter((x) => x !== r.id); select(rest.length === 1 ? { kind: 'rack', id: rest[0] } : { kind: 'racks', ids: rest }); setFocusRack(null) }}>Sacar de la selección</button>
+            <button type="button" className="vp-btn" onClick={() => { const rest = ids.filter((x) => x !== r.id); commit(() => removeRacks(base, [r.id])); select(rest.length === 1 ? { kind: 'rack', id: rest[0] } : rest.length ? { kind: 'racks', ids: rest } : null); setFocusRack(null) }}><Trash2 size={14} aria-hidden /> Borrar este</button>
+          </div>
+        </div>
+      )}
+    </li>
   )
 }
 

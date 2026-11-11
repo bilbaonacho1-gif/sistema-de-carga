@@ -680,3 +680,11 @@
 .beam-heights { display: flex; flex-direction: column; gap: 6px; }
 .beam-heights__row { padding: 6px 8px; border-radius: 8px; border: 1px solid transparent; }
 .beam-heights__row.is-picked { border-color: #e0a100; background: #fff8dc; }
+/* varios racks: lista para editar cada uno por separado */
+.rack-list__t { margin: 6px 0 0; font: 700 11px var(--f-body); text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); }
+.rack-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.rack-list__i { border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.rack-list__i.is-open { border-color: #2f6fb8; box-shadow: 0 0 0 1px #2f6fb8; }
+.rack-list__h { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 10px; border: 0; background: none; text-align: left; cursor: pointer; font: 13px var(--f-body); color: var(--ink); }
+.rack-list__h span { color: var(--ink-2); font-size: 12.5px; }
+.rack-list__b { display: flex; flex-direction: column; gap: 8px; padding: 0 10px 10px; }
