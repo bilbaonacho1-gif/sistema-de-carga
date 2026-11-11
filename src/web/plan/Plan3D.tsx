@@ -184,6 +184,7 @@ export function Plan3D(props: Props) {
       <Scene {...props} span={span} onStats={setStats} />
       <OrbitControls makeDefault target={center} enableDamping maxPolarAngle={Math.PI / 2 - 0.02} minDistance={2} maxDistance={span * 6} />
       <ZoomBridge zoomRef={zoomRef} min={2} max={span * 6} />
+      <IsolateCamera racks={props.racks} center={center} span={span} />
     </Canvas>
     <div className="zoom-btns" role="group" aria-label="Zoom">
       <button type="button" onClick={() => zoomRef.current?.(1 / 1.4)} aria-label="Acercar" title="Acercar">+</button>
@@ -210,6 +211,15 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, size, span, on
     return new THREE.ShapeGeometry(shape)
   }, [poly])
   const placements: RackPlacement[] = useMemo(() => racks.map((r) => r.placement), [racks])
+  // "ver solo este": se dibujan sólo los racks aislados (los cambios se siguen haciendo sobre todos)
+  const isolate = usePlan((s) => s.isolate)
+  const shown = useMemo(() => {
+    if (!isolate) return racks
+    const ids = new Set(isolate)
+    const only = racks.filter((r) => ids.has(r.placement.id))
+    return only.length ? only : racks
+  }, [racks, isolate])
+  const shownPlacements = useMemo(() => shown.map((r) => r.placement), [shown])
   const isSel = (kind: string, id: string | number) => !!selection && selection.kind === kind && ('id' in selection ? selection.id : 'index' in selection ? selection.index : undefined) === id
   const selRacks = useMemo(() => new Set(selectedRackIds(selection)), [selection])
   const isRackSel = (id: string) => selRacks.has(id)
@@ -220,8 +230,8 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, size, span, on
     <>
       <mesh geometry={floor} material={MAT.floor} rotation-x={-Math.PI / 2} position={[0, 0.001, 0]} receiveShadow />
 
-      {/* paredes del contorno */}
-      <mesh geometry={ring} material={MAT.wall} castShadow />
+      {/* paredes del contorno (viendo un rack solo, no están: taparían el rack) */}
+      {shown === racks && <mesh geometry={ring} material={MAT.wall} castShadow />}
 
       {/* esquinas del contorno: se arrastran para cambiar la forma del depósito */}
       {plan.outline.points.map((p, i) => (
@@ -304,11 +314,11 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, size, span, on
       ))}
 
       {/* muchos racks: en lote, con una sola malla invisible para tocarlos y arrastrarlos */}
-      {racks.length > MANY_RACKS && <>
-        <RackInstances racks={racks} showLoads={showLoads} onStats={onStats} />
-        <RackHitInstances racks={racks} placements={placements}
+      {shown.length > MANY_RACKS && <>
+        <RackInstances racks={shown} showLoads={showLoads} onStats={onStats} />
+        <RackHitInstances racks={shown} placements={shownPlacements}
           onDown={(e, p) => drag({ kind: 'rack', id: p.id }, (dx, dy, free) => live((pl) => (size ? moveRackWithin(freezeRacks(pl, placements), p.id, snapTo(p.x + dx, free), snapTo(p.y + dy, free), size) : moveRack(freezeRacks(pl, placements), p.id, snapTo(p.x + dx, free), snapTo(p.y + dy, free))))).onPointerDown(e)} />
-        {racks.filter(({ placement: p }) => isRackSel(p.id) || issues[p.id]).map(({ placement: p, structure }) => {
+        {shown.filter(({ placement: p }) => isRackSel(p.id) || issues[p.id]).map(({ placement: p, structure }) => {
           const b = placementRect(p)
           const H = m(structure.config.height) + 0.02
           return (
@@ -320,8 +330,8 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, size, span, on
       </>}
 
       {/* pocos racks: el modelo con todo el detalle y, encima, una caja invisible para tocarlo y arrastrarlo */}
-      {racks.length <= MANY_RACKS && racks.map((r) => <PlacedRackModel key={r.placement.id} rack={r} showLoads={showLoads} />)}
-      {racks.length <= MANY_RACKS && racks.map(({ placement: p, structure }) => {
+      {shown.length <= MANY_RACKS && shown.map((r) => <PlacedRackModel key={r.placement.id} rack={r} showLoads={showLoads} />)}
+      {shown.length <= MANY_RACKS && shown.map(({ placement: p, structure }) => {
         const b = placementRect(p)
         const H = m(structure.config.height) + 0.02
         const mat = isRackSel(p.id) ? MAT.rackSelected : issues[p.id] ? MAT.rackIssue : MAT.rackHit
@@ -379,5 +389,41 @@ function ZoomBridge({ zoomRef, min, max }: { zoomRef: MutableRefObject<((k: numb
     }
     return () => { zoomRef.current = null }
   }, [camera, controls, invalidate, zoomRef, min, max])
+  return null
+}
+
+/** "Ver solo este": la cámara va a los racks aislados; al volver a ver todos, vuelve a la vista general. */
+function IsolateCamera({ racks = [], center, span }: { racks?: PlacedRack[]; center: THREE.Vector3; span: number }) {
+  const camera = useThree((s) => s.camera)
+  const controls = useThree((s) => s.controls) as unknown as { target: THREE.Vector3; update(): void } | null
+  const invalidate = useThree((s) => s.invalidate)
+  const isolate = usePlan((s) => s.isolate)
+  const key = isolate?.join(',') ?? ''
+  const first = useRef(true)
+  useEffect(() => {
+    if (!controls) return
+    const ids = new Set(isolate ?? [])
+    const only = racks.filter((r) => ids.has(r.placement.id))
+    // al abrir el 3D sin nada aislado, la cámara queda donde arranca
+    if (!only.length && first.current) { first.current = false; return }
+    first.current = false
+    let target: THREE.Vector3, dist: number
+    if (only.length) {
+      const bs = only.map((r) => placementRect(r.placement))
+      const x0 = Math.min(...bs.map((b) => b.x)), y0 = Math.min(...bs.map((b) => b.y))
+      const x1 = Math.max(...bs.map((b) => b.x + b.w)), y1 = Math.max(...bs.map((b) => b.y + b.h))
+      const h = Math.max(...only.map((r) => m(r.structure.config.height)))
+      target = new THREE.Vector3(m((x0 + x1) / 2), h / 3, m((y0 + y1) / 2))
+      dist = Math.max(m(x1 - x0), m(y1 - y0), h * 2) * 1.15 + 4
+    } else {
+      target = center.clone()
+      dist = new THREE.Vector3(span * 0.7, span * 0.75, span * 1.05).length()
+    }
+    const dir = new THREE.Vector3(0.7, 0.75, 1.05).normalize()
+    controls.target.copy(target)
+    camera.position.copy(target).add(dir.multiplyScalar(dist))
+    controls.update()
+    invalidate()
+  }, [key, controls]) // eslint-disable-line react-hooks/exhaustive-deps -- sólo al aislar o volver
   return null
 }

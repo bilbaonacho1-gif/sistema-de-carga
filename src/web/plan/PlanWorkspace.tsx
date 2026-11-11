@@ -2,7 +2,7 @@
  * Visor del depósito: el plano (2D, editable) o el depósito en 3D (también editable: se toca y
  * se arrastra), con los racks ubicados si los hay. Lo seleccionado tiene su barra de acciones.
  */
-import { AlertTriangle, Box, ChevronDown, ChevronRight, Copy, Map as MapIcon, Maximize2, Package, RotateCw, Trash2 } from 'lucide-react'
+import { AlertTriangle, Box, ChevronDown, ChevronRight, Copy, Focus, Map as MapIcon, Maximize2, Package, RotateCw, Trash2 } from 'lucide-react'
 import { rackNames } from './PlanNotes'
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import type { PlacedRack } from '../../shared/plan/depot'
@@ -22,7 +22,7 @@ const Plan3D = lazy(() => import('./Plan3D').then((x) => ({ default: x.Plan3D })
 const MANY_PALLETS = 1500
 
 export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackLayer; racks?: PlacedRack[]; summary?: ReactNode }) {
-  const { view3d: want3d, setView3d, plan } = usePlan()
+  const { view3d: want3d, setView3d, plan, isolate, setIsolate, selection } = usePlan()
   // sin depósito todavía no hay nada que ver en 3D: se queda en el plano
   const empty = plan.outline.points.length < 3
   const view3d = want3d && !empty
@@ -30,7 +30,10 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
   const pallets = (racks ?? []).reduce((n, r) => n + r.structure.pallets.length, 0)
   const [loads, setLoads] = useState<boolean | null>(null)
   // con muchos racks el 3D va en lote y las cajas no pesan: se ven siempre; con pocos racks muy largos, sólo si no son demasiadas
-  const showLoads = loads ?? ((racks?.length ?? 0) > 30 || pallets <= MANY_PALLETS)
+  // viendo un rack solo, los pallets se ven siempre (son pocos)
+  const isoOn = !!isolate?.length && !!racks?.some((r) => isolate.includes(r.placement.id))
+  const showLoads = loads ?? (isoOn || (racks?.length ?? 0) > 30 || pallets <= MANY_PALLETS)
+  const selIds = selectedRackIds(selection)
   useKeys3d(view3d, rackLayer)
   return (
     <section className="plan-stage" aria-label={view3d ? 'Depósito en 3D' : 'Plano del depósito'}>
@@ -41,13 +44,22 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
         {view3d && !!racks?.length && (
           <label className="plan-snap plan-stage__loads"><input type="checkbox" checked={showLoads} onChange={(e) => setLoads(e.target.checked)} /> <Package size={14} aria-hidden /> Ver pallets</label>
         )}
+        {view3d && selIds.length > 0 && !isoOn && (
+          <button type="button" className="vp-btn" onClick={() => setIsolate(selIds)}><Focus size={14} aria-hidden /> Ver solo {selIds.length === 1 ? 'este rack' : `estos ${selIds.length}`}</button>
+        )}
         {summary && <div className="plan-stage__summary">{summary}</div>}
       </div>
       <div className="plan-stage__body">
         {view3d
           ? <Suspense fallback={<Spinner />}><Plan3D plan={plan} racks={racks} showLoads={showLoads} issues={rackLayer?.issues} size={rackLayer?.size} /></Suspense>
           : <PlanEditor fitRequest={fit} rackLayer={rackLayer} />}
-        {view3d && <p className="plan-stage__hint">Tocá algo para elegirlo y arrastralo para moverlo · arrastrá el fondo para girar</p>}
+        {view3d && isoOn && (
+          <div className="iso-pill" role="status">
+            <span>Viendo solo {isolate!.length === 1 ? 'este rack' : `estos ${isolate!.length} racks`}</span>
+            <button type="button" onClick={() => setIsolate(null)}>Ver todos</button>
+          </div>
+        )}
+        {view3d && !isoOn && <p className="plan-stage__hint">Tocá algo para elegirlo y arrastralo para moverlo · arrastrá el fondo para girar</p>}
       </div>
     </section>
   )
@@ -70,7 +82,7 @@ function useKeys3d(active: boolean, layer?: PlanRackLayer) {
       const s = usePlan.getState()
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) s.redo(); else s.undo() }
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); s.redo() }
-      else if (e.key === 'Escape') s.select(null)
+      else if (e.key === 'Escape') { if (!s.selection && s.isolate) s.setIsolate(null); else s.select(null) }
       else if ((e.key === 'Delete' || e.key === 'Backspace') && s.selection && s.selection.kind !== 'edge') {
         e.preventDefault()
         const sel = s.selection
