@@ -142,7 +142,7 @@ export function removeOutside(plan: Plan): Plan {
 }
 
 /** Borra lo seleccionado. */
-export function removeItem(plan: Plan, kind: 'column' | 'wall' | 'door' | 'zone' | 'area' | 'aisle' | 'rack', id: string): Plan {
+export function removeItem(plan: Plan, kind: 'column' | 'wall' | 'door' | 'zone' | 'area' | 'aisle' | 'rack' | 'text' | 'symbol' | 'dim', id: string): Plan {
   switch (kind) {
     case 'column': return { ...plan, columns: plan.columns.filter((x) => x.id !== id) }
     case 'wall': return { ...plan, walls: plan.walls.filter((x) => x.id !== id) }
@@ -150,6 +150,9 @@ export function removeItem(plan: Plan, kind: 'column' | 'wall' | 'door' | 'zone'
     case 'zone': return { ...plan, zones: plan.zones.filter((x) => x.id !== id) }
     case 'area': return { ...plan, rackAreas: (plan.rackAreas ?? []).filter((x) => x.id !== id) }
     case 'aisle': return { ...plan, aisles: (plan.aisles ?? []).filter((x) => x.id !== id) }
+    case 'text': return { ...plan, texts: (plan.texts ?? []).filter((x) => x.id !== id) }
+    case 'symbol': return { ...plan, symbols: (plan.symbols ?? []).filter((x) => x.id !== id) }
+    case 'dim': return { ...plan, dims: (plan.dims ?? []).filter((x) => x.id !== id) }
     case 'rack': return { ...plan, racks: (plan.racks ?? []).filter((x) => x.id !== id) }
   }
 }

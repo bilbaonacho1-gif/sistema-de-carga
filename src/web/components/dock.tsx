@@ -40,10 +40,10 @@ const DEFAULT: DockState = { floating: false, collapsed: false, x: 380, y: 140, 
 export const dockState = (id: string, panels: Record<string, Partial<DockState>>): DockState => ({ ...DEFAULT, ...panels[id] })
 
 /** Un módulo del panel: barra con su nombre, achicar y sacar / meter; el contenido abajo. */
-export function DockPanel({ id, title, children, icon }: { id: string; title: string; children: ReactNode; icon?: ReactNode }) {
+export function DockPanel({ id, title, children, icon, defaultCollapsed = false }: { id: string; title: string; children: ReactNode; icon?: ReactNode; defaultCollapsed?: boolean }) {
   // se lee el dato guardado tal cual (referencia estable) y se completa afuera del selector
   const raw = useDock((s) => s.panels[id])
-  const saved: DockState = { ...DEFAULT, ...raw }
+  const saved: DockState = { ...DEFAULT, collapsed: defaultCollapsed, ...raw }
   // en pantallas angostas (celular) los módulos van siempre en columna
   const narrow = typeof window !== 'undefined' && window.matchMedia?.('(max-width: 900px)').matches
   const st = narrow ? { ...saved, floating: false } : saved

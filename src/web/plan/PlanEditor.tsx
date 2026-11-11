@@ -15,12 +15,17 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { drawnRect, itemsOutside, setEdgeLength, setTotal, moveVertex, newId, pointAtLength, removeItem, removeVertex, sagFromPoint, setOutline, splitEdge, updateRect } from '../../shared/plan/edit'
 import { rectanglePlan } from '../../shared/plan/geometry'
 import { metrosNum, parseMetros } from '../../shared/units'
+import './plan-extra.css'
 import { apex, arcOf, edgeLength, edges, nearestOnEdge, planBounds, pointOnEdge, tangentOnEdge, type Edge } from '../../shared/plan/geometry'
-import type { Plan, PlanPoint } from '../../shared/plan/types'
+import type { Plan, PlanPoint, PlanSelection } from '../../shared/plan/types'
 import type { RackModuleSize, RackPlacement } from '../../shared/plan/layout'
 import { freezeRacks, moveRack, moveRackWithin, moveRacksBy, rackSelection, racksInBox, removeRacks, selectedRackIds } from '../../shared/plan/racks'
 import { PlanCotas } from './PlanCotas'
 import { Legend, PlanRackNotes, ScaleBar } from './PlanNotes'
+import { PlanAnnotations } from './PlanAnnotations'
+import { scaleCalco, useCalco } from './calco'
+import { nearestSnap, snapPoints, type SnapPoint } from '../../shared/plan/snap'
+import { copySelection, moveSelection, pasteClip, type Clip } from '../../shared/plan/clipboard'
 import { PlanRacks } from './PlanRacks'
 import { usePlan } from './planStore'
 
@@ -29,6 +34,8 @@ type Drag =
   | { type: 'pan'; cx: number; cy: number; vb: VB; moved: boolean }
   | { type: 'racks'; ids: string[]; start: PlanPoint; done: PlanPoint; started: boolean }
   | { type: 'box'; a: PlanPoint }
+  | { type: 'anno'; kind: 'text' | 'symbol' | 'dim'; id: string; start: PlanPoint; started: boolean }
+  | { type: 'calco'; start: PlanPoint; x: number; y: number }
   | { type: 'vertex'; index: number; started: boolean }
   | { type: 'sag'; index: number; started: boolean }
   | { type: 'column' | 'zone'; id: string; dx: number; dy: number; started: boolean }
@@ -41,6 +48,9 @@ type Drag =
   | { type: 'draw'; kind: 'area' | 'aisle'; a: PlanPoint }
 
 const RED = '#be1e30'
+/** Lo copiado con Ctrl+C (queda mientras la página está abierta). */
+let clipboard: Clip | null = null
+let pasteCount = 0
 const BLUE = '#2f6fb8'
 const meters = (mm: number) => `${(Math.round(mm / 10) / 100 + 0).toLocaleString('es-AR', { maximumFractionDigits: 2 })} m`
 
@@ -89,6 +99,21 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
   /** Medida que se está escribiendo sobre el plano (tocando una cota). */
   const [inline, setInline] = useState<{ edit: { kind: 'edge'; index: number } | { kind: 'total'; axis: 'x' | 'y' }; at: PlanPoint; text: string } | null>(null)
   const inlineCancel = useRef(false)
+  /** Medir: de a hasta b (b fijo después del segundo clic). */
+  const [measure, setMeasure] = useState<{ a: PlanPoint; b?: PlanPoint } | null>(null)
+  /** Cota que se está poniendo (primer punto) o calibración del calco. */
+  const [twoPoint, setTwoPoint] = useState<PlanPoint | null>(null)
+  /** Texto nuevo que se está escribiendo sobre el plano. */
+  const [textInput, setTextInput] = useState<{ at: PlanPoint; text: string } | null>(null)
+  const textCancel = useRef(false)
+  /** Calibrar el calco: los dos puntos marcados y la medida real que se escribe. */
+  const [calib, setCalib] = useState<{ a: PlanPoint; b: PlanPoint; text: string } | null>(null)
+  /** Punto de imán bajo el cursor (se marca con un cuadradito). */
+  const [hoverSnap, setHoverSnap] = useState<SnapPoint | null>(null)
+  const { osnap, hidden, symbolKind } = usePlan()
+  const calco = useCalco((st) => st.calco)
+  // al cambiar de herramienta se descarta lo que estaba a medio hacer
+  useEffect(() => { setMeasure(null); setTwoPoint(null); setCalib(null); setHoverSnap(null) }, [tool])
   /** Recuadro para elegir varios racks (Shift + arrastrar). */
   const [boxDraft, setBoxDraft] = useState<{ a: PlanPoint; b: PlanPoint } | null>(null)
   const selectedSet = useMemo(() => new Set(selectedRackIds(selection)), [selection])
@@ -127,6 +152,12 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
   })
   const fit = useCallback(() => setVb(fitView(usePlan.getState().plan, size.w / size.h)), [size.w, size.h])
   useEffect(() => { fit() }, [fitRequest]) // eslint-disable-line react-hooks/exhaustive-deps -- encuadra al pedirlo
+  // al exportar se pide encuadrar el plano entero
+  useEffect(() => {
+    const on = () => fit()
+    window.addEventListener('plan-fit', on)
+    return () => window.removeEventListener('plan-fit', on)
+  }, [fit])
 
   /* ---- coordenadas ---- */
   const toPlan = (clientX: number, clientY: number): PlanPoint => {
@@ -138,6 +169,15 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
   }
   const sn = (v: number, free = false) => (snap && !free ? Math.round(v / snapStep) * snapStep : Math.round(v))
   const snapPt = (p: PlanPoint, free = false): PlanPoint => ({ x: sn(p.x, free), y: sn(p.y, free) })
+  /** Puntos de imán a objetos (esquinas, puntas, medios, centros). */
+  // sólo hacen falta mientras se dibuja, mide o acota (así arrastrar racks en depósitos grandes no se traba)
+  const snapPts = useMemo(() => (osnap && tool !== 'select' ? snapPoints(plan, rackLayer?.racks) : []), [osnap, tool, plan, rackLayer?.racks])
+  /** El punto del clic: pegado a un objeto cercano si hay imán a objetos, si no, a la grilla. */
+  const objSnap = (raw: PlanPoint, free = false): SnapPoint | null => (osnap && !free ? nearestSnap(snapPts, raw, px(12)) : null)
+  const smartPt = (raw: PlanPoint, free = false): PlanPoint => {
+    const o = objSnap(raw, free)
+    return o ? { x: Math.round(o.x), y: Math.round(o.y) } : snapPt(raw, free)
+  }
   /** Mientras se dibuja: a 90° del punto anterior si está casi alineado. */
   const ortho = (p: PlanPoint, prev?: PlanPoint): PlanPoint => {
     if (!prev || !snap) return p
@@ -178,7 +218,36 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
       if (drawing && !e.ctrlKey && !e.metaKey && /^[\d.,]$/.test(e.key)) { e.preventDefault(); setTyped(typedRef.current + e.key); return }
       if (drawing && e.key === 'Backspace' && typedRef.current) { e.preventDefault(); setTyped(typedRef.current.slice(0, -1)); return }
       if (drawing && e.key === 'Enter' && typedRef.current) { e.preventDefault(); placeTyped(); return }
-      if (e.key === 'Escape') { setTyped(''); if (s.draft.length) s.setDraft([]); else s.select(null); return }
+      if (e.key === 'Escape') {
+        setTyped(''); setMeasure(null); setTwoPoint(null); setCalib(null)
+        if (s.draft.length) s.setDraft([]); else if (s.tool === 'calibrate' || s.tool === 'measure' || s.tool === 'dim') s.setTool('select'); else s.select(null)
+        return
+      }
+      // copiar, pegar, duplicar
+      const racks = layerRef.current?.racks ?? []
+      const mod = e.ctrlKey || e.metaKey
+      if (mod && e.key.toLowerCase() === 'c' && s.selection) { const c = copySelection(s.plan, s.selection, racks); if (c) { clipboard = c; pasteCount = 0; e.preventDefault() } return }
+      if (mod && (e.key.toLowerCase() === 'v' || e.key.toLowerCase() === 'd')) {
+        if (e.key.toLowerCase() === 'd') { if (!s.selection) return; clipboard = copySelection(s.plan, s.selection, racks); pasteCount = 0 }
+        if (!clipboard) return
+        e.preventDefault()
+        pasteCount++
+        const off = 1000 * pasteCount
+        let sel: PlanSelection = null
+        s.commit((p) => { const r = pasteClip(p, clipboard!, off, off, racks); sel = r.selection; return r.plan })
+        s.select(sel)
+        return
+      }
+      // flechas: mover lo seleccionado (de a un paso del imán; con Shift, diez)
+      if (s.selection && s.selection.kind !== 'edge' && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        e.preventDefault()
+        const step = (s.snap ? s.snapStep : 100) * (e.shiftKey ? 10 : 1)
+        const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0
+        const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0
+        const sel = s.selection
+        s.commit((p) => moveSelection(p, sel, dx, dy, racks))
+        return
+      }
       if (e.key === 'Enter' && s.tool === 'outline' && s.draft.length >= 3) { closeOutline(s.draft); return }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const sel = s.selection
@@ -256,12 +325,19 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
       setBoxDraft({ a: raw, b: raw })
       return
     }
+    // mover el plano de fondo (calco)
+    const cal = useCalco.getState().calco
+    if (tool === 'select' && cal?.moving && raw.x >= cal.x && raw.x <= cal.x + cal.w && raw.y >= cal.y && raw.y <= cal.y + cal.h) {
+      drag.current = { type: 'calco', start: raw, x: cal.x, y: cal.y }
+      return
+    }
     if (e.button === 1 || tool === 'select') {
       drag.current = { type: 'pan', cx: e.clientX, cy: e.clientY, vb, moved: false }
       return
     }
     const last = draft[draft.length - 1]
-    const p = ortho(snapPt(raw, e.altKey), last)
+    const snapped = objSnap(raw, e.altKey)
+    const p = snapped ? { x: Math.round(snapped.x), y: Math.round(snapped.y) } : ortho(snapPt(raw, e.altKey), last)
     switch (tool) {
       case 'outline': {
         const first = draft[0]
@@ -295,6 +371,34 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         drag.current = { type: 'draw', kind: tool, a: p }
         setRectDraft({ kind: tool, a: p, b: p })
         break
+      case 'measure':
+        // primer clic: desde; segundo: hasta (queda fija); tercero: empieza otra medición
+        if (!measure || measure.b) setMeasure({ a: p })
+        else setMeasure({ a: measure.a, b: p })
+        break
+      case 'dim':
+        if (!twoPoint) setTwoPoint(p)
+        else if (Math.hypot(p.x - twoPoint.x, p.y - twoPoint.y) > 50) {
+          const id = newId('k')
+          const a = twoPoint
+          commit((pl) => ({ ...pl, dims: [...(pl.dims ?? []), { id, a, b: p, offset: -Math.max(800, px(28)) }] }))
+          setTwoPoint(null)
+        }
+        break
+      case 'calibrate':
+        if (!twoPoint) setTwoPoint(raw)
+        else { e.preventDefault(); setCalib({ a: twoPoint, b: raw, text: '' }); setTwoPoint(null) }
+        break
+      case 'text':
+        // sin esto, el clic le saca el foco al cuadro de texto apenas aparece
+        e.preventDefault()
+        setTextInput({ at: p, text: '' })
+        break
+      case 'symbol': {
+        const id = newId('s')
+        commit((pl) => ({ ...pl, symbols: [...(pl.symbols ?? []), { id, x: p.x, y: p.y, kind: symbolKind }] }))
+        break
+      }
       case 'door': {
         const near = edges(plan.outline).map((ed) => ({ ed, ...nearestOnEdge(ed, raw) })).sort((a, b) => a.distance - b.distance)[0]
         if (near && near.distance < Math.max(1500, px(30))) {
@@ -328,8 +432,20 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
     setCursor(raw)
     cursorRef.current = raw
     const d = drag.current
+    if (tool !== 'select' || d?.type === 'wall-end') setHoverSnap(objSnap(raw, e.altKey))
+    else if (hoverSnap) setHoverSnap(null)
     if (!d) return
     if (d.type === 'box') { setBoxDraft({ a: d.a, b: raw }); return }
+    if (d.type === 'calco') { useCalco.getState().patch({ x: Math.round(d.x + raw.x - d.start.x), y: Math.round(d.y + raw.y - d.start.y) }); return }
+    if (d.type === 'anno') {
+      const dx = sn(raw.x - d.start.x, e.altKey), dy = sn(raw.y - d.start.y, e.altKey)
+      if (!dx && !dy) return
+      if (!d.started) { begin(); d.started = true }
+      d.start = { x: d.start.x + dx, y: d.start.y + dy }
+      const sel = { kind: d.kind, id: d.id } as PlanSelection
+      live((pl) => moveSelection(pl, sel, dx, dy, []))
+      return
+    }
     if (d.type === 'racks') {
       // varios racks juntos: se aplica sólo lo que falta del movimiento (si alguno no entra, frenan)
       const layer = layerRef.current
@@ -368,7 +484,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
           return { ...w, a: { x: nx, y: ny }, b: { x: w.b.x + ox, y: w.b.y + oy } }
         }),
       })); break
-      case 'wall-end': live((pl) => ({ ...pl, walls: pl.walls.map((w) => (w.id === d.id ? { ...w, [d.end]: p } : w)) })); break
+      case 'wall-end': { const q = smartPt(raw, e.altKey); live((pl) => ({ ...pl, walls: pl.walls.map((w) => (w.id === d.id ? { ...w, [d.end]: q } : w)) })); break }
       case 'area': case 'aisle': {
         const id = d.id, kind = d.type, dx = d.dx, dy = d.dy
         live((pl) => updateRect(pl, kind, id, () => ({ x: sn(raw.x - dx, e.altKey), y: sn(raw.y - dy, e.altKey) })))
@@ -482,11 +598,14 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
 
         {/* piso del depósito y, encima, la grilla de 1 m (así los cuadros se ven también adentro) */}
         {es.length >= 3 && <path d={outlineD(plan)} fill="#fff" stroke="none" />}
-        <g>{grid.lines.map(({ k, major, ...l }) => <line key={k} {...l} stroke={major ? '#c3c8cf' : '#dde0e5'} strokeWidth={px(major ? 1.2 : 1)} />)}</g>
+        {/* plano de fondo para calcar */}
+        {calco && !hidden.calco && <image href={calco.src} x={calco.x} y={calco.y} width={calco.w} height={calco.h} preserveAspectRatio="none"
+          opacity={calco.opacity} pointerEvents="none" style={{ outline: calco.moving ? `${px(2)}px dashed ${BLUE}` : undefined }} />}
+        {!hidden.grilla && <g>{grid.lines.map(({ k, major, ...l }) => <line key={k} {...l} stroke={major ? '#c3c8cf' : '#dde0e5'} strokeWidth={px(major ? 1.2 : 1)} />)}</g>}
 
         {/* piso y paredes */}
         {es.length >= 3 && <>
-          {plan.zones.map((z) => (
+          {!hidden.zonas && plan.zones.map((z) => (
             <g key={z.id} onPointerDown={(e) => { select({ kind: 'zone', id: z.id }); const p = toPlan(e.clientX, e.clientY); startDrag(e, { type: 'zone', id: z.id, dx: p.x - z.x, dy: p.y - z.y, started: false }) }}>
               <rect x={z.x} y={z.y} width={z.w} height={z.d} fill="url(#plan-hatch)" stroke={isSel('zone', z.id) ? RED : '#c98a93'} strokeWidth={px(isSel('zone', z.id) ? 2.5 : 1.2)} strokeDasharray={`${px(6)} ${px(4)}`} />
               {label({ x: z.x + z.w / 2, y: z.y + z.d / 2 }, z.name, `zl${z.id}`, RED)}
@@ -502,7 +621,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         </>}
 
         {/* zonas de racks: sólo el borde y el nombre se agarran (adentro se puede seguir moviendo el plano) */}
-        {(plan.rackAreas ?? []).map((z) => {
+        {!hidden.areas && (plan.rackAreas ?? []).map((z) => {
           const sel = isSel('area', z.id)
           const grab = (e: React.PointerEvent) => { select({ kind: 'area', id: z.id }); const p = toPlan(e.clientX, e.clientY); startDrag(e, { type: 'area', id: z.id, dx: p.x - z.x, dy: p.y - z.y, started: false }) }
           return (
@@ -517,7 +636,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
           )
         })}
         {/* pasillos marcados */}
-        {(plan.aisles ?? []).map((a) => {
+        {!hidden.pasillos && (plan.aisles ?? []).map((a) => {
           const sel = isSel('aisle', a.id)
           const vertical = a.d > a.w
           return (
@@ -532,7 +651,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         })}
 
         {/* racks ubicados */}
-        {rackLayer && <PlanRacks racks={rackLayer.racks} size={rackLayer.size} px={px} issues={rackLayer.issues}
+        {rackLayer && !hidden.racks && <PlanRacks racks={rackLayer.racks} size={rackLayer.size} px={px} issues={rackLayer.issues}
           selected={selectedSet}
           onDown={tool === 'select' ? (e, r) => {
             const p = toPlan(e.clientX, e.clientY)
@@ -548,10 +667,10 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
             select({ kind: 'rack', id: r.id })
             startDrag(e, { type: 'rack', id: r.id, dx: p.x - r.x, dy: p.y - r.y, started: false })
           } : undefined} />}
-        {rackLayer && showCotas && <PlanRackNotes racks={rackLayer.racks} px={px} />}
+        {rackLayer && showCotas && !hidden.numeros && !hidden.racks && <PlanRackNotes racks={rackLayer.racks} px={px} />}
 
         {/* tabiques */}
-        {plan.walls.map((w) => (
+        {!hidden.tabiques && plan.walls.map((w) => (
           <g key={w.id}>
             <line x1={w.a.x} y1={w.a.y} x2={w.b.x} y2={w.b.y} stroke={isSel('wall', w.id) || outside.has(w.id) ? RED : '#4b5058'} strokeWidth={Math.max(w.thickness, px(2))} strokeLinecap="square"
               strokeDasharray={outside.has(w.id) ? `${px(8)} ${px(5)}` : undefined} />
@@ -566,7 +685,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         ))}
 
         {/* portones */}
-        {plan.doors.map((d) => {
+        {!hidden.portones && plan.doors.map((d) => {
           const e = es[d.edge]
           if (!e) return null
           const c = pointOnEdge(e, d.t), t = tangentOnEdge(e, d.t)
@@ -580,7 +699,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         })}
 
         {/* columnas */}
-        {plan.columns.map((c) => {
+        {!hidden.columnas && plan.columns.map((c) => {
           const sel = isSel('column', c.id)
           const props = {
             fill: sel ? RED : outside.has(c.id) ? '#fff' : '#3b3f45', stroke: sel || outside.has(c.id) ? RED : 'none', strokeWidth: px(2),
@@ -592,6 +711,12 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
             ? <circle key={c.id} cx={c.x} cy={c.y} r={Math.max(c.w / 2, minR)} {...props} />
             : <rect key={c.id} x={c.x - Math.max(c.w / 2, minR)} y={c.y - Math.max(c.d / 2, minR)} width={Math.max(c.w, minR * 2)} height={Math.max(c.d, minR * 2)} {...props} />
         })}
+
+        {/* anotaciones: cotas propias, textos y símbolos */}
+        <PlanAnnotations texts={plan.texts ?? []} symbols={plan.symbols ?? []} dims={plan.dims ?? []} px={px}
+          selectedId={selection && 'id' in selection ? selection.id : undefined}
+          showTexts={!hidden.textos} showSymbols={!hidden.simbolos} showDims={!hidden.cotasPropias}
+          onDown={tool === 'select' ? (e, kind, id) => { select({ kind, id }); startDrag(e, { type: 'anno', kind, id, start: toPlan(e.clientX, e.clientY), started: false }) } : undefined} />
 
         {/* cotas (o, si están apagadas, el largo de cada pared) */}
         {showCotas && tool !== 'outline' && !empty && (
@@ -620,7 +745,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
           const r = kind === 'area' ? plan.rackAreas?.find((x) => x.id === selection.id) : plan.aisles?.find((x) => x.id === selection.id)
           if (!r) return null
           return (
-            <rect x={r.x + r.w - px(7)} y={r.y + r.d - px(7)} width={px(14)} height={px(14)} rx={px(3)} fill="#fff" stroke={kind === 'area' ? BLUE : '#8a6500'} strokeWidth={px(2.5)}
+            <rect className="no-export" x={r.x + r.w - px(7)} y={r.y + r.d - px(7)} width={px(14)} height={px(14)} rx={px(3)} fill="#fff" stroke={kind === 'area' ? BLUE : '#8a6500'} strokeWidth={px(2.5)}
               style={{ cursor: 'nwse-resize' }} onPointerDown={(e) => startDrag(e, { type: 'resize', kind, id: r.id, started: false })} />
           )
         })()}
@@ -630,7 +755,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
           const e = es[selection.index]
           const m = apex(e)
           return (
-            <g>
+            <g className="no-export">
               <circle cx={m.x} cy={m.y} r={px(8)} fill={RED} stroke="#fff" strokeWidth={px(2)} style={{ cursor: 'grab' }}
                 onPointerDown={(ev) => startDrag(ev, { type: 'sag', index: e.index, started: false })} />
               {label({ x: m.x, y: m.y - px(20) }, 'arrastrá para curvar', 'hint-sag', RED)}
@@ -638,7 +763,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
           )
         })()}
         {tool === 'select' && plan.outline.points.map((p, i) => (
-          <rect key={`v${i}`} x={p.x - px(6)} y={p.y - px(6)} width={px(12)} height={px(12)} rx={px(2)}
+          <rect key={`v${i}`} className="no-export" x={p.x - px(6)} y={p.y - px(6)} width={px(12)} height={px(12)} rx={px(2)}
             fill={isSel('vertex', i) ? RED : '#fff'} stroke={RED} strokeWidth={px(2)} style={{ cursor: 'grab' }}
             onPointerDown={(e) => { select({ kind: 'vertex', index: i }); startDrag(e, { type: 'vertex', index: i, started: false }) }} />
         ))}
@@ -662,9 +787,41 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         })()}
         {boxDraft && <rect x={Math.min(boxDraft.a.x, boxDraft.b.x)} y={Math.min(boxDraft.a.y, boxDraft.b.y)} width={Math.abs(boxDraft.b.x - boxDraft.a.x)} height={Math.abs(boxDraft.b.y - boxDraft.a.y)}
           fill={RED} fillOpacity={0.06} stroke={RED} strokeWidth={px(1.5)} strokeDasharray={`${px(6)} ${px(4)}`} pointerEvents="none" />}
-        {cursor && tool !== 'select' && <circle cx={snapPt(cursor).x} cy={snapPt(cursor).y} r={px(3)} fill={RED} pointerEvents="none" />}
+        {/* medir */}
+        {tool === 'measure' && measure && (() => {
+          const a = measure.a, b = measure.b ?? (cursor ? smartPt(cursor) : a)
+          const L = Math.hypot(b.x - a.x, b.y - a.y)
+          return (
+            <g pointerEvents="none">
+              <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#0f8a8a" strokeWidth={px(2.5)} strokeDasharray={measure.b ? undefined : `${px(8)} ${px(5)}`} />
+              {[a, b].map((q, i) => <circle key={i} cx={q.x} cy={q.y} r={px(4)} fill="#fff" stroke="#0f8a8a" strokeWidth={px(2)} />)}
+              {L > 0 && label({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - px(16) }, `${meters(L)}  ·  ↔ ${meters(Math.abs(b.x - a.x))}  ↕ ${meters(Math.abs(b.y - a.y))}`, 'measure', '#0b6b6b')}
+            </g>
+          )
+        })()}
+        {/* cota o calibración en curso: del primer punto al cursor */}
+        {(tool === 'dim' || tool === 'calibrate') && twoPoint && cursor && (() => {
+          const b = tool === 'dim' ? smartPt(cursor) : cursor
+          return (
+            <g pointerEvents="none">
+              <line x1={twoPoint.x} y1={twoPoint.y} x2={b.x} y2={b.y} stroke={tool === 'dim' ? '#1f5f8b' : BLUE} strokeWidth={px(2)} strokeDasharray={`${px(8)} ${px(5)}`} />
+              <circle cx={twoPoint.x} cy={twoPoint.y} r={px(4)} fill="#fff" stroke={BLUE} strokeWidth={px(2)} />
+              {label({ x: (twoPoint.x + b.x) / 2, y: (twoPoint.y + b.y) / 2 - px(14) }, meters(Math.hypot(b.x - twoPoint.x, b.y - twoPoint.y)), 'two-point', '#1f5f8b')}
+            </g>
+          )
+        })()}
+        {calib && <line x1={calib.a.x} y1={calib.a.y} x2={calib.b.x} y2={calib.b.y} stroke={BLUE} strokeWidth={px(3)} pointerEvents="none" />}
+        {/* imán a objetos: cuadradito naranja en el punto donde se pega */}
+        {hoverSnap && <g pointerEvents="none">
+          <rect x={hoverSnap.x - px(6)} y={hoverSnap.y - px(6)} width={px(12)} height={px(12)} fill="none" stroke="#e07b1f" strokeWidth={px(2.2)} />
+          {label({ x: hoverSnap.x, y: hoverSnap.y + px(16) }, hoverSnap.kind, 'snap-kind', '#b85c0a')}
+        </g>}
+        {cursor && tool !== 'select' && !hoverSnap && <circle cx={snapPt(cursor).x} cy={snapPt(cursor).y} r={px(3)} fill={RED} pointerEvents="none" />}
       </svg>
       {empty && draft.length === 0 && tool !== 'outline' && <StartCard onCreate={createRect} onDraw={() => setTool('outline')} />}
+      {TOOL_HINT[tool] && (
+        <div className="plan-editor__hint" role="status">{TOOL_HINT[tool](!!twoPoint, !!measure?.b)}</div>
+      )}
       {(tool === 'outline' || tool === 'wall') && (
         <div className="plan-editor__hint" role="status">
           {draft.length === 0
@@ -695,6 +852,38 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
       )}
       {!empty && <Legend plan={plan} racks={!!rackLayer?.racks.length} issues={!!rackLayer?.issues && Object.keys(rackLayer.issues).length > 0} />}
       {!empty && <ScaleBar mmPerPx={scale} />}
+      {textInput && (
+        <input className="cota-input cota-input--text" autoFocus value={textInput.text} placeholder="Escribí el texto" aria-label="Texto"
+          style={{ left: ((textInput.at.x - vb.x) / vb.w) * size.w, top: ((textInput.at.y - vb.y) / vb.h) * size.h }}
+          onChange={(e) => setTextInput({ ...textInput, text: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') { textCancel.current = true; setTextInput(null) }
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+          }}
+          onBlur={() => {
+            const t = textInput.text.trim()
+            if (t && !textCancel.current) { const id = newId('t'); commit((pl) => ({ ...pl, texts: [...(pl.texts ?? []), { id, x: textInput.at.x, y: textInput.at.y, text: t, size: Math.round(Math.max(400, px(14)) / 50) * 50 }] })); setTool('select'); select({ kind: 'text', id }) }
+            textCancel.current = false
+            setTextInput(null)
+          }} />
+      )}
+      {calib && (
+        <div className="calib-ask" style={{ left: (((calib.a.x + calib.b.x) / 2 - vb.x) / vb.w) * size.w, top: (((calib.a.y + calib.b.y) / 2 - vb.y) / vb.h) * size.h }}>
+          <span>¿Cuánto mide esa distancia en la realidad?</span>
+          <input autoFocus inputMode="decimal" placeholder="ej. 40" value={calib.text} aria-label="Distancia real en metros"
+            onChange={(e) => setCalib({ ...calib, text: e.target.value.replace(/[^\d.,]/g, '') })}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') { setCalib(null); setTool('select') }
+              if (e.key === 'Enter') {
+                const real = parseMetros(calib.text)
+                const cur = useCalco.getState().calco
+                if (cur && real > 0) useCalco.getState().set(scaleCalco(cur, calib.a, calib.b, real))
+                setCalib(null); setTool('select')
+              }
+            }} />
+          <small>m · Enter</small>
+        </div>
+      )}
       <div className="zoom-btns" role="group" aria-label="Zoom">
         <button type="button" onClick={() => zoomBy(1 / 1.5)} aria-label="Acercar" title="Acercar">+</button>
         <button type="button" onClick={() => zoomBy(1.5)} aria-label="Alejar" title="Alejar">−</button>
@@ -705,6 +894,15 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
       </div>
     </div>
   )
+}
+
+/** Qué hacer con cada herramienta nueva (cartel de arriba del plano). */
+const TOOL_HINT: Partial<Record<string, (first: boolean, done: boolean) => string>> = {
+  measure: (_f, done) => (done ? 'Medición lista. Hacé clic para medir otra cosa; Esc termina.' : 'Medir: clic en un punto y clic en el otro. Se pega a esquinas, puntas y centros.'),
+  dim: (first) => (first ? 'Ahora clic en el otro extremo de la cota.' : 'Cota: clic en un extremo y clic en el otro. Queda dibujada en el plano.'),
+  text: () => 'Texto: clic donde va, escribilo y Enter.',
+  symbol: () => 'Símbolo: clic donde va cada uno. Elegí cuál en el panel Herramientas.',
+  calibrate: (first) => (first ? 'Ahora clic en el otro punto de esa medida conocida.' : 'Escala del plano de fondo: clic en dos puntos de una medida que conozcas (por ejemplo, una pared).'),
 }
 
 /** Plano vacío: crear el depósito escribiendo largo × ancho, o dibujarlo a mano. */

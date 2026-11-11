@@ -1,0 +1,45 @@
+/* Herramientas tipo AutoCAD del plano: símbolos, capas, calco, revisión, exportar y lámina */
+.plan-tools__k { margin-top: 2px; font: 700 10.5px var(--f-body); text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); }
+.symbol-pick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+.symbol-pick__b { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font: 600 12px var(--f-body); text-align: left; cursor: pointer; }
+.symbol-pick__b span { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.symbol-pick__b.is-active { border-color: currentColor; box-shadow: inset 0 0 0 1px currentColor; background: #fafafa; }
+.layers { display: flex; flex-direction: column; gap: 4px; }
+.layers .muted { margin: 0 0 4px; }
+.layers__row { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ink); cursor: pointer; }
+.calco { display: flex; flex-direction: column; gap: 8px; }
+.calco .muted { margin: 0; }
+.calco__row { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--ink-2); }
+.calco__row input { flex: 1; accent-color: var(--red); }
+.checks { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.checks__i { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border-radius: 8px; font-size: 13px; line-height: 1.35; }
+.checks__i svg { flex: none; margin-top: 2px; }
+.checks__i button { padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; text-decoration: underline; text-decoration-color: rgba(0, 0, 0, .25); cursor: pointer; }
+.checks__i--error { background: #fdecee; color: #8d1422; }
+.checks__i--aviso { background: #fff5dc; color: #6f4800; }
+.checks__i--consejo { background: #eef4fb; color: #1f4f80; }
+.checks__ok { display: flex; align-items: center; gap: 8px; margin: 0; color: #14823a; font-weight: 600; font-size: 14px; }
+.export { display: flex; flex-direction: column; gap: 8px; }
+.export .muted { margin: 0; }
+.cota-input--text { width: 220px; text-align: left; font-family: var(--f-body); }
+.calib-ask { position: absolute; z-index: 5; transform: translate(-50%, -120%); display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #fff; border: 2px solid #2f6fb8; border-radius: 10px; box-shadow: 0 8px 22px rgba(20, 24, 30, .18); font-size: 13px; }
+.calib-ask input { width: 80px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; font: 700 15px var(--f-mono); text-align: right; }
+.calib-ask small { color: var(--ink-2); }
+
+/* lámina para imprimir / guardar en PDF */
+#print-sheet { display: none; }
+@media print {
+  @page { size: A4 landscape; margin: 8mm; }
+  body > *:not(#print-sheet) { display: none !important; }
+  #print-sheet { display: grid !important; grid-template-columns: 1fr 62mm; gap: 6mm; height: 190mm; border: 0.6mm solid #1f2328; padding: 4mm; font-family: Arial, Helvetica, sans-serif; color: #1f2328; }
+  #print-sheet .ps-plan { min-width: 0; min-height: 0; }
+  #print-sheet .ps-plan svg { width: 100%; height: 100%; }
+  #print-sheet .ps-block { display: flex; flex-direction: column; gap: 3mm; border-left: 0.4mm solid #1f2328; padding-left: 4mm; font-size: 9pt; }
+  #print-sheet .ps-brand { font-weight: 800; letter-spacing: .12em; color: #be1e30; font-size: 10pt; }
+  #print-sheet .ps-title { font-weight: 800; font-size: 13pt; text-transform: uppercase; }
+  #print-sheet table { border-collapse: collapse; width: 100%; }
+  #print-sheet th, #print-sheet td { padding: 1.2mm 0; border-bottom: 0.2mm solid #c9cdd2; text-align: left; vertical-align: top; }
+  #print-sheet th { font-weight: 600; color: #4b5058; padding-right: 2mm; }
+  #print-sheet td { font-weight: 700; text-align: right; }
+  #print-sheet .ps-note { margin-top: auto; font-size: 7.5pt; color: #4b5058; }
+}

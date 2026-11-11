@@ -79,6 +79,16 @@ export interface PlanAisle {
   d: number
 }
 
+/** Texto suelto sobre el plano (aclaraciones, nombres de sectores…). `size` = alto de letra en mm. */
+export interface PlanText { id: string; x: number; y: number; text: string; size: number }
+
+/** Símbolos que se pueden poner en el plano (matafuegos, salidas, baños…). */
+export type SymbolKind = 'matafuego' | 'hidrante' | 'salida' | 'botiquin' | 'banio' | 'tablero' | 'cargador' | 'autoelevador' | 'picking' | 'anden'
+export interface PlanSymbol { id: string; x: number; y: number; kind: SymbolKind }
+
+/** Cota puesta a mano entre dos puntos (como DIM en AutoCAD); `offset` corre la línea hacia un costado. */
+export interface PlanDim { id: string; a: PlanPoint; b: PlanPoint; offset: number }
+
 /** Un rack ubicado en el plano: una fila (o un par de filas espalda con espalda) de módulos. */
 export interface RackPlacement {
   id: string
@@ -109,6 +119,10 @@ export interface Plan {
   rackAreas?: PlanRackArea[]
   /** Pasillos marcados a mano. */
   aisles?: PlanAisle[]
+  /** Anotaciones: textos, símbolos y cotas propias. */
+  texts?: PlanText[]
+  symbols?: PlanSymbol[]
+  dims?: PlanDim[]
   /**
    * Racks ubicados a mano. Si no hay, los ubica la distribución automática; al mover, girar o
    * borrar uno, la distribución se copia acá y desde ahí se edita libremente.
@@ -126,6 +140,9 @@ export type PlanSelection =
   | { kind: 'zone'; id: string }
   | { kind: 'area'; id: string }
   | { kind: 'aisle'; id: string }
+  | { kind: 'text'; id: string }
+  | { kind: 'symbol'; id: string }
+  | { kind: 'dim'; id: string }
   | { kind: 'rack'; id: string }
   /** Varios racks a la vez (Shift + clic, o Shift + arrastrar un recuadro). */
   | { kind: 'racks'; ids: string[] }

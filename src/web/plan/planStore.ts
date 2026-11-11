@@ -3,7 +3,7 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { emptyPlan } from '../../shared/plan/edit'
 import { DEFAULT_LAYOUT, type LayoutOptions } from '../../shared/plan/layout'
-import type { Plan, PlanPoint, PlanSelection } from '../../shared/plan/types'
+import type { Plan, PlanPoint, PlanSelection, SymbolKind } from '../../shared/plan/types'
 
 /**
  * Guardado en el navegador. Mientras se arrastra algo el plano cambia en cada movimiento: se guarda
@@ -19,7 +19,10 @@ const safeStorage = {
   removeItem: (k: string) => { try { localStorage.removeItem(k) } catch { /* sin memoria */ } },
 }
 
-export type PlanTool = 'select' | 'outline' | 'column' | 'wall' | 'door' | 'zone' | 'area' | 'aisle'
+export type PlanTool = 'select' | 'outline' | 'column' | 'wall' | 'door' | 'zone' | 'area' | 'aisle' | 'measure' | 'dim' | 'text' | 'symbol' | 'calibrate'
+
+/** Capas del plano que se pueden apagar (como en AutoCAD). */
+export type PlanLayer = 'grilla' | 'calco' | 'zonas' | 'areas' | 'pasillos' | 'racks' | 'numeros' | 'columnas' | 'tabiques' | 'portones' | 'textos' | 'simbolos' | 'cotasPropias'
 
 /** Pasos del cotizador de depósitos: primero el lugar, después el rack y su distribución. */
 export const FLOW = ['deposito', 'rack', 'carga', 'distribucion', 'accesorios', 'resumen'] as const
@@ -83,6 +86,15 @@ interface PlanState {
   setDraft(d: PlanPoint[]): void
   setSnap(v: boolean): void
   setSnapStep(v: number): void
+  /** Imán a objetos: el clic se pega a esquinas, puntas, medios y centros. */
+  osnap: boolean
+  setOsnap(v: boolean): void
+  /** Capas apagadas. */
+  hidden: Partial<Record<PlanLayer, boolean>>
+  toggleLayer(l: PlanLayer): void
+  /** Símbolo que pone la herramienta Símbolos. */
+  symbolKind: SymbolKind
+  setSymbolKind(k: SymbolKind): void
   /** Modo "elegir varios": tocar un rack lo suma a la selección (como Shift + clic). */
   multi: boolean
   setMulti(v: boolean): void
@@ -127,6 +139,12 @@ export const usePlan = create<PlanState>()(
       setDraft: (draft) => set({ draft }),
       setSnap: (snap) => set({ snap }),
       setSnapStep: (snapStep) => set({ snapStep }),
+      osnap: true,
+      setOsnap: (osnap) => set({ osnap }),
+      hidden: {},
+      toggleLayer: (l) => set((s) => ({ hidden: { ...s.hidden, [l]: !s.hidden[l] } })),
+      symbolKind: 'matafuego',
+      setSymbolKind: (symbolKind) => set({ symbolKind, tool: 'symbol', draft: [] }),
       multi: false,
       setMulti: (multi) => set({ multi }),
       setShowCotas: (showCotas) => set({ showCotas }),
@@ -148,7 +166,7 @@ export const usePlan = create<PlanState>()(
         return out as PlanState
       },
       storage: createJSONStorage(() => safeStorage),
-      partialize: (s) => ({ plan: s.plan, snap: s.snap, snapStep: s.snapStep, showCotas: s.showCotas, workspace: s.workspace, view3d: s.view3d, flowStep: s.flowStep, layout: s.layout }),
+      partialize: (s) => ({ plan: s.plan, snap: s.snap, snapStep: s.snapStep, osnap: s.osnap, hidden: s.hidden, showCotas: s.showCotas, workspace: s.workspace, view3d: s.view3d, flowStep: s.flowStep, layout: s.layout }),
       // estados guardados antes de la distribución no tienen estas opciones
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<PlanState>

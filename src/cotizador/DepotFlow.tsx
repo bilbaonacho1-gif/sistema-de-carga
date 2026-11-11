@@ -23,6 +23,8 @@ import { Viewport, Warnings } from '../web/pages/designer/CotizadorView'
 import { useDesigner } from '../web/pages/designer/designerStore'
 import { MarkTools, PlanDepotData, PlanToolbar, Selection } from '../web/plan/PlanPanel'
 import { DockPanel, useAnyDocked, useDock } from '../web/components/dock'
+import { CalcoPanel, ChecksPanel, ExportPanel, LayersPanel } from '../web/plan/PlanModules'
+import { planChecks } from '../shared/plan/checks'
 import { FLOW, usePlan, type FlowStep } from '../web/plan/planStore'
 import { MultiRackEditor, PlanStage, RackEditor } from '../web/plan/PlanWorkspace'
 import { metros, metrosNum } from '../shared/units'
@@ -71,6 +73,28 @@ export function DepotFlow({ onQuote }: { onQuote(): void }) {
   const editing = !rackView && !!selection && ((selection.kind !== 'rack' && selection.kind !== 'racks') || !!rackLayer)
   const defaults = { height: config.height, levels: config.levels }
   const area = planArea(plan.outline)
+  // revisión del plano (sólo con racks a la vista se revisan los racks)
+  const layoutOpts = usePlan((s) => s.layout)
+  const checks = useMemo(() => planChecks(plan, {
+    racks: showRacks ? depot.racks.map((r) => ({ placement: r.placement, height: r.structure.config.height })) : [],
+    issues: showRacks ? depot.issues : {},
+    aisle: layoutOpts.aisle,
+  }), [plan, depot, showRacks, layoutOpts.aisle])
+  // datos del rótulo de la lámina
+  const sheet = {
+    title: 'Plano de depósito · rack selectivo',
+    rows: [
+      ['Fecha', new Date().toLocaleDateString('es-AR')],
+      ['Superficie', `${fmt(Math.round(area))} m²`],
+      ['Posiciones de pallet', fmt(depot.positions)],
+      ['Filas de rack', fmt(depot.layout.rows)],
+      ['Módulos', fmt(depot.layout.modules)],
+      ['Rack', `${metrosNum(depot.sample.config.width)} × ${metrosNum(depot.sample.config.depth)} × ${metros(depot.sample.config.height)}`],
+      ['Capacidad estimada', kg(depot.capacity)],
+      ['Pasillos', metros(layoutOpts.aisle)],
+    ] as [string, string][],
+    note: 'Simulación de referencia: no reemplaza el cálculo estructural. Medidas en metros.',
+  }
   // módulos del panel en este paso (como en Photoshop: cada uno se achica o se saca por separado)
   const modules = MODULES[flowStep]
   const ids = ['pasos', ...(editing ? ['editar'] : []), ...modules.map((m) => m.id)]
@@ -92,10 +116,14 @@ export function DepotFlow({ onQuote }: { onQuote(): void }) {
           </DockPanel>
         )}
         {modules.map((m) => (
-          <DockPanel key={m.id} id={m.id} title={m.title}>
+          <DockPanel key={m.id} id={m.id} title={m.title} defaultCollapsed={m.collapsed}>
             {m.id === 'herramientas' && <div className="plan-panel"><PlanToolbar showSelection={false} /></div>}
             {m.id === 'deposito-datos' && <div className="plan-panel"><PlanDepotData /></div>}
             {m.id === 'marcar' && <MarkTools />}
+            {m.id === 'capas' && <LayersPanel />}
+            {m.id === 'calco' && <CalcoPanel />}
+            {m.id === 'revision' && <ChecksPanel checks={checks} />}
+            {m.id === 'exportar' && <ExportPanel racks={showRacks ? depot.layout.placements : []} size={size} sheet={sheet} />}
             {m.id === 'paso' && <>
               <StepBody step={flowStep} depot={depot} preview={preview} onQuote={onQuote} />
               {rackView && <Warnings warnings={preview.warnings.filter((w) => w.code !== 'free-positions')} />}
@@ -121,13 +149,21 @@ export function DepotFlow({ onQuote }: { onQuote(): void }) {
 }
 
 /** Los módulos de cada paso (además de "Pasos" y, si hay algo elegido, "Editando"). */
-const MODULES: Record<FlowStep, { id: string; title: string }[]> = {
-  deposito: [{ id: 'herramientas', title: 'Herramientas' }, { id: 'deposito-datos', title: 'Datos del depósito' }],
+const MODULES: Record<FlowStep, { id: string; title: string; collapsed?: boolean }[]> = {
+  deposito: [
+    { id: 'herramientas', title: 'Herramientas' }, { id: 'deposito-datos', title: 'Datos del depósito' },
+    { id: 'calco', title: 'Calcar un plano', collapsed: true }, { id: 'capas', title: 'Capas', collapsed: true },
+    { id: 'revision', title: 'Revisión del plano' }, { id: 'exportar', title: 'Exportar', collapsed: true },
+  ],
   rack: [{ id: 'paso', title: 'El rack' }],
   carga: [{ id: 'paso', title: 'Pallet y carga' }],
-  distribucion: [{ id: 'marcar', title: 'Dónde van los racks' }, { id: 'paso', title: 'Distribución' }],
+  distribucion: [
+    { id: 'marcar', title: 'Dónde van los racks' }, { id: 'paso', title: 'Distribución' },
+    { id: 'herramientas', title: 'Herramientas', collapsed: true }, { id: 'capas', title: 'Capas', collapsed: true },
+    { id: 'revision', title: 'Revisión del plano' }, { id: 'exportar', title: 'Exportar', collapsed: true },
+  ],
   accesorios: [{ id: 'paso', title: 'Accesorios' }],
-  resumen: [{ id: 'paso', title: 'Resumen y materiales' }],
+  resumen: [{ id: 'paso', title: 'Resumen y materiales' }, { id: 'revision', title: 'Revisión del plano' }, { id: 'exportar', title: 'Exportar' }],
 }
 
 /* ------------------------------ Pasos ------------------------------ */

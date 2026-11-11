@@ -2,15 +2,16 @@
  * Panel izquierdo del depósito: herramientas con su instructivo, arranque rápido,
  * grilla de columnas y las medidas de lo que esté seleccionado.
  */
-import { Box, Circle, DoorOpen, Footprints, Grid3x3, LayoutGrid, MousePointer2, PenLine, Redo2, RotateCcw, RotateCw, Square, Trash2, Undo2, Minus as WallIcon, type LucideIcon } from 'lucide-react'
+import { Box, Circle, DoorOpen, Footprints, Grid3x3, LayoutGrid, Minus as WallIcon, MousePointer2, MoveHorizontal, PenLine, Redo2, RotateCcw, RotateCw, Ruler, Shapes, Square, Trash2, Type, Undo2, type LucideIcon } from 'lucide-react'
 import { useState } from 'react'
 import { columnGrid, itemsOutside, removeItem, removeOutside, removeVertex, rotateAisle, setEdgeLength, setSag, splitEdge, updateRect } from '../../shared/plan/edit'
 import { arcOf, edgeLength, edges, planArea, planPerimeter, rectanglePlan } from '../../shared/plan/geometry'
 import type { Plan } from '../../shared/plan/types'
 import { NumberStepper } from '../components/fields'
-import { Button, Field, Input, KeyValue, Segmented } from '../components/ui'
+import { Button, Field, Input, KeyValue, Segmented, Select } from '../components/ui'
 import { fmt } from '../lib/format'
 import { usePlan, type PlanTool } from './planStore'
+import { SYMBOLS, SYMBOL_KINDS } from './PlanAnnotations'
 import { metros } from '../../shared/units'
 
 export const TOOLS: { id: PlanTool; label: string; icon: LucideIcon; help: string }[] = [
@@ -23,6 +24,15 @@ export const TOOLS: { id: PlanTool; label: string; icon: LucideIcon; help: strin
   { id: 'area', label: 'Zona de racks', icon: LayoutGrid, help: 'Arrastrá un rectángulo donde querés los racks: se llenan solos con filas y pasillos. Podés marcar varias zonas, cada una con filas horizontales o verticales. Si no marcás ninguna, se usa todo el depósito.' },
   { id: 'aisle', label: 'Pasillo', icon: Footprints, help: 'Arrastrá de punta a punta por donde pasa el pasillo (sale con el ancho de pasillo elegido) o marcá un rectángulo. Un clic solo hace un pasillo de lado a lado. Ahí no van racks: las filas se acomodan a cada lado o se cortan.' },
 ]
+
+/** Herramientas para medir y anotar el plano (como en AutoCAD). */
+export const NOTE_TOOLS: { id: PlanTool; label: string; icon: LucideIcon; help: string }[] = [
+  { id: 'measure', label: 'Medir', icon: Ruler, help: 'Clic en un punto y clic en el otro: te dice la distancia, y cuánto es en horizontal y en vertical. No queda dibujado. El clic se pega a esquinas, puntas y centros (cuadradito naranja).' },
+  { id: 'dim', label: 'Cota', icon: MoveHorizontal, help: 'Clic en un extremo y clic en el otro: queda una cota dibujada con su medida. Después la podés correr, borrar o cambiarle la separación.' },
+  { id: 'text', label: 'Texto', icon: Type, help: 'Clic donde va el texto, escribilo y Enter. Sirve para nombrar sectores (Oficina, Expedición, Recepción…).' },
+  { id: 'symbol', label: 'Símbolo', icon: Shapes, help: 'Elegí el símbolo de abajo y hacé clic donde va cada uno: matafuegos, salidas de emergencia, baños, tablero, carga de autoelevadores…' },
+]
+const CALIBRATE = { id: 'calibrate' as PlanTool, label: 'Escala del fondo', icon: Ruler, help: 'Clic en dos puntos de una medida que conozcas del plano de fondo y escribí cuánto mide en la realidad.' }
 
 /** El panel del depósito completo (con su marco). */
 export function PlanPanel() {
@@ -43,8 +53,8 @@ export function PlanTools({ showSelection = true }: { showSelection?: boolean } 
 
 /** Herramientas de dibujo, su instructivo, deshacer, imán y cotas. */
 export function PlanToolbar({ showSelection = true }: { showSelection?: boolean } = {}) {
-  const { tool, setTool, plan, undo, redo, past, future, snap, setSnap, snapStep, setSnapStep, showCotas, setShowCotas } = usePlan()
-  const current = TOOLS.find((t) => t.id === tool)!
+  const { tool, setTool, plan, undo, redo, past, future, snap, setSnap, snapStep, setSnapStep, showCotas, setShowCotas, osnap, setOsnap, symbolKind, setSymbolKind } = usePlan()
+  const current = [...TOOLS, ...NOTE_TOOLS].find((t) => t.id === tool) ?? CALIBRATE
   return (
     <>
       <div className="plan-tools" role="toolbar" aria-label="Herramientas">
@@ -54,6 +64,27 @@ export function PlanToolbar({ showSelection = true }: { showSelection?: boolean 
           </button>
         ))}
       </div>
+      <span className="plan-tools__k">Medir y anotar</span>
+      <div className="plan-tools" role="toolbar" aria-label="Medir y anotar">
+        {NOTE_TOOLS.map((t) => (
+          <button key={t.id} type="button" className={`plan-tool${tool === t.id ? ' is-active' : ''}`} aria-pressed={tool === t.id} onClick={() => setTool(t.id)} title={t.label}>
+            <t.icon size={18} aria-hidden /><span>{t.label}</span>
+          </button>
+        ))}
+      </div>
+      {tool === 'symbol' && (
+        <div className="symbol-pick" role="radiogroup" aria-label="Qué símbolo poner">
+          {SYMBOL_KINDS.map((k) => {
+            const d = SYMBOLS[k]
+            return (
+              <button key={k} type="button" role="radio" aria-checked={symbolKind === k} className={`symbol-pick__b${symbolKind === k ? ' is-active' : ''}`}
+                onClick={() => setSymbolKind(k)} title={d.label} style={{ color: d.color }}>
+                <d.icon size={18} aria-hidden /><span>{d.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
       <p className="cot-help"><current.icon size={16} aria-hidden /><span>{current.help}</span></p>
       <div className="plan-history">
         <Button size="sm" variant="ghost" icon={Undo2} onClick={undo} disabled={!past.length}>Deshacer</Button>
@@ -68,6 +99,7 @@ export function PlanToolbar({ showSelection = true }: { showSelection?: boolean 
               <option value={0}>Sin imán</option>
             </select>
           </label>
+          <label className="plan-snap" title="El clic se pega a esquinas, puntas, medios y centros de lo que ya está dibujado"><input type="checkbox" checked={osnap} onChange={(e) => setOsnap(e.target.checked)} /> Imán a objetos</label>
           <label className="plan-snap"><input type="checkbox" checked={showCotas} onChange={(e) => setShowCotas(e.target.checked)} /> Cotas</label>
         </span>
       </div>
@@ -278,6 +310,60 @@ export function Selection() {
         </div>
         <Button size="sm" variant="ghost" icon={vertical ? RotateCcw : RotateCw} onClick={() => commit((pl) => rotateAisle(pl, a.id))}>Girar 90°</Button>
         <Button size="sm" variant="ghost" icon={Trash2} onClick={() => del((pl) => removeItem(pl, 'aisle', a.id))}>Quitar pasillo</Button>
+      </div>
+    )
+  }
+
+  if (selection.kind === 'text') {
+    const t = plan.texts?.find((x) => x.id === selection.id)
+    if (!t) return null
+    const upd = (patch: Partial<typeof t>) => commit((pl) => ({ ...pl, texts: pl.texts?.map((x) => (x.id === t.id ? { ...x, ...patch } : x)) }))
+    return (
+      <div className="plan-sel">
+        <h2 className="section-label">Texto</h2>
+        <Field label="Qué dice">{(id) => <Input id={id} value={t.text} onChange={(e) => upd({ text: e.target.value })} />}</Field>
+        <NumberStepper label="Alto de la letra" meters value={t.size} min={100} max={5000} step={100} typedStep={10} onChange={(size) => upd({ size })} />
+        <div className="plan-xy">
+          <NumberStepper label="X" meters value={t.x} min={-500_000} max={500_000} step={1000} typedStep={10} onChange={(x) => upd({ x })} />
+          <NumberStepper label="Y" meters value={t.y} min={-500_000} max={500_000} step={1000} typedStep={10} onChange={(y) => upd({ y })} />
+        </div>
+        <Button size="sm" variant="ghost" icon={Trash2} onClick={() => del((pl) => removeItem(pl, 'text', t.id))}>Quitar texto</Button>
+      </div>
+    )
+  }
+
+  if (selection.kind === 'symbol') {
+    const sy = plan.symbols?.find((x) => x.id === selection.id)
+    if (!sy) return null
+    const upd = (patch: Partial<typeof sy>) => commit((pl) => ({ ...pl, symbols: pl.symbols?.map((x) => (x.id === sy.id ? { ...x, ...patch } : x)) }))
+    return (
+      <div className="plan-sel">
+        <h2 className="section-label">Símbolo</h2>
+        <Field label="Qué es">{(id) => (
+          <Select id={id} value={sy.kind} onChange={(e) => upd({ kind: e.target.value as typeof sy.kind })}>
+            {SYMBOL_KINDS.map((k) => <option key={k} value={k}>{SYMBOLS[k].label}</option>)}
+          </Select>
+        )}</Field>
+        <div className="plan-xy">
+          <NumberStepper label="X" meters value={sy.x} min={-500_000} max={500_000} step={1000} typedStep={10} onChange={(x) => upd({ x })} />
+          <NumberStepper label="Y" meters value={sy.y} min={-500_000} max={500_000} step={1000} typedStep={10} onChange={(y) => upd({ y })} />
+        </div>
+        <Button size="sm" variant="ghost" icon={Trash2} onClick={() => del((pl) => removeItem(pl, 'symbol', sy.id))}>Quitar símbolo</Button>
+      </div>
+    )
+  }
+
+  if (selection.kind === 'dim') {
+    const d = plan.dims?.find((x) => x.id === selection.id)
+    if (!d) return null
+    const L = Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y)
+    return (
+      <div className="plan-sel">
+        <h2 className="section-label">Cota · {metros(L)}</h2>
+        <NumberStepper label="Separación de la línea" meters value={d.offset} min={-50_000} max={50_000} step={500} typedStep={10}
+          onChange={(offset) => commit((pl) => ({ ...pl, dims: pl.dims?.map((x) => (x.id === d.id ? { ...x, offset } : x)) }))}
+          hint="Corre la línea de la cota hacia un lado o el otro (con signo menos, al otro lado)." />
+        <Button size="sm" variant="ghost" icon={Trash2} onClick={() => del((pl) => removeItem(pl, 'dim', d.id))}>Quitar cota</Button>
       </div>
     )
   }
