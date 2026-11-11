@@ -16,6 +16,7 @@ import {
 } from './geometry/parts'
 import { uprightGeometry } from './geometry/upright'
 import { MATERIALS, m } from './materials'
+import { useDesigner } from '../pages/designer/designerStore'
 import { loadOf, stackBoxes } from '../../shared/rack/load'
 
 interface PrevCounts { rows: number; modules: number; levels: number }
@@ -183,9 +184,9 @@ function Module({ mod, structure, pallets, slots, isNew, delay, prevLevels }: {
     <Animated position={[m(mod.xStart), 0, 0]}>
       {/* las vigas crecen de izquierda a derecha cuando el módulo es nuevo */}
       <Animated position={[0, 0, 0]} appear={isNew ? 'grow-x' : 'none'} delay={delay} duration={0.5}>
-        {beamLevels.map((lv) => (
+        {beamLevels.map((lv, plane) => (
           <Animated key={lv.index} position={[0, m(lv.elevation), 0]} appear={mounting ? 'none' : 'drop'} delay={levelDelay(lv)}>
-            <BeamLevel structure={structure} mod={mod} />
+            <BeamLevel structure={structure} mod={mod} plane={plane} />
             {acc.decking !== 'none' && (
               <mesh material={acc.decking === 'wood' ? MATERIALS.wood : MATERIALS.mesh} position={[W / 2, m(VISUAL.deck.thickness) / 2, -D / 2]} receiveShadow>
                 <boxGeometry args={[W - 0.02, m(VISUAL.deck.thickness), D - 0.02]} />
@@ -231,7 +232,10 @@ function Module({ mod, structure, pallets, slots, isNew, delay, prevLevels }: {
 }
 
 /** Un plano de carga: viga frontal + viga trasera con sus 4 conectores. */
-function BeamLevel({ structure, mod }: { structure: RackStructure; mod: ModuleLayout }) {
+function BeamLevel({ structure, mod, plane }: { structure: RackStructure; mod: ModuleLayout; plane: number }) {
+  // tocar una viga la elige para editar su altura (se marca en amarillo)
+  const picked = useDesigner((s) => s.pickedBeam === plane)
+  const pick = (e: { stopPropagation(): void }) => { e.stopPropagation(); const st = useDesigner.getState(); st.pickBeam(st.pickedBeam === plane ? null : plane) }
   const { config, upright } = structure
   const beam = mod.beam
   const W = m(mod.width)
@@ -246,8 +250,9 @@ function BeamLevel({ structure, mod }: { structure: RackStructure; mod: ModuleLa
 
   return (
     <group>
-      <mesh geometry={geo} material={MATERIALS.red} position={[W / 2, -bh / 2, zFront]} scale={[W - 0.01, 1, 1]} castShadow />
-      <mesh geometry={geo} material={MATERIALS.red} position={[W / 2, -bh / 2, zBack]} scale={[W - 0.01, 1, 1]} castShadow />
+      <mesh geometry={geo} material={picked ? MATERIALS.yellow : MATERIALS.red} position={[W / 2, -bh / 2, zFront]} scale={[W - 0.01, 1, 1]} castShadow onClick={pick}
+        onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = 'pointer' }} onPointerOut={() => { document.body.style.cursor = '' }} />
+      <mesh geometry={geo} material={picked ? MATERIALS.yellow : MATERIALS.red} position={[W / 2, -bh / 2, zBack]} scale={[W - 0.01, 1, 1]} castShadow onClick={pick} />
       <mesh geometry={left} material={MATERIALS.painted} />
       <mesh geometry={right} material={MATERIALS.painted} position={[W, 0, 0]} />
       {/* atrás: la pieza del lado opuesto girada 180° */}

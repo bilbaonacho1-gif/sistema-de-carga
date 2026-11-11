@@ -18,7 +18,7 @@ import type { RackStructure } from '../shared/rack/types'
 import { NumberStepper, Switch } from '../web/components/fields'
 import { Button, Field, KeyValue, Segmented, Select } from '../web/components/ui'
 import { fmt, plural } from '../web/lib/format'
-import { AccessoriesStep, LoadStep, MaterialsList, downloadMaterials } from '../web/pages/designer/CotizadorPanel'
+import { AccessoriesStep, BeamHeights, LoadStep, MaterialsList, downloadMaterials } from '../web/pages/designer/CotizadorPanel'
 import { Viewport, Warnings } from '../web/pages/designer/CotizadorView'
 import { useDesigner } from '../web/pages/designer/designerStore'
 import { MarkTools, PlanDepotData, PlanToolbar, Selection } from '../web/plan/PlanPanel'
@@ -241,6 +241,7 @@ function RackStep({ s }: { s: RackStructure }) {
       <Switch label="Usar el piso como primer nivel" checked={config.floorStorage}
         onChange={(floorStorage) => update({ floorStorage, levels: Math.max(config.levels, floorStorage ? 2 : 1) })}
         hint={`${plural(s.beamLevels, 'plano', 'planos')} de vigas`} />
+      <BeamHeights s={s} />
       <details className="plan-more">
         <summary>Parante y viga</summary>
         <Field label="Parante" hint={autoUpright ? `Automático: ${s.upright.name}.` : undefined}>{(id) => (

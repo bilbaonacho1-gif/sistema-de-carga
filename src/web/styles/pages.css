@@ -677,3 +677,6 @@
 .load-diagram { display: flex; align-items: flex-end; justify-content: center; gap: 22px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: #fbfaf8; }
 .load-diagram figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .load-diagram figcaption { font: 600 11px var(--f-body); color: var(--ink-2); text-transform: uppercase; letter-spacing: .06em; }
+.beam-heights { display: flex; flex-direction: column; gap: 6px; }
+.beam-heights__row { padding: 6px 8px; border-radius: 8px; border: 1px solid transparent; }
+.beam-heights__row.is-picked { border-color: #e0a100; background: #fff8dc; }

@@ -4,6 +4,7 @@
  *  - Ver todo: todas las opciones juntas, para quien ya sabe qué quiere.
  * Cada cambio rearma la estructura y el 3D al instante.
  */
+import { useEffect } from 'react'
 import { Calculator, ChevronLeft, ChevronRight, Copy, Download, Lightbulb, Plus, Trash2, Warehouse } from 'lucide-react'
 import { PRODUCT_TYPES, type ProductGroup } from '../../../shared/catalog'
 import { materialsTotal } from '../../../shared/rack/bom'
@@ -214,6 +215,45 @@ export function LoadStep({ s }: { s: RackStructure }) {
           options={[{ value: 'auto', label: 'Auto' }, ...[1, 2, 3, 4].map((n) => ({ value: String(n), label: String(n) }))]} />
       )}</Field>
     </div>
+  )
+}
+
+/* ------------------------------ Altura de cada viga ------------------------------ */
+
+/**
+ * Edición fina: la altura de cada plano de vigas (desde el piso), uno por uno. Tocando una viga en
+ * el 3D se elige acá. "Repartir parejas" vuelve a la distribución automática.
+ */
+export function BeamHeights({ s }: { s: RackStructure }) {
+  const { config, update, pickedBeam, pickBeam } = useDesigner()
+  const levels = s.rows[0]?.modules[0]?.levels ?? []
+  const beams = levels.filter((l) => l.hasBeam)
+  const custom = !!config.beamElevations && config.beamElevations.length === beams.length
+  // al tocar una viga en el 3D, su campo queda a la vista
+  useEffect(() => { if (pickedBeam !== null) document.querySelector('.beam-heights__row.is-picked')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }) }, [pickedBeam])
+  const setAt = (i: number, v: number) => {
+    const arr = beams.map((b) => b.elevation)
+    arr[i] = v
+    // las de arriba no pueden quedar por debajo: se corren lo justo
+    for (let k = i + 1; k < arr.length; k++) arr[k] = Math.max(arr[k], arr[k - 1] + 200)
+    update({ beamElevations: arr })
+  }
+  return (
+    <details className="plan-more beam-heights" open={pickedBeam !== null || custom}>
+      <summary>Altura de cada viga{custom ? ' (a mano)' : ''}</summary>
+      <p className="muted small">De abajo hacia arriba, medida desde el piso hasta la viga. También podés tocar una viga en el 3D.</p>
+      {beams.map((b, i) => {
+        const lv = levels[b.index]
+        return (
+          <div key={b.index} className={`beam-heights__row${pickedBeam === i ? ' is-picked' : ''}`} onFocusCapture={() => pickBeam(i)}>
+            <NumberStepper label={`Viga ${i + 1}${i === beams.length - 1 ? ' (la de arriba)' : ''}`} meters value={b.elevation} min={50} max={s.config.height} step={50} typedStep={50}
+              onChange={(v) => setAt(i, v)}
+              hint={Number.isFinite(lv.clearHeight) ? `Libre hasta la viga de arriba: ${metros(lv.clearHeight)}` : undefined} />
+          </div>
+        )
+      })}
+      {custom && <Button size="sm" variant="ghost" onClick={() => { update({ beamElevations: undefined }); pickBeam(null) }}>Repartir parejas otra vez</Button>}
+    </details>
   )
 }
 

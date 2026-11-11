@@ -110,6 +110,7 @@ export function resolvePallet(config: RackConfiguration, catalog: Catalog = defa
 /** Cotas de los niveles: el piso (si se usa) y un plano de vigas por cada nivel restante. */
 function computeLevels(
   height: number, storageLevels: number, floorStorage: boolean, pallet: PalletType, beamHeight: number,
+  custom?: number[],
 ): { levels: LevelLayout[]; tight: boolean } {
   const R = DESIGN_RULES
   const beamLevels = floorStorage ? storageLevels - 1 : storageLevels
@@ -123,6 +124,19 @@ function computeLevels(
     const first = R.firstBeamWithoutFloor
     const pitch = beamLevels > 1 ? (topBeam - first) / (beamLevels - 1) : 0
     for (let i = 0; i < beamLevels; i++) beamElevations.push(snap(first + i * pitch, R.holePitch))
+  }
+
+  // alturas de viga elegidas a mano (una por plano de vigas): se acomodan al paso de los agujeros,
+  // quedan entre el piso y el tope del parante y nunca una debajo de la anterior
+  if (custom && custom.length === beamLevels) {
+    let prev = 0
+    for (let i = 0; i < beamLevels; i++) {
+      const v = Number(custom[i])
+      if (!Number.isFinite(v) || v <= 0) continue
+      const minV = prev + beamHeight + R.holePitch
+      beamElevations[i] = clamp(snap(v, R.holePitch), Math.max(R.holePitch, minV), topBeam)
+      prev = beamElevations[i]
+    }
   }
 
   const supports = floorStorage ? [0, ...beamElevations] : beamElevations
@@ -206,7 +220,7 @@ export function calculateRackStructure(
     } else {
       ({ beam, capacity: beamCapacity, ok: beamOk } = rules.selectBeam(catalog.beams, sec.width, levelLoad))
     }
-    const { levels, tight } = computeLevels(sec.height, sec.levels, config.floorStorage, pallet, beam.height)
+    const { levels, tight } = computeLevels(sec.height, sec.levels, config.floorStorage, pallet, beam.height, config.beamElevations)
     if (tight) warn({ code: 'clearance', level: 'warning', message: `${label(index)}la altura libre entre niveles es insuficiente para el pallet y la carga. Reducí la cantidad de niveles o aumentá la altura.` })
     if (!beamOk) {
       warn({

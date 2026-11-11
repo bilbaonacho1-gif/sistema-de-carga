@@ -43,6 +43,9 @@ interface DesignerState {
   setView(v: CameraPreset): void
   releaseView(): void
   toggleDimensions(): void
+  /** Plano de vigas tocado en el 3D (0 = el de más abajo), para editar su altura. */
+  pickedBeam: number | null
+  pickBeam(i: number | null): void
 }
 
 const withSections = (c: RackConfiguration, fn: (s: RackSection[]) => RackSection[]): RackConfiguration =>
@@ -58,6 +61,8 @@ export const useDesigner = create<DesignerState>()(
       showDimensions: true,
       view: 'iso',
       viewRequest: 0,
+      pickedBeam: null,
+      pickBeam: (pickedBeam) => set({ pickedBeam }),
       update: (patch) => set((s) => ({ config: { ...s.config, ...patch } })),
       updateLayout: (patch) => set((s) => ({ config: { ...s.config, layout: { ...s.config.layout, ...patch } } })),
       updateAccessories: (patch) => set((s) => ({ config: { ...s.config, accessories: { ...DEFAULT_ACCESSORIES, ...s.config.accessories, ...patch } } })),
