@@ -27,6 +27,8 @@ import { scaleCalco, useCalco } from './calco'
 import { nearestSnap, snapPoints, type SnapPoint } from '../../shared/plan/snap'
 import { copySelection, moveSelection, pasteClip, type Clip } from '../../shared/plan/clipboard'
 import { clearances, snapRack, type Guide } from '../../shared/plan/guides'
+import { resizeRect, type Side } from '../../shared/plan/transform'
+import { ObjectBar, patchRect, type RectKind } from './ObjectBar'
 import { fitPlacement } from '../../shared/plan/racks'
 import { outlinePolygon } from '../../shared/plan/geometry'
 import { placementRect } from '../../shared/plan/layout'
@@ -41,6 +43,7 @@ type Drag =
   | { type: 'anno'; kind: 'text' | 'symbol' | 'dim'; id: string; start: PlanPoint; started: boolean }
   | { type: 'calco'; start: PlanPoint; x: number; y: number }
   | { type: 'rackdraw'; a: PlanPoint }
+  | { type: 'rside'; kind: RectKind; id: string; sides: Side[]; started: boolean }
   | { type: 'vertex'; index: number; started: boolean }
   | { type: 'sag'; index: number; started: boolean }
   | { type: 'column' | 'zone'; id: string; dx: number; dy: number; started: boolean }
@@ -528,6 +531,11 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         live((pl) => updateRect(pl, kind, id, () => ({ x: sn(raw.x - dx, e.altKey), y: sn(raw.y - dy, e.altKey) })))
         break
       }
+      case 'rside': {
+        const { kind, id, sides } = d
+        live((pl) => patchRect(pl, kind, id, (r) => resizeRect(r, sides, p)))
+        break
+      }
       case 'resize': {
         const id = d.id, kind = d.kind
         live((pl) => updateRect(pl, kind, id, (r) => ({ w: Math.max(500, p.x - r.x), d: Math.max(500, p.y - r.y) })))
@@ -799,14 +807,25 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
           return label(at, meters(edgeLength(e)), `el${e.index}`)
         })}
 
-        {/* manija para cambiar el tamaño de la zona de racks o el pasillo elegido */}
-        {tool === 'select' && (selection?.kind === 'area' || selection?.kind === 'aisle') && (() => {
+        {/* manijas en los 4 lados y las 4 esquinas de la zona o el pasillo elegido: se estira desde cualquiera */}
+        {tool === 'select' && (selection?.kind === 'area' || selection?.kind === 'aisle' || selection?.kind === 'zone') && (() => {
           const kind = selection.kind
-          const r = kind === 'area' ? plan.rackAreas?.find((x) => x.id === selection.id) : plan.aisles?.find((x) => x.id === selection.id)
+          const r = kind === 'area' ? plan.rackAreas?.find((x) => x.id === selection.id) : kind === 'aisle' ? plan.aisles?.find((x) => x.id === selection.id) : plan.zones.find((x) => x.id === selection.id)
           if (!r) return null
+          const color = kind === 'area' ? BLUE : kind === 'aisle' ? '#8a6500' : RED
+          const hs: { sides: Side[]; x: number; y: number; cur: string }[] = [
+            { sides: ['l', 't'], x: r.x, y: r.y, cur: 'nwse-resize' }, { sides: ['t'], x: r.x + r.w / 2, y: r.y, cur: 'ns-resize' },
+            { sides: ['r', 't'], x: r.x + r.w, y: r.y, cur: 'nesw-resize' }, { sides: ['r'], x: r.x + r.w, y: r.y + r.d / 2, cur: 'ew-resize' },
+            { sides: ['r', 'b'], x: r.x + r.w, y: r.y + r.d, cur: 'nwse-resize' }, { sides: ['b'], x: r.x + r.w / 2, y: r.y + r.d, cur: 'ns-resize' },
+            { sides: ['l', 'b'], x: r.x, y: r.y + r.d, cur: 'nesw-resize' }, { sides: ['l'], x: r.x, y: r.y + r.d / 2, cur: 'ew-resize' },
+          ]
           return (
-            <rect className="no-export" x={r.x + r.w - px(7)} y={r.y + r.d - px(7)} width={px(14)} height={px(14)} rx={px(3)} fill="#fff" stroke={kind === 'area' ? BLUE : '#8a6500'} strokeWidth={px(2.5)}
-              style={{ cursor: 'nwse-resize' }} onPointerDown={(e) => startDrag(e, { type: 'resize', kind, id: r.id, started: false })} />
+            <g className="no-export">
+              {hs.map((h, i) => (
+                <rect key={i} x={h.x - px(6)} y={h.y - px(6)} width={px(12)} height={px(12)} rx={px(2.5)} fill="#fff" stroke={color} strokeWidth={px(2.2)}
+                  style={{ cursor: h.cur }} onPointerDown={(e) => startDrag(e, { type: 'rside', kind, id: r.id, sides: h.sides, started: false })} />
+              ))}
+            </g>
           )
         })()}
 
@@ -966,6 +985,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
           <small>m · Enter</small>
         </div>
       )}
+      {tool === 'select' && <ObjectBar vb={vb} size={size} layer={rackLayer} onFit={fit} />}
       <div className="zoom-btns" role="group" aria-label="Zoom">
         <button type="button" onClick={() => zoomBy(1 / 1.5)} aria-label="Acercar" title="Acercar">+</button>
         <button type="button" onClick={() => zoomBy(1.5)} aria-label="Alejar" title="Alejar">−</button>

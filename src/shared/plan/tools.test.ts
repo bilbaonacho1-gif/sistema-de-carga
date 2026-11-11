@@ -96,3 +96,28 @@ describe('guías para ubicar racks', () => {
     expect(v).toEqual([3000, 5000, 5000, 25_000])
   })
 })
+
+describe('girar, agrandar y achicar', () => {
+  it('pasillo: girar sobre su centro, +/- sin moverse y estirar desde un lado', async () => {
+    const { rotateRect, growRect, resizeRect, fitToDepot } = await import('./transform')
+    const a = { id: 'p', x: 0, y: 10_000, w: 40_000, d: 3000 }
+    expect(rotateRect(a)).toEqual({ id: 'p', x: 18_500, y: -8500, w: 3000, d: 40_000 })
+    expect(growRect(a, 'd', 1000)).toMatchObject({ y: 9500, d: 4000 })
+    expect(growRect(a, 'd', -10_000)).toMatchObject({ d: 500 })
+    expect(resizeRect(a, ['l'], { x: 5000, y: 0 })).toMatchObject({ x: 5000, w: 35_000 })
+    expect(fitToDepot(rectanglePlan(30_000, 20_000), a)).toMatchObject({ x: 0, w: 30_000 })
+  })
+
+  it('girar el depósito entero: el rectángulo de 40 × 20 pasa a 20 × 40 y lo de adentro gira con él', async () => {
+    const { rotatePlan } = await import('./transform')
+    const plan = { ...rectanglePlan(40_000, 20_000), zones: [{ id: 'z', x: 0, y: 0, w: 10_000, d: 5000, name: 'Oficina' }], racks: [rack({ x: 2000, y: 2000 })] }
+    const r = rotatePlan(plan)
+    const xs = r.outline.points.map((p) => p.x), ys = r.outline.points.map((p) => p.y)
+    expect(Math.max(...xs) - Math.min(...xs)).toBe(20_000)
+    expect(Math.max(...ys) - Math.min(...ys)).toBe(40_000)
+    expect(r.zones[0]).toMatchObject({ w: 5000, d: 10_000 })
+    expect(r.racks![0].orientation).toBe('y')
+    // cuatro giros: vuelve a como estaba
+    expect(rotatePlan(rotatePlan(rotatePlan(r))).outline.points).toEqual(plan.outline.points)
+  })
+})
