@@ -544,7 +544,7 @@
 .plan-more > summary { display: flex; align-items: center; gap: 6px; font-weight: 600; cursor: pointer; }
 .plan-more[open] > summary { margin-bottom: 10px; }
 .plan-more > * + * { margin-top: 10px; }
-.plan-stage { position: sticky; top: calc(var(--topbar) + 16px); align-self: start; display: flex; flex-direction: column; height: max(520px, calc(100dvh - var(--topbar) - 32px)); overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: #f6f7f8; }
+.plan-stage { position: sticky; top: calc(var(--topbar) + 16px); align-self: start; display: flex; flex-direction: column; height: max(420px, calc(100dvh - var(--topbar) - 40px)); overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: #f6f7f8; }
 .plan-stage__bar { display: flex; align-items: center; gap: 8px; padding: 8px; border-bottom: 1px solid var(--line); background: #fff; }
 .plan-stage__body { position: relative; flex: 1; min-height: 0; }
 .plan-editor { position: absolute; inset: 0; touch-action: none; user-select: none; }

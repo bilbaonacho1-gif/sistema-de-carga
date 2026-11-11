@@ -6,7 +6,7 @@
  * (materiales, presupuesto) sale del depósito completo.
  */
 import { AlertTriangle, Calculator, ChevronLeft, ChevronRight, Download, Lightbulb, Mail, PenLine, Phone, Plus, Trash2 } from 'lucide-react'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { buildDepot, moduleSize, type Depot } from '../shared/plan/depot'
 import { planArea } from '../shared/plan/geometry'
 import { placementRect } from '../shared/plan/layout'
@@ -61,6 +61,8 @@ export function useDepot(): { depot: Depot; preview: RackStructure } {
 
 export function DepotFlow({ onQuote }: { onQuote(): void }) {
   const { flowStep } = usePlan()
+  // al cambiar de paso se vuelven a ver todos los racks
+  useEffect(() => { usePlan.getState().setIsolate(null) }, [flowStep])
   const { depot, preview } = useDepot()
   const plan = usePlan((s) => s.plan)
   const config = useDesigner((s) => s.config)

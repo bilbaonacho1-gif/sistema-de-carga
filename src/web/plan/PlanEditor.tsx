@@ -123,7 +123,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
   /** Fila de racks que se está dibujando (de a hasta b). */
   const [rackDraft, setRackDraft] = useState<{ a: PlanPoint; b: PlanPoint } | null>(null)
   const rackDrawPair = usePlan((st) => st.rackDrawPair)
-  const { osnap, hidden, symbolKind, focusRack } = usePlan()
+  const { osnap, hidden, symbolKind, focusRack, isolate, setIsolate } = usePlan()
   const calco = useCalco((st) => st.calco)
   // al cambiar de herramienta se descarta lo que estaba a medio hacer
   useEffect(() => { setMeasure(null); setTwoPoint(null); setCalib(null); setHoverSnap(null) }, [tool])
@@ -164,6 +164,25 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
     return { x: cx - (v.w * f) / 2, y: cy - (v.h * f) / 2, w, h: v.h * f }
   })
   const fit = useCallback(() => setVb(fitView(usePlan.getState().plan, size.w / size.h)), [size.w, size.h])
+  // "ver solo este": separa los racks aislados del resto y acerca el plano a ellos
+  const iso = useMemo(() => {
+    if (!isolate || !rackLayer) return null
+    const ids = new Set(isolate)
+    const only = rackLayer.racks.filter((r) => ids.has(r.id))
+    return only.length ? { only, rest: rackLayer.racks.filter((r) => !ids.has(r.id)) } : null
+  }, [isolate, rackLayer])
+  const isoKey = isolate?.join(',') ?? ''
+  useEffect(() => {
+    if (!iso || !size.w) return
+    const bs = iso.only.map(placementRect)
+    const x0 = Math.min(...bs.map((b) => b.x)), y0 = Math.min(...bs.map((b) => b.y))
+    const x1 = Math.max(...bs.map((b) => b.x + b.w)), y1 = Math.max(...bs.map((b) => b.y + b.h))
+    const pad = Math.max(x1 - x0, y1 - y0) * 0.25 + 3000
+    let w = x1 - x0 + pad * 2, h = y1 - y0 + pad * 2
+    const aspect = size.w / size.h
+    if (w / h > aspect) h = w / aspect; else w = h * aspect
+    setVb({ x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - h / 2, w, h })
+  }, [isoKey, size.w, size.h]) // eslint-disable-line react-hooks/exhaustive-deps -- sólo al aislar
   useEffect(() => { fit() }, [fitRequest]) // eslint-disable-line react-hooks/exhaustive-deps -- encuadra al pedirlo
   // al exportar se pide encuadrar el plano entero
   useEffect(() => {
@@ -251,7 +270,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
       if (drawing && e.key === 'Enter' && typedRef.current) { e.preventDefault(); placeTyped(); return }
       if (e.key === 'Escape') {
         setTyped(''); setMeasure(null); setTwoPoint(null); setCalib(null)
-        if (s.draft.length) s.setDraft([]); else if (s.tool === 'calibrate' || s.tool === 'measure' || s.tool === 'dim' || s.tool === 'rackdraw') s.setTool('select'); else s.select(null)
+        if (s.draft.length) s.setDraft([]); else if (s.tool === 'calibrate' || s.tool === 'measure' || s.tool === 'dim' || s.tool === 'rackdraw') s.setTool('select'); else if (!s.selection && s.isolate) s.setIsolate(null); else s.select(null)
         return
       }
       // copiar, pegar, duplicar
@@ -721,7 +740,9 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         })}
 
         {/* racks ubicados */}
-        {rackLayer && !hidden.racks && <PlanRacks racks={rackLayer.racks} size={rackLayer.size} px={px} issues={rackLayer.issues} view={vb}
+        {/* "ver solo este": los demás racks quedan apagados y no se pueden tocar */}
+        {rackLayer && !hidden.racks && iso && <g opacity={0.18}><PlanRacks racks={iso.rest} size={rackLayer.size} px={px} view={vb} /></g>}
+        {rackLayer && !hidden.racks && <PlanRacks racks={iso ? iso.only : rackLayer.racks} size={rackLayer.size} px={px} issues={rackLayer.issues} view={vb}
           selected={selectedSet}
           onDown={tool === 'select' ? (e, r) => {
             const p = toPlan(e.clientX, e.clientY)
@@ -994,6 +1015,12 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         </div>
       )}
       {tool === 'select' && <ObjectBar vb={vb} size={size} layer={rackLayer} onFit={fit} />}
+      {iso && (
+        <div className="iso-pill" role="status">
+          <span>Viendo solo {iso.only.length === 1 ? 'este rack' : `estos ${iso.only.length} racks`}</span>
+          <button type="button" onClick={() => { setIsolate(null); fit() }}>Ver todos</button>
+        </div>
+      )}
       <div className="zoom-btns" role="group" aria-label="Zoom">
         <button type="button" onClick={() => zoomBy(1 / 1.5)} aria-label="Acercar" title="Acercar">+</button>
         <button type="button" onClick={() => zoomBy(1.5)} aria-label="Alejar" title="Alejar">−</button>

@@ -1,7 +1,7 @@
 /* Paneles por módulos (como en Photoshop): ver dock.tsx */
 /* panel del cotizador por módulos (como en Photoshop): en columna o sueltos donde uno quiera */
 .dock-col { position: sticky; top: calc(var(--topbar) + 12px); align-self: start; min-width: 0; }
-.dock-col__scroll { position: relative; display: flex; flex-direction: column; gap: 10px; max-height: calc(100dvh - var(--topbar) - 24px); overflow-y: auto; overscroll-behavior: contain; padding: 0 2px 2px 0; }
+.dock-col__scroll { position: relative; display: flex; flex-direction: column; gap: 10px; max-height: calc(100dvh - var(--topbar) - 40px); overflow-y: auto; overscroll-behavior: contain; padding: 0 2px 2px 0; }
 .dock { flex: none; display: flex; flex-direction: column; background: #fff; border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
 .dock__bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 6px; background: #fff; border-bottom: 1px solid var(--line-2); border-radius: 12px 12px 0 0; user-select: none; }
 .dock.is-collapsed .dock__bar { border-bottom: 0; border-radius: 12px; }

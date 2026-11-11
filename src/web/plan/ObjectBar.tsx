@@ -4,7 +4,7 @@
  * zonas de racks, pasillos, columnas, tabiques, textos, símbolos, cotas, racks y el depósito entero
  * (tocando una de sus paredes).
  */
-import { AlignStartHorizontal, AlignStartVertical, Copy, Maximize, Minus, Plus, RotateCw, Trash2 } from 'lucide-react'
+import { AlignStartHorizontal, AlignStartVertical, Copy, Focus, Maximize, Minus, Plus, RotateCw, SlidersHorizontal, Trash2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { removeItem, removeVertex, setTotal } from '../../shared/plan/edit'
 import { placementRect, type RackModuleSize } from '../../shared/plan/layout'
@@ -12,7 +12,20 @@ import { duplicateWithin, fitPlacement, freezeRacks, guarded, mapRacks, removeRa
 import { fitToDepot, growRect, growWall, rotatePlan, rotateRect, rotateWall, type Rect } from '../../shared/plan/transform'
 import type { Plan, RackPlacement } from '../../shared/plan/types'
 import { metros } from '../../shared/units'
+import { useDock } from '../components/dock'
 import { usePlan } from './planStore'
+
+/** Abre el panel "Editando" (si estaba achicado) y lo trae a la vista con un destello. */
+export function openEditor() {
+  useDock.getState().set('editar', { collapsed: false })
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const el = document.querySelector<HTMLElement>('[data-dock-id="editar"]') ?? document.querySelector<HTMLElement>('.rack-editor')
+    if (!el) return
+    el.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    el.classList.remove('is-flash'); void el.offsetWidth; el.classList.add('is-flash')
+    setTimeout(() => el.classList.remove('is-flash'), 1400)
+  }))
+}
 
 export type RectKind = 'zone' | 'area' | 'aisle'
 
@@ -43,8 +56,17 @@ const Step = ({ label, value, onMinus, onPlus, minusOff, plusOff }: { label: str
 )
 
 export function ObjectBar({ vb, size, layer, onFit }: Props) {
-  const { plan, selection, commit, select, layout } = usePlan()
+  const { plan, selection, commit, select, layout, isolate, setIsolate } = usePlan()
   if (!selection) return null
+  /** "Ver solo este / estos" (o volver a ver todos si ya se están viendo solos). */
+  const isoBtn = (ids: string[]) => {
+    const on = !!isolate && isolate.length === ids.length && ids.every((id) => isolate.includes(id))
+    const label = on ? 'Ver todos los racks' : ids.length === 1 ? 'Ver solo este rack' : `Ver solo estos ${ids.length}`
+    return <button type="button" className={`obar__t${on ? ' is-on' : ''}`} title={label} onClick={() => (on ? (setIsolate(null), onFit()) : setIsolate(ids))}>
+      <Focus size={14} aria-hidden /> {on ? 'Ver todos' : 'Ver solo'}
+    </button>
+  }
+  const editBtn = <button type="button" className="obar__t" title="Abrir todas sus medidas en el panel" onClick={openEditor}><SlidersHorizontal size={14} aria-hidden /> Editar</button>
   const del = (fn: (p: Plan) => Plan) => { commit(fn); select(null) }
   let box: { x: number; y: number; w: number; h: number } | null = null
   let body: ReactNode = null
@@ -142,6 +164,9 @@ export function ObjectBar({ vb, size, layer, onFit }: Props) {
         <Btn title="Duplicar al lado" onClick={() => { if (dup) { commit(() => dup.plan); select({ kind: 'rack', id: dup.id }) } }} disabled={!dup}><Copy size={15} aria-hidden /></Btn>
         <Btn title="Borrar" onClick={() => del(() => removeRacks(base, [r.id]))}><Trash2 size={15} aria-hidden /></Btn>
         <span className="obar__v obar__v--info">{metros(fitPlacement(r, layer.size).length)}</span>
+        <span className="obar__sep" aria-hidden />
+        {isoBtn([r.id])}
+        {editBtn}
       </>
       break
     }
@@ -174,6 +199,9 @@ export function ObjectBar({ vb, size, layer, onFit }: Props) {
         <Btn title="Alinear a la izquierda" onClick={() => align('x')}><AlignStartVertical size={15} aria-hidden /></Btn>
         <Btn title="Alinear arriba" onClick={() => align('y')}><AlignStartHorizontal size={15} aria-hidden /></Btn>
         <Btn title={`Borrar los ${rs.length}`} onClick={() => del(() => removeRacks(base, [...ids]))}><Trash2 size={15} aria-hidden /></Btn>
+        <span className="obar__sep" aria-hidden />
+        {isoBtn([...ids])}
+        {editBtn}
       </>
       break
     }
@@ -200,9 +228,11 @@ export function ObjectBar({ vb, size, layer, onFit }: Props) {
   const sx = ((box.x + box.w / 2 - vb.x) / vb.w) * size.w
   const top = ((box.y - vb.y) / vb.h) * size.h, bottom = ((box.y + box.h - vb.y) / vb.h) * size.h
   const y = top > 70 ? top - 14 : Math.min(size.h - 60, bottom + 14)
+  // media barra (las de racks son más largas), para que no se salga por los costados
+  const half = Math.min(size.w / 2, selection.kind === 'rack' || selection.kind === 'racks' ? 330 : 170)
   return (
     <div className={`obar${top > 70 ? '' : ' obar--below'}`} role="toolbar" aria-label="Acciones sobre lo elegido"
-      style={{ left: Math.max(170, Math.min(size.w - 170, sx)), top: Math.max(8, y) }}
+      style={{ left: Math.max(half, Math.min(size.w - half, sx)), top: Math.max(8, y) }}
       onPointerDown={(e) => e.stopPropagation()}>
       {body}
     </div>

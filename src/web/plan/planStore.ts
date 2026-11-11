@@ -95,6 +95,9 @@ interface PlanState {
   /** Entre varios racks elegidos, el que se está editando (se marca en el plano). */
   focusRack: string | null
   setFocusRack(id: string | null): void
+  /** "Ver solo este": racks que se miran aislados (los demás quedan apagados). */
+  isolate: string[] | null
+  setIsolate(ids: string[] | null): void
   /** Símbolo que pone la herramienta Símbolos. */
   symbolKind: SymbolKind
   /** Dibujar fila de racks: simple o doble (espalda con espalda). */
@@ -151,6 +154,8 @@ export const usePlan = create<PlanState>()(
       toggleLayer: (l) => set((s) => ({ hidden: { ...s.hidden, [l]: !s.hidden[l] } })),
       focusRack: null,
       setFocusRack: (focusRack) => set({ focusRack }),
+      isolate: null,
+      setIsolate: (isolate) => set({ isolate }),
       symbolKind: 'matafuego',
       rackDrawPair: true,
       setRackDrawPair: (rackDrawPair) => set({ rackDrawPair }),

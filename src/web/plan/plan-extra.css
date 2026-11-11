@@ -50,10 +50,22 @@
 .obar__b { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 7px; background: transparent; color: #fff; cursor: pointer; }
 .obar__b:hover:not(:disabled) { background: rgba(255, 255, 255, .14); }
 .obar__b:disabled { opacity: .35; cursor: default; }
-.obar__t { height: 30px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: #fff; font: 600 12.5px var(--f-body); cursor: pointer; }
+.obar__t { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: #fff; font: 600 12.5px var(--f-body); cursor: pointer; }
 .obar__t:hover:not(:disabled) { background: rgba(255, 255, 255, .14); }
 .obar__t:disabled { opacity: .35; }
 .obar__step { display: inline-flex; align-items: center; margin: 0 2px; padding: 0 2px; border-left: 1px solid rgba(255, 255, 255, .15); }
 .obar__v { display: inline-flex; flex-direction: column; align-items: center; min-width: 48px; padding: 0 4px; font: 700 12.5px var(--f-mono); line-height: 1.1; }
 .obar__v small { font: 600 9.5px var(--f-body); text-transform: uppercase; letter-spacing: .06em; color: #aeb4bb; }
 .obar__v--info { padding: 0 8px; font: 700 12px var(--f-body); color: #d6dade; }
+
+/* separador y botón prendido en la barra */
+.obar__sep { width: 1px; height: 20px; margin: 0 4px; background: rgba(255, 255, 255, .22); }
+.obar__t.is-on { background: #2f6fb8; }
+.obar__t.is-on:hover { background: #2a62a3; }
+/* "ver solo este rack": aviso arriba del plano para volver a ver todos */
+.iso-pill { position: absolute; z-index: 7; top: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; background: #2f6fb8; color: #fff; border-radius: 999px; font: 600 13px var(--f-body); box-shadow: 0 6px 18px rgba(20, 24, 30, .25); white-space: nowrap; }
+.iso-pill button { height: 28px; padding: 0 12px; border: 0; border-radius: 999px; background: #fff; color: #2f6fb8; font: 700 12.5px var(--f-body); cursor: pointer; }
+.iso-pill button:hover { background: #e8f0fa; }
+/* el panel "Editando" destella al abrirlo desde la barra */
+.dock.is-flash, .rack-editor.is-flash { animation: dock-flash 1.4s ease-out; }
+@keyframes dock-flash { 0%, 30% { box-shadow: 0 0 0 3px #2f6fb8; } 100% { box-shadow: 0 0 0 3px transparent; } }
