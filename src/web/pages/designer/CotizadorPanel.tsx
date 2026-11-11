@@ -16,6 +16,7 @@ import { Badge, Button, Field, KeyValue, Segmented, Select } from '../../compone
 import { fmt, plural } from '../../lib/format'
 import { STEPS, useDesigner, type StepId } from './designerStore'
 import { metros } from '../../../shared/units'
+import { loadOf, PALLET_TARE, stackBoxes } from '../../../shared/rack/load'
 
 const L = DESIGN_RULES.limits
 const mm = metros
@@ -205,12 +206,100 @@ export function LoadStep({ s }: { s: RackStructure }) {
         <NumberStepper label="Fondo" meters value={cp.deep} min={L.palletDeep.min} max={L.palletDeep.max} step={10} onChange={(deep) => update({ customPallet: { ...cp, deep } })} />
         <NumberStepper label="Alto del pallet" meters value={cp.height} min={L.palletHeight.min} max={L.palletHeight.max} step={5} onChange={(height) => update({ customPallet: { ...cp, height } })} />
       </div>}
-      <NumberStepper label="Carga por pallet" unit="kg" value={config.palletWeight} min={L.palletWeight.min} max={L.palletWeight.max} step={50} onChange={(palletWeight) => update({ palletWeight })}
-        hint={config.palletWeight > OFFICIAL_REFERENCE.maxPalletWeight ? <span className="late">Supera la referencia de {kg(OFFICIAL_REFERENCE.maxPalletWeight)}.</span> : `Referencia publicada: hasta ${kg(OFFICIAL_REFERENCE.maxPalletWeight)} por pallet.`} />
+      <LoadEditor s={s} />
+      {loadOf(config).mode !== 'boxes' && <NumberStepper label="Carga por pallet" unit="kg" value={config.palletWeight} min={L.palletWeight.min} max={L.palletWeight.max} step={50} onChange={(palletWeight) => update({ palletWeight })}
+        hint={config.palletWeight > OFFICIAL_REFERENCE.maxPalletWeight ? <span className="late">Supera la referencia de {kg(OFFICIAL_REFERENCE.maxPalletWeight)}.</span> : `Referencia publicada: hasta ${kg(OFFICIAL_REFERENCE.maxPalletWeight)} por pallet.`} />}
       <Field label="Pallets por módulo" hint={`${plural(s.palletsPerLevel, 'pallet', 'pallets')} por nivel en todo el rack`}>{() => (
         <Segmented label="Pallets por módulo" value={String(config.palletsPerModule)} onChange={(v) => update({ palletsPerModule: v === 'auto' ? 'auto' : Number(v) })}
           options={[{ value: 'auto', label: 'Auto' }, ...[1, 2, 3, 4].map((n) => ({ value: String(n), label: String(n) }))]} />
       )}</Field>
+    </div>
+  )
+}
+
+/* ------------------------------ La carga: bloque o cajas apiladas ------------------------------ */
+
+/** Cómo es la carga del pallet: un bloque, o cajas que se apilan solas sobre la tarima. */
+function LoadEditor({ s }: { s: RackStructure }) {
+  const { config, update } = useDesigner()
+  const load = loadOf(config)
+  const stack = stackBoxes(s.pallet, load)
+  // alto libre en cada nivel (sobre la tarima): las capas que no entran no se ponen
+  const frees = s.rows[0]?.modules[0]?.levels.map((l) => l.loadHeight).filter((h) => h > 0) ?? []
+  const free = frees.length ? Math.min(...frees) : 0
+  const fitLayers = Math.min(stack.layers, Math.floor(free / Math.max(1, load.boxH)))
+  const set = (patch: Partial<typeof load>) => {
+    const next = { ...load, ...patch }
+    const st = stackBoxes(s.pallet, next)
+    // con cajas, el peso del pallet sale de las cajas (más la tarima)
+    update({ load: next, ...(next.mode === 'boxes' ? { palletWeight: Math.max(L.palletWeight.min, Math.min(L.palletWeight.max, st.weight + PALLET_TARE)) } : {}) })
+  }
+  return <>
+    <Field label="Cómo es la carga">{() => (
+      <Segmented label="Cómo es la carga" value={load.mode} onChange={(mode) => set({ mode })}
+        options={[{ value: 'block', label: 'Un bloque' }, { value: 'boxes', label: 'Cajas apiladas' }]} />
+    )}</Field>
+    {load.mode === 'boxes' && <>
+      <div className="cot-inline">
+        <NumberStepper label="Ancho de la caja" meters value={load.boxW} min={50} max={2000} step={50} typedStep={10} onChange={(boxW) => set({ boxW })} />
+        <NumberStepper label="Fondo de la caja" meters value={load.boxD} min={50} max={2000} step={50} typedStep={10} onChange={(boxD) => set({ boxD })} />
+      </div>
+      <div className="cot-inline">
+        <NumberStepper label="Alto de la caja" meters value={load.boxH} min={50} max={2000} step={50} typedStep={10} onChange={(boxH) => set({ boxH })} />
+        <NumberStepper label="Peso de cada caja" unit="kg" value={load.boxKg} min={1} max={500} step={1} onChange={(boxKg) => set({ boxKg })} />
+      </div>
+      <NumberStepper label="Alto máximo de la carga" meters value={load.maxHeight} min={200} max={3000} step={100} typedStep={10} onChange={(maxHeight) => set({ maxHeight })}
+        hint={free ? `Cada nivel del rack deja ${metros(free)} libres arriba del pallet.` : undefined} />
+      <LoadDiagram pallet={s.pallet} stack={stack} boxH={load.boxH} fitLayers={fitLayers} />
+      <KeyValue items={[
+        ['Cajas por capa', stack.perLayer ? `${stack.perLayer} (${stack.cols} × ${stack.rows}${stack.rotated ? ', giradas' : ''})` : 'no entra ninguna'],
+        ['Capas', fmt(stack.layers)],
+        ['Cajas por pallet', fmt(stack.total)],
+        ['Alto de la carga', metros(stack.height)],
+        ['Peso por pallet', `${kg(stack.weight + PALLET_TARE)} (con la tarima)`],
+      ]} />
+      {stack.perLayer === 0 && <p className="note note--amber">La caja es más grande que el pallet: no entra ninguna.</p>}
+      {stack.layers > fitLayers && stack.perLayer > 0 && (
+        <p className="note note--amber">Las cajas llegan a {metros(stack.height)} y en cada nivel hay {metros(free)} libres: entran {fitLayers} {fitLayers === 1 ? 'capa' : 'capas'}. Bajá el alto máximo, o poné menos niveles o más alto el rack.</p>
+      )}
+      {stack.weight + PALLET_TARE > OFFICIAL_REFERENCE.maxPalletWeight && <p className="note note--amber">El pallet pesa {kg(stack.weight + PALLET_TARE)}: supera la referencia de {kg(OFFICIAL_REFERENCE.maxPalletWeight)}.</p>}
+    </>}
+  </>
+}
+
+/** Dibujo de la carga: vista de arriba (cómo van las cajas en la tarima) y de costado (las capas). */
+function LoadDiagram({ pallet, stack, boxH, fitLayers }: { pallet: { front: number; deep: number; height: number }; stack: ReturnType<typeof stackBoxes>; boxH: number; fitLayers: number }) {
+  const k = 130 / Math.max(pallet.front, pallet.deep)
+  const PW = pallet.front * k, PD = pallet.deep * k
+  const ox = (PW - stack.cols * stack.w * k) / 2, oz = (PD - stack.rows * stack.d * k) / 2
+  const shown = Math.min(stack.layers, 10)
+  const sideK = Math.min(k, 120 / Math.max(1, shown * boxH + pallet.height))
+  const SW = pallet.front * sideK, PH = pallet.height * sideK, BH = boxH * sideK
+  return (
+    <div className="load-diagram" aria-label="Dibujo de cómo van las cajas">
+      <figure>
+        <svg width={PW + 2} height={PD + 2} viewBox={`-1 -1 ${PW + 2} ${PD + 2}`}>
+          <rect width={PW} height={PD} fill="#e8c9a0" stroke="#8a5a2b" />
+          {Array.from({ length: stack.cols * stack.rows }, (_, n) => {
+            const i = n % stack.cols, j = Math.floor(n / stack.cols)
+            return <rect key={n} x={ox + i * stack.w * k + 0.6} y={oz + j * stack.d * k + 0.6} width={stack.w * k - 1.2} height={stack.d * k - 1.2} fill="#d9a86c" stroke="#7a5230" strokeWidth={0.8} />
+          })}
+        </svg>
+        <figcaption>De arriba</figcaption>
+      </figure>
+      <figure>
+        <svg width={SW + 2} height={PH + shown * BH + 2} viewBox={`-1 -1 ${SW + 2} ${PH + shown * BH + 2}`}>
+          {Array.from({ length: shown }, (_, l) => (
+            <g key={l} opacity={l < fitLayers ? 1 : 0.3}>
+              {Array.from({ length: stack.cols }, (_, i) => (
+                <rect key={i} x={(SW - stack.cols * stack.w * sideK) / 2 + i * stack.w * sideK + 0.5} y={(shown - 1 - l) * BH + 0.5} width={stack.w * sideK - 1} height={BH - 1} fill="#d9a86c" stroke="#7a5230" strokeWidth={0.8} />
+              ))}
+            </g>
+          ))}
+          <rect x={0} y={shown * BH} width={SW} height={PH} fill="#b07a45" />
+        </svg>
+        <figcaption>De costado{stack.layers > fitLayers ? ' (en claro, lo que no entra)' : ''}</figcaption>
+      </figure>
     </div>
   )
 }

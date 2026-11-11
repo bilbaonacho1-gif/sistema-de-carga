@@ -149,3 +149,19 @@ export function loadGeometry(p: PalletType, heightMm: number) {
     return g
   }, 40)
 }
+
+/* ---------- Carga armada con cajas apiladas sobre la tarima ---------- */
+export function boxesGeometry(p: PalletType, s: { cols: number; rows: number; w: number; d: number }, boxH: number, layers: number) {
+  return cached(store, `boxes-${p.id}-${p.front}-${p.deep}-${s.cols}x${s.rows}-${s.w}x${s.d}x${boxH}-${layers}`, () => {
+    const gap = 0.006
+    const W = m(s.w), D = m(s.d), H = m(boxH)
+    const parts: THREE.BufferGeometry[] = []
+    const x0 = -(s.cols * W) / 2 + W / 2, z0 = -(s.rows * D) / 2 + D / 2
+    for (let l = 0; l < layers; l++) for (let i = 0; i < s.cols; i++) for (let j = 0; j < s.rows; j++) {
+      const g = new RoundedBoxGeometry(W - gap, H - gap, D - gap, 1, 0.006)
+      g.translate(x0 + i * W, l * H + H / 2, z0 + j * D)
+      parts.push(g)
+    }
+    return parts.length ? merge(parts) : new THREE.BufferGeometry()
+  }, 60)
+}

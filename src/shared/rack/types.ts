@@ -34,6 +34,8 @@ export interface RackConfiguration {
   sections?: RackSection[]
   /** Medidas del pallet cuando palletTypeId = 'custom'. */
   customPallet?: { front: number; deep: number; height: number }
+  /** Cómo es la carga del pallet: un bloque, o cajas apiladas (ver shared/rack/load.ts). */
+  load?: { mode: 'block' | 'boxes'; boxW: number; boxD: number; boxH: number; boxKg: number; maxHeight: number }
   /** Perfiles elegidos a mano. 'auto' = el motor elige el más liviano que alcanza. */
   uprightId?: string
   beamId?: string

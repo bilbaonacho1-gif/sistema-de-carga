@@ -12,10 +12,11 @@ import { DESIGN_RULES, VISUAL } from '../../shared/rack/technicalSpecs'
 import type { FrameLayout, LevelLayout, ModuleLayout, PositionSlot, RackStructure, RowLayout } from '../../shared/rack/types'
 import { Animated } from './Animated'
 import {
-  basePlateGeometry, beamGeometry, bracingGeometry, connectorGeometry, loadGeometry, palletGeometry, protectorGeometry,
+  basePlateGeometry, beamGeometry, bracingGeometry, connectorGeometry, boxesGeometry, loadGeometry, palletGeometry, protectorGeometry,
 } from './geometry/parts'
 import { uprightGeometry } from './geometry/upright'
 import { MATERIALS, m } from './materials'
+import { loadOf, stackBoxes } from '../../shared/rack/load'
 
 interface PrevCounts { rows: number; modules: number; levels: number }
 type V3 = [number, number, number]
@@ -258,10 +259,17 @@ function BeamLevel({ structure, mod }: { structure: RackStructure; mod: ModuleLa
 
 function PalletLoad({ structure, loadHeight }: { structure: RackStructure; loadHeight: number }) {
   const { pallet } = structure
+  const load = loadOf(structure.config)
+  // con cajas: las capas que entran en el nivel (sin pasarse del alto libre)
+  const stack = load.mode === 'boxes' ? stackBoxes(pallet, load) : null
+  const layers = stack ? Math.min(stack.layers, Math.floor(loadHeight / Math.max(1, load.boxH))) : 0
   return (
     <group>
       <mesh geometry={palletGeometry(pallet)} material={MATERIALS.wood} castShadow />
-      {loadHeight > 0 && (
+      {stack && layers > 0 && stack.perLayer > 0 && (
+        <mesh geometry={boxesGeometry(pallet, stack, load.boxH, layers)} material={MATERIALS.cardboard} position={[0, m(pallet.height), 0]} castShadow />
+      )}
+      {!stack && loadHeight > 0 && (
         <mesh geometry={loadGeometry(pallet, loadHeight)} material={MATERIALS.cardboard} position={[0, m(pallet.height), 0]} castShadow />
       )}
     </group>

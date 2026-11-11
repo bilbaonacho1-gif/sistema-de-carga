@@ -672,3 +672,8 @@
 @media (max-width: 900px) {
   .depot .designer__panel.cotizador, .depot .designer__panel.cotizador.is-floating { position: static; width: auto; max-height: none; overflow: visible; }
 }
+
+/* dibujo de la carga con cajas */
+.load-diagram { display: flex; align-items: flex-end; justify-content: center; gap: 22px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: #fbfaf8; }
+.load-diagram figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.load-diagram figcaption { font: 600 11px var(--f-body); color: var(--ink-2); text-transform: uppercase; letter-spacing: .06em; }

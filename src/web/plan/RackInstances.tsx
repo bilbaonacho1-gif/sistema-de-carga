@@ -16,6 +16,7 @@ import type { PlacedRack } from '../../shared/plan/depot'
 import type { RackPlacement } from '../../shared/plan/types'
 import type { RackStructure } from '../../shared/rack/types'
 import { MATERIALS, m } from '../three/materials'
+import { loadOf, stackBoxes } from '../../shared/rack/load'
 
 type Kind = 'upright' | 'brace' | 'beam' | 'pallet' | 'load' | 'unit'
 const KINDS: Kind[] = ['upright', 'brace', 'beam', 'pallet', 'load', 'unit']
@@ -84,14 +85,19 @@ function partsFor(s: RackStructure): Parts {
       }
     }
     const pal = s.pallet
+    // con la carga armada con cajas, el bloque tiene el alto de las capas que entran en el nivel
+    const load = loadOf(s.config)
+    const stack = load.mode === 'boxes' ? stackBoxes(pal, load) : null
+    const loadH = (free: number) => (stack ? Math.min(stack.layers, Math.floor(free / Math.max(1, load.boxH))) * load.boxH * (stack.perLayer > 0 ? 1 : 0) : free)
     for (const p of s.pallets) {
       if (p.row !== row.index) continue
       const lv = row.modules[p.module]?.levels[p.level]
       if (!lv) continue
       const y = m(p.elevation)
+      const lh = loadH(lv.loadHeight)
       put('pallet', m(p.x), y + m(pal.height) / 2, -D / 2, m(pal.front), m(pal.height), m(pal.deep))
-      if (lv.loadHeight > 0) put('load', m(p.x), y + m(pal.height) + m(lv.loadHeight) / 2, -D / 2, m(pal.front) * 0.96, m(lv.loadHeight), m(pal.deep) * 0.96)
-      const h = m(pal.height) + m(lv.loadHeight)
+      if (lh > 0) put('load', m(p.x), y + m(pal.height) + m(lh) / 2, -D / 2, m(pal.front) * 0.96, m(lh), m(pal.deep) * 0.96)
+      const h = m(pal.height) + m(lh)
       put('unit', m(p.x), y + h / 2, -D / 2, m(pal.front), h, m(pal.deep))
     }
   }
