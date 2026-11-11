@@ -72,3 +72,27 @@ describe('copiar, pegar y mover', () => {
     expect(r.selection).toMatchObject({ kind: 'racks' })
   })
 })
+
+describe('guías para ubicar racks', () => {
+  it('se alinea con otra fila y se pega dejando el pasillo justo', async () => {
+    const { snapRack } = await import('./guides')
+    const otro = { x: 2000, y: 2000, w: 20_000, h: 2300 }
+    // pedido 200 mm corrido en X y casi a 3 m de pasillo en Y
+    const r = snapRack({ x: 2200, y: 2000 + 2300 + 2900, w: 20_000, h: 2300 }, [otro], 3000, 400)
+    expect(r.x).toBe(2000)
+    expect(r.y).toBe(2000 + 2300 + 3000)
+    expect(r.guides.find((g) => g.kind === 'gap')?.value).toBe(3000)
+    expect(r.guides.some((g) => g.kind === 'align')).toBe(true)
+    // lejos de todo: queda donde se pidió
+    expect(snapRack({ x: 30_000, y: 30_000, w: 1000, h: 1000 }, [otro], 3000, 400)).toMatchObject({ x: 30_000, y: 30_000, guides: [] })
+  })
+
+  it('mide la distancia a las paredes y al rack de al lado', async () => {
+    const { clearances } = await import('./guides')
+    const poly = [{ x: 0, y: 0 }, { x: 40_000, y: 0 }, { x: 40_000, y: 20_000 }, { x: 0, y: 20_000 }]
+    const g = clearances({ x: 5000, y: 5000, w: 10_000, h: 1000 }, poly, [{ x: 5000, y: 9000, w: 10_000, h: 1000 }])
+    const v = g.map((x) => Math.round(x.value!)).sort((a, b) => a - b)
+    // izquierda 5 m (pared), arriba 5 m (pared), abajo 3 m (otro rack), derecha 25 m (pared)
+    expect(v).toEqual([3000, 5000, 5000, 25_000])
+  })
+})

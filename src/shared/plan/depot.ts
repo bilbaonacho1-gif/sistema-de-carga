@@ -33,7 +33,8 @@ export interface Depot {
 export function moduleSize(config: RackConfiguration): { size: RackModuleSize; sample: RackStructure } {
   const c = sanitizeConfiguration({ ...config, sections: [], layout: { ...config.layout, rows: 1, backToBack: false, warehouseLength: 0, warehouseWidth: 0 } })
   const sample = calculateRackStructure({ ...c, positions: 1 })
-  return { sample, size: { width: c.width, depth: c.depth, upright: sample.upright.faceWidth, backToBackGap: DESIGN_RULES.backToBackGap } }
+  return { sample, size: { width: c.width, depth: c.depth, upright: sample.upright.faceWidth, backToBackGap: DESIGN_RULES.backToBackGap,
+    pallets: sample.palletsPerModule, palletFront: sample.pallet.front, palletDeep: sample.pallet.deep } }
 }
 
 /** Estructura de un rack ubicado: una fila, o un par espalda con espalda, de `modules` módulos. */

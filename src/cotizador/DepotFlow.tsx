@@ -5,7 +5,7 @@
  * cuántos racks entran en ESE depósito (filas, pasillos, columnas y zonas) y todo lo demás
  * (materiales, presupuesto) sale del depósito completo.
  */
-import { AlertTriangle, Calculator, ChevronLeft, ChevronRight, Download, Lightbulb, Mail, Phone, Plus, RotateCcw } from 'lucide-react'
+import { AlertTriangle, Calculator, ChevronLeft, ChevronRight, Download, Lightbulb, Mail, PenLine, Phone, Plus, Trash2 } from 'lucide-react'
 import { useMemo } from 'react'
 import { buildDepot, moduleSize, type Depot } from '../shared/plan/depot'
 import { planArea } from '../shared/plan/geometry'
@@ -65,7 +65,8 @@ export function DepotFlow({ onQuote }: { onQuote(): void }) {
   const plan = usePlan((s) => s.plan)
   const config = useDesigner((s) => s.config)
   const { size } = useMemo(() => moduleSize(config), [config])
-  const showRacks = FLOW.indexOf(flowStep) >= FLOW.indexOf('distribucion')
+  // los racks se ven en el plano desde el primer paso (mientras se dibuja el depósito ya se ve cuántos entran)
+  const showRacks = flowStep !== 'rack' && flowStep !== 'carga'
   const rackView = flowStep === 'rack' || flowStep === 'carga'
   const rackLayer = showRacks ? { racks: depot.layout.placements, size, issues: depot.issues } : undefined
   // lo que se está editando en el plano va arriba de todo en el panel (en lugar de la ayuda del paso)
@@ -262,7 +263,7 @@ function RackStep({ s }: { s: RackStructure }) {
 /* ------------------------------ 4. Distribución ------------------------------ */
 
 function LayoutStep({ depot }: { depot: Depot }) {
-  const { layout, setLayout, plan, commit, select, multi, setMulti } = usePlan()
+  const { layout, setLayout, plan, commit, select, multi, setMulti, tool, setTool, rackDrawPair, setRackDrawPair } = usePlan()
   const config = useDesigner((s) => s.config)
   // la otra orientación, para comparar
   const other = useMemo(() => buildDepot(plan, config, { ...layout, orientation: layout.orientation === 'x' ? 'y' : 'x' }), [plan, config, layout])
@@ -300,21 +301,43 @@ function LayoutStep({ depot }: { depot: Depot }) {
     </>
   )
 
+  // cómo se ubican los racks: solos (la distribución automática) o a mano
+  const mode = (
+    <Field label="¿Cómo se ubican los racks?">{() => (
+      <Segmented label="Cómo se ubican los racks" value={depot.manual ? 'mano' : 'solos'}
+        onChange={(v) => {
+          if (v === 'mano') { commit((p) => freezeRacks(p, depot.layout.placements)); return }
+          if (!window.confirm('¿Volver a ubicarlos solos? Se pierden los racks que moviste o dibujaste a mano.')) return
+          commit((p) => ({ ...p, racks: undefined })); select(null); if (tool === 'rackdraw') setTool('select')
+        }}
+        options={[{ value: 'solos', label: 'Se ubican solos' }, { value: 'mano', label: 'Los ubico yo' }]} />
+    )}</Field>
+  )
+
   if (depot.manual) return (
     <div className="cot-fields">
-      <p className="note note--blue">
-        Racks ubicados a mano: tocá uno en el plano o en el 3D para moverlo, girarlo, cambiarle los módulos, duplicarlo o borrarlo.
- Si marcás o cambiás una zona libre, una zona de racks o un pasillo, los racks se vuelven a acomodar solos.
-      </p>
+      {mode}
+      <p className="muted small">Arrancás con lo que había. Arrastrá cualquier rack: se alinea con las otras filas y se pega dejando el pasillo justo (Alt: libre). Al elegir uno ves a cuánto queda de las paredes y de los otros racks.</p>
+      <div className="rack-tools">
+        <Button icon={PenLine} variant={tool === 'rackdraw' ? 'primary' : undefined} onClick={() => setTool(tool === 'rackdraw' ? 'select' : 'rackdraw')} block>
+          {tool === 'rackdraw' ? 'Dibujando filas… (Esc termina)' : 'Dibujar una fila de racks'}
+        </Button>
+        {tool === 'rackdraw' && (
+          <Segmented label="Fila simple o doble" value={rackDrawPair ? 'doble' : 'simple'} onChange={(v) => setRackDrawPair(v === 'doble')}
+            options={[{ value: 'simple', label: 'Simple' }, { value: 'doble', label: 'Doble (espalda con espalda)' }]} />
+        )}
+      </div>
       {results}
-      <Button variant="ghost" icon={RotateCcw} block onClick={() => { commit((p) => ({ ...p, racks: undefined })); select(null) }}>
-        Volver a la distribución automática
+      <Button variant="ghost" icon={Trash2} block onClick={() => { if (window.confirm('¿Sacar todos los racks y empezar de cero?')) { commit((p) => ({ ...p, racks: [] })); select(null) } }}>
+        Empezar de cero (sacar todos)
       </Button>
+      <p className="muted small">Si marcás o cambiás una zona libre, una zona de racks o un pasillo, los racks se vuelven a ubicar solos.</p>
     </div>
   )
 
   return (
     <div className="cot-fields">
+      {mode}
       <Field label={plan.rackAreas?.length ? 'Filas (de las zonas sin orientación propia)' : 'Filas'}>{() => (
         <Segmented label="Orientación de las filas" value={layout.orientation} onChange={(orientation) => setLayout({ orientation })}
           options={[{ value: 'x', label: 'Horizontales' }, { value: 'y', label: 'Verticales' }]} />
@@ -336,7 +359,7 @@ function LayoutStep({ depot }: { depot: Depot }) {
         <NumberStepper label="Separación de columnas y zonas" meters value={layout.obstacleGap} min={0} max={2000} step={50} onChange={(obstacleGap) => setLayout({ obstacleGap })} />
       </details>
       {results}
-      <p className="muted small">Tocá cualquier rack en el plano o en el 3D para moverlo a mano.</p>
+      <p className="muted small">Si movés un rack, pasa solo a "Los ubico yo". También podés elegir "Los ubico yo" y dibujar las filas vos.</p>
       {!depot.layout.placements.length && <p className="note note--amber">No entra ningún rack: revisá el plano, el ancho de pasillo o las separaciones.</p>}
     </div>
   )

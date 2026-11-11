@@ -26,6 +26,10 @@ import { PlanAnnotations } from './PlanAnnotations'
 import { scaleCalco, useCalco } from './calco'
 import { nearestSnap, snapPoints, type SnapPoint } from '../../shared/plan/snap'
 import { copySelection, moveSelection, pasteClip, type Clip } from '../../shared/plan/clipboard'
+import { clearances, snapRack, type Guide } from '../../shared/plan/guides'
+import { fitPlacement } from '../../shared/plan/racks'
+import { outlinePolygon } from '../../shared/plan/geometry'
+import { placementRect } from '../../shared/plan/layout'
 import { PlanRacks } from './PlanRacks'
 import { usePlan } from './planStore'
 
@@ -36,6 +40,7 @@ type Drag =
   | { type: 'box'; a: PlanPoint }
   | { type: 'anno'; kind: 'text' | 'symbol' | 'dim'; id: string; start: PlanPoint; started: boolean }
   | { type: 'calco'; start: PlanPoint; x: number; y: number }
+  | { type: 'rackdraw'; a: PlanPoint }
   | { type: 'vertex'; index: number; started: boolean }
   | { type: 'sag'; index: number; started: boolean }
   | { type: 'column' | 'zone'; id: string; dx: number; dy: number; started: boolean }
@@ -110,6 +115,11 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
   const [calib, setCalib] = useState<{ a: PlanPoint; b: PlanPoint; text: string } | null>(null)
   /** Punto de imán bajo el cursor (se marca con un cuadradito). */
   const [hoverSnap, setHoverSnap] = useState<SnapPoint | null>(null)
+  /** Guías de alineación y pasillo mientras se mueve o se dibuja un rack. */
+  const [guides, setGuides] = useState<Guide[]>([])
+  /** Fila de racks que se está dibujando (de a hasta b). */
+  const [rackDraft, setRackDraft] = useState<{ a: PlanPoint; b: PlanPoint } | null>(null)
+  const rackDrawPair = usePlan((st) => st.rackDrawPair)
   const { osnap, hidden, symbolKind } = usePlan()
   const calco = useCalco((st) => st.calco)
   // al cambiar de herramienta se descarta lo que estaba a medio hacer
@@ -178,6 +188,24 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
     const o = objSnap(raw, free)
     return o ? { x: Math.round(o.x), y: Math.round(o.y) } : snapPt(raw, free)
   }
+  /**
+   * La fila de racks que sale de arrastrar de a hasta b: a lo largo del lado más largo, con todos los
+   * módulos que entran en ese largo (al menos uno), simple o doble. Se alinea con las otras filas.
+   */
+  const rackFromDrag = (a: PlanPoint, b: PlanPoint) => {
+    const layer = layerRef.current
+    if (!layer) return null
+    const sz = layer.size
+    const horizontal = Math.abs(b.x - a.x) >= Math.abs(b.y - a.y)
+    const L = Math.abs(horizontal ? b.x - a.x : b.y - a.y)
+    const modules = Math.max(1, Math.floor((L - sz.upright) / (sz.width + sz.upright)))
+    const base = fitPlacement({ id: 'nuevo', x: 0, y: 0, orientation: horizontal ? 'x' : 'y', modules, length: 0, depth: 0, pair: rackDrawPair }, sz)
+    const x0 = horizontal ? Math.min(a.x, b.x) : a.x, y0 = horizontal ? a.y : Math.min(a.y, b.y)
+    const box = placementRect({ ...base, x: x0, y: y0 })
+    const others = layer.racks.map(placementRect)
+    const g = snapRack(box, others, usePlan.getState().layout.aisle, px(10))
+    return { rack: { ...base, x: g.x, y: g.y }, guides: g.guides }
+  }
   /** Mientras se dibuja: a 90° del punto anterior si está casi alineado. */
   const ortho = (p: PlanPoint, prev?: PlanPoint): PlanPoint => {
     if (!prev || !snap) return p
@@ -220,7 +248,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
       if (drawing && e.key === 'Enter' && typedRef.current) { e.preventDefault(); placeTyped(); return }
       if (e.key === 'Escape') {
         setTyped(''); setMeasure(null); setTwoPoint(null); setCalib(null)
-        if (s.draft.length) s.setDraft([]); else if (s.tool === 'calibrate' || s.tool === 'measure' || s.tool === 'dim') s.setTool('select'); else s.select(null)
+        if (s.draft.length) s.setDraft([]); else if (s.tool === 'calibrate' || s.tool === 'measure' || s.tool === 'dim' || s.tool === 'rackdraw') s.setTool('select'); else s.select(null)
         return
       }
       // copiar, pegar, duplicar
@@ -371,6 +399,10 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         drag.current = { type: 'draw', kind: tool, a: p }
         setRectDraft({ kind: tool, a: p, b: p })
         break
+      case 'rackdraw':
+        drag.current = { type: 'rackdraw', a: p }
+        setRackDraft({ a: p, b: p })
+        break
       case 'measure':
         // primer clic: desde; segundo: hasta (queda fija); tercero: empieza otra medición
         if (!measure || measure.b) setMeasure({ a: p })
@@ -436,6 +468,12 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
     else if (hoverSnap) setHoverSnap(null)
     if (!d) return
     if (d.type === 'box') { setBoxDraft({ a: d.a, b: raw }); return }
+    if (d.type === 'rackdraw') {
+      const b = snapPt(raw, e.altKey)
+      setRackDraft({ a: d.a, b })
+      setGuides(rackFromDrag(d.a, b)?.guides ?? [])
+      return
+    }
     if (d.type === 'calco') { useCalco.getState().patch({ x: Math.round(d.x + raw.x - d.start.x), y: Math.round(d.y + raw.y - d.start.y) }); return }
     if (d.type === 'anno') {
       const dx = sn(raw.x - d.start.x, e.altKey), dy = sn(raw.y - d.start.y, e.altKey)
@@ -497,7 +535,15 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
       }
       case 'rack': {
         const layer = layerRef.current
-        const nx = sn(raw.x - d.dx, e.altKey), ny = sn(raw.y - d.dy, e.altKey)
+        let nx = sn(raw.x - d.dx, e.altKey), ny = sn(raw.y - d.dy, e.altKey)
+        // guías: se alinea con las otras filas y se pega dejando el pasillo justo (Alt: libre)
+        const me = layer?.racks.find((r) => r.id === d.id)
+        if (layer && me && !e.altKey) {
+          const b = placementRect({ ...me, x: nx, y: ny })
+          const g = snapRack(b, layer.racks.filter((r) => r.id !== d.id).map(placementRect), usePlan.getState().layout.aisle, px(10))
+          nx = g.x; ny = g.y
+          setGuides(g.guides)
+        }
         // no se deja entrar en zonas libres ni pasillos, ni salir de la zona de racks
         live((pl) => layer ? moveRackWithin(freezeRacks(pl, layer.racks), d.id, nx, ny, layer.size) : moveRack(pl, d.id, nx, ny))
         break
@@ -516,6 +562,20 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
     if (pointers.current.size < 2) pinch.current = null
     const d = drag.current
     if (d?.type === 'pan' && !d.moved && tool === 'select') select(null)
+    if (guides.length) setGuides([])
+    if (d?.type === 'rackdraw') {
+      const b = snapPt(toPlan(e.clientX, e.clientY), e.altKey)
+      const layer = layerRef.current
+      // un clic sin arrastrar: una fila de 5 módulos desde ahí
+      const far = Math.hypot(b.x - d.a.x, b.y - d.a.y) > 800
+      const made = layer && rackFromDrag(d.a, far ? b : { x: d.a.x + 5 * (layer.size.width + layer.size.upright) + layer.size.upright, y: d.a.y })
+      if (layer && made) {
+        const id = newId('r')
+        commit((pl) => { const base = freezeRacks(pl, layer.racks); return { ...base, racks: [...(base.racks ?? []), { ...made.rack, id }] } })
+        select({ kind: 'rack', id })
+      }
+      setRackDraft(null)
+    }
     if (d?.type === 'box') {
       const b = toPlan(e.clientX, e.clientY)
       const ids = racksInBox(layerRef.current?.racks ?? [], d.a.x, d.a.y, b.x, b.y)
@@ -651,7 +711,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         })}
 
         {/* racks ubicados */}
-        {rackLayer && !hidden.racks && <PlanRacks racks={rackLayer.racks} size={rackLayer.size} px={px} issues={rackLayer.issues}
+        {rackLayer && !hidden.racks && <PlanRacks racks={rackLayer.racks} size={rackLayer.size} px={px} issues={rackLayer.issues} view={vb}
           selected={selectedSet}
           onDown={tool === 'select' ? (e, r) => {
             const p = toPlan(e.clientX, e.clientY)
@@ -787,6 +847,28 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         })()}
         {boxDraft && <rect x={Math.min(boxDraft.a.x, boxDraft.b.x)} y={Math.min(boxDraft.a.y, boxDraft.b.y)} width={Math.abs(boxDraft.b.x - boxDraft.a.x)} height={Math.abs(boxDraft.b.y - boxDraft.a.y)}
           fill={RED} fillOpacity={0.06} stroke={RED} strokeWidth={px(1.5)} strokeDasharray={`${px(6)} ${px(4)}`} pointerEvents="none" />}
+        {/* fila de racks que se está dibujando */}
+        {rackDraft && (() => {
+          const m = rackFromDrag(rackDraft.a, rackDraft.b)
+          if (!m) return null
+          const b = placementRect(m.rack)
+          return (
+            <g pointerEvents="none">
+              <rect x={b.x} y={b.y} width={b.w} height={b.h} fill="#fdebd3" fillOpacity={0.8} stroke="#e07b1f" strokeWidth={px(2)} strokeDasharray={`${px(8)} ${px(5)}`} />
+              {label({ x: b.x + b.w / 2, y: b.y - px(16) }, `${m.rack.modules} ${m.rack.modules === 1 ? 'módulo' : 'módulos'} · ${meters(m.rack.length)}${m.rack.pair ? ' · doble' : ''}`, 'rackdraft', '#9a4a0c')}
+            </g>
+          )
+        })()}
+        {/* distancias del rack elegido a lo que tiene alrededor, y guías al moverlo */}
+        {rackLayer && tool === 'select' && selection?.kind === 'rack' && (() => {
+          const me = rackLayer.racks.find((r) => r.id === selection.id)
+          if (!me) return null
+          const poly = outlinePolygon(plan.outline, 200)
+          const gs = clearances(placementRect(me), poly, rackLayer.racks.filter((r) => r.id !== me.id).map(placementRect))
+          return <GuideLines guides={gs} px={px} color="#0f8a8a" />
+        })()}
+        {guides.length > 0 && <GuideLines guides={guides} px={px} color="#c2189a" />}
+
         {/* medir */}
         {tool === 'measure' && measure && (() => {
           const a = measure.a, b = measure.b ?? (cursor ? smartPt(cursor) : a)
@@ -896,12 +978,36 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
   )
 }
 
+/** Guías y distancias: línea de alineación punteada, o tramo con su medida. */
+function GuideLines({ guides, px, color }: { guides: Guide[]; px: (n: number) => number; color: string }) {
+  return (
+    <g pointerEvents="none" className="no-export">
+      {guides.map((g, i) => {
+        const mid = { x: (g.a.x + g.b.x) / 2, y: (g.a.y + g.b.y) / 2 }
+        const vertical = Math.abs(g.b.x - g.a.x) < Math.abs(g.b.y - g.a.y)
+        const t = px(4)
+        return (
+          <g key={i}>
+            <line x1={g.a.x} y1={g.a.y} x2={g.b.x} y2={g.b.y} stroke={color} strokeWidth={px(1.5)} strokeDasharray={g.kind === 'align' ? `${px(6)} ${px(4)}` : undefined} />
+            {g.kind === 'gap' && <>
+              {[g.a, g.b].map((p, k) => <line key={k} x1={p.x - (vertical ? t : 0)} y1={p.y - (vertical ? 0 : t)} x2={p.x + (vertical ? t : 0)} y2={p.y + (vertical ? 0 : t)} stroke={color} strokeWidth={px(1.5)} />)}
+              {g.value !== undefined && <text x={mid.x + (vertical ? px(6) : 0)} y={mid.y - (vertical ? 0 : px(7))} fontSize={px(11)} textAnchor={vertical ? 'start' : 'middle'} dominantBaseline="middle"
+                fill={color} stroke="#fff" strokeWidth={px(3)} style={{ paintOrder: 'stroke', fontFamily: 'var(--f-mono)', fontWeight: 700 }}>{meters(g.value)}</text>}
+            </>}
+          </g>
+        )
+      })}
+    </g>
+  )
+}
+
 /** Qué hacer con cada herramienta nueva (cartel de arriba del plano). */
 const TOOL_HINT: Partial<Record<string, (first: boolean, done: boolean) => string>> = {
   measure: (_f, done) => (done ? 'Medición lista. Hacé clic para medir otra cosa; Esc termina.' : 'Medir: clic en un punto y clic en el otro. Se pega a esquinas, puntas y centros.'),
   dim: (first) => (first ? 'Ahora clic en el otro extremo de la cota.' : 'Cota: clic en un extremo y clic en el otro. Queda dibujada en el plano.'),
   text: () => 'Texto: clic donde va, escribilo y Enter.',
   symbol: () => 'Símbolo: clic donde va cada uno. Elegí cuál en el panel Herramientas.',
+  rackdraw: () => 'Fila de racks: arrastrá de punta a punta y salen todos los módulos que entran (un clic solo: 5 módulos). Se alinea con las otras filas dejando el pasillo justo. Esc termina.',
   calibrate: (first) => (first ? 'Ahora clic en el otro punto de esa medida conocida.' : 'Escala del plano de fondo: clic en dos puntos de una medida que conozcas (por ejemplo, una pared).'),
 }
 

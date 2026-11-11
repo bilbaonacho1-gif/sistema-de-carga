@@ -19,7 +19,7 @@ const safeStorage = {
   removeItem: (k: string) => { try { localStorage.removeItem(k) } catch { /* sin memoria */ } },
 }
 
-export type PlanTool = 'select' | 'outline' | 'column' | 'wall' | 'door' | 'zone' | 'area' | 'aisle' | 'measure' | 'dim' | 'text' | 'symbol' | 'calibrate'
+export type PlanTool = 'select' | 'outline' | 'column' | 'wall' | 'door' | 'zone' | 'area' | 'aisle' | 'measure' | 'dim' | 'text' | 'symbol' | 'calibrate' | 'rackdraw'
 
 /** Capas del plano que se pueden apagar (como en AutoCAD). */
 export type PlanLayer = 'grilla' | 'calco' | 'zonas' | 'areas' | 'pasillos' | 'racks' | 'numeros' | 'columnas' | 'tabiques' | 'portones' | 'textos' | 'simbolos' | 'cotasPropias'
@@ -94,6 +94,9 @@ interface PlanState {
   toggleLayer(l: PlanLayer): void
   /** Símbolo que pone la herramienta Símbolos. */
   symbolKind: SymbolKind
+  /** Dibujar fila de racks: simple o doble (espalda con espalda). */
+  rackDrawPair: boolean
+  setRackDrawPair(v: boolean): void
   setSymbolKind(k: SymbolKind): void
   /** Modo "elegir varios": tocar un rack lo suma a la selección (como Shift + clic). */
   multi: boolean
@@ -144,6 +147,8 @@ export const usePlan = create<PlanState>()(
       hidden: {},
       toggleLayer: (l) => set((s) => ({ hidden: { ...s.hidden, [l]: !s.hidden[l] } })),
       symbolKind: 'matafuego',
+      rackDrawPair: true,
+      setRackDrawPair: (rackDrawPair) => set({ rackDrawPair }),
       setSymbolKind: (symbolKind) => set({ symbolKind, tool: 'symbol', draft: [] }),
       multi: false,
       setMulti: (multi) => set({ multi }),

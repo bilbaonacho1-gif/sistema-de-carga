@@ -45,6 +45,10 @@ export interface RackModuleSize {
   upright: number
   /** Separación entre las dos filas de un par espalda con espalda. */
   backToBackGap: number
+  /** Para dibujar los pallets en el plano: cuántos por módulo y su medida (frente y fondo). */
+  pallets?: number
+  palletFront?: number
+  palletDeep?: number
 }
 
 export interface LayoutResult {
