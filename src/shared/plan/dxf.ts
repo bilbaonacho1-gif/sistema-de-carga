@@ -5,6 +5,7 @@
  */
 import { dxfBulge, edges } from './geometry'
 import { placementRect, type RackModuleSize } from './layout'
+import { rackDims } from './racks'
 import type { Plan, PlanPoint, RackPlacement } from './types'
 import { metros } from '../units'
 
@@ -62,14 +63,15 @@ export function planToDxf(plan: Plan, racks: RackPlacement[] = [], size?: RackMo
   for (const r of racks) {
     const b = placementRect(r)
     const horizontal = r.orientation === 'x'
-    const D = size?.depth ?? (r.pair ? r.depth / 2 : r.depth)
+    const dims = size && rackDims(r, size)
+    const D = dims?.depth ?? (r.pair ? r.depth / 2 : r.depth)
     const offsets = r.pair ? [0, r.depth - D] : [0]
     for (const off of offsets) {
       const x = horizontal ? b.x : b.x + off, y = horizontal ? b.y + off : b.y
       const rw = horizontal ? r.length : D, rh = horizontal ? D : r.length
       rect('RACKS', x, y, rw, rh)
-      if (size) for (let k = 0; k <= r.modules; k++) {
-        const f = size.upright / 2 + k * (size.width + size.upright)
+      if (dims) for (let k = 0; k <= r.modules; k++) {
+        const f = dims.upright / 2 + k * (dims.width + dims.upright)
         line('BASTIDORES', horizontal ? { x: x + f, y } : { x, y: y + f }, horizontal ? { x: x + f, y: y + rh } : { x: x + rw, y: y + f })
       }
     }

@@ -105,6 +105,12 @@ export interface RackPlacement {
   /** Medidas propias de este rack (si no están, las del rack elegido para todo el depósito). */
   levels?: number
   height?: number
+  /** Piezas propias de este rack: largo de viga, fondo del bastidor, altura de cada viga y perfiles. */
+  beamLength?: number
+  frameDepth?: number
+  beamElevations?: number[]
+  uprightId?: string
+  beamId?: string
 }
 
 export interface Plan {

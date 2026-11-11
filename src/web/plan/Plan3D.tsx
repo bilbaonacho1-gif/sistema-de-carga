@@ -15,9 +15,10 @@ import { placementRect, type RackModuleSize } from '../../shared/plan/layout'
 import { freezeRacks, moveRack, moveRackWithin, rackSelection, selectedRackIds } from '../../shared/plan/racks'
 import type { Plan, PlanPoint, PlanSelection, RackPlacement } from '../../shared/plan/types'
 import { fmt } from '../lib/format'
-import { RackModel } from '../three/RackModel'
+import { RackModel, RackPickContext, type PickedPart } from '../three/RackModel'
 import { RackInstances, type InstanceStats } from './RackInstances'
 import { usePlan } from './planStore'
+import { useDock } from '../components/dock'
 
 const m = (mm: number) => mm / 1000
 const RED = '#be1e30'
@@ -175,7 +176,7 @@ export function Plan3D(props: Props) {
     <div className="plan3d">
     {/* frameloop "demand": se dibuja sólo cuando algo cambia o se mueve la cámara (depósitos grandes) */}
     <Canvas shadows frameloop="demand" dpr={[1, many ? 1.25 : 2]} camera={{ fov: 40, near: 0.1, far: Math.max(2000, span * 10), position: [center.x + span * 0.7, span * 0.75, center.z + span * 1.05] }}
-      onPointerMissed={() => usePlan.getState().select(null)}>
+      onPointerMissed={() => { const s = usePlan.getState(); s.select(null); s.setPiece(null) }}>
       <color attach="background" args={['#eef0f2']} />
       <hemisphereLight args={['#ffffff', '#cfd3d8', 1]} />
       <directionalLight position={[center.x + span, span * 1.5, center.z + span * 0.6]} intensity={1.4} castShadow shadow-bias={-0.0005} shadow-normalBias={0.05}
@@ -330,8 +331,11 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, size, span, on
       </>}
 
       {/* pocos racks: el modelo con todo el detalle y, encima, una caja invisible para tocarlo y arrastrarlo */}
-      {shown.length <= MANY_RACKS && shown.map((r) => <PlacedRackModel key={r.placement.id} rack={r} showLoads={showLoads} />)}
-      {shown.length <= MANY_RACKS && shown.map(({ placement: p, structure }) => {
+      {shown.length <= MANY_RACKS && shown.map((r) => (shown !== racks
+        ? <PickableRack key={r.placement.id} rack={r} showLoads={showLoads} />
+        : <PlacedRackModel key={r.placement.id} rack={r} showLoads={showLoads} />))}
+      {/* viendo un rack solo no hay caja para agarrarlo: se tocan sus piezas (vigas y parantes) */}
+      {shown.length <= MANY_RACKS && shown === racks && shown.map(({ placement: p, structure }) => {
         const b = placementRect(p)
         const H = m(structure.config.height) + 0.02
         const mat = isRackSel(p.id) ? MAT.rackSelected : issues[p.id] ? MAT.rackIssue : MAT.rackHit
@@ -426,4 +430,21 @@ function IsolateCamera({ racks = [], center, span }: { racks?: PlacedRack[]; cen
     invalidate()
   }, [key, controls]) // eslint-disable-line react-hooks/exhaustive-deps -- sólo al aislar o volver
   return null
+}
+
+/** Rack visto solo: sus vigas y parantes se tocan para editarlos (se marcan en amarillo). */
+function PickableRack({ rack, showLoads }: { rack: PlacedRack; showLoads: boolean }) {
+  const id = rack.placement.id
+  const piece = usePlan((s) => (s.piece?.rack === id ? s.piece : null))
+  const key = piece ? (piece.kind === 'beam' ? `b${piece.plane}` : 'u') : ''
+  const value = useMemo(() => ({
+    picked: piece ? (piece.kind === 'beam' ? { kind: 'beam' as const, plane: piece.plane } : { kind: 'upright' as const }) : null,
+    onPick: (p: PickedPart) => {
+      const s = usePlan.getState()
+      s.select({ kind: 'rack', id })
+      s.setPiece({ rack: id, ...p })
+      useDock.getState().set('editar', { collapsed: false })
+    },
+  }), [key, id]) // eslint-disable-line react-hooks/exhaustive-deps -- piece se compara por su clave
+  return <RackPickContext.Provider value={value}><PlacedRackModel rack={rack} showLoads={showLoads} /></RackPickContext.Provider>
 }

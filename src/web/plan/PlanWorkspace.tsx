@@ -15,6 +15,8 @@ import { Segmented, Spinner } from '../components/ui'
 import { PlanEditor, type PlanRackLayer } from './PlanEditor'
 import { PlanPanel } from './PlanPanel'
 import { usePlan } from './planStore'
+import { RackParts } from './RackParts'
+import type { RackConfiguration } from '../../shared/rack/types'
 
 const Plan3D = lazy(() => import('./Plan3D').then((x) => ({ default: x.Plan3D })))
 
@@ -136,26 +138,28 @@ export function RackEditor({ rackLayer, defaults }: { rackLayer: PlanRackLayer; 
         </div>
       </div>
       {rejected && <p className="rack-editor__issue"><AlertTriangle size={14} aria-hidden /> {rejected.why}</p>}
-      <RackOverrides racks={[r]} defaults={defaults} onChange={(patch) => commit(() => mapRacks(base, [r.id], (q) => ({ ...q, ...patch })))} />
+      {/* con las piezas a mano, el alto va con los parantes (abajo) */}
+      <RackOverrides racks={[r]} defaults={defaults} onlyLevels={!!defaults.config} onChange={(patch) => commit(() => mapRacks(base, [r.id], (q) => ({ ...q, ...patch })))} />
       <div className="rack-editor__actions">
         <button type="button" className="vp-btn" disabled={!pair} title={pair ? undefined : noRoom} onClick={() => apply(pair)}>{r.pair ? 'Hacer simple' : 'Hacer doble'}</button>
         <button type="button" className="vp-btn" disabled={!rotated} title={rotated ? undefined : noRoom} onClick={() => apply(rotated)}><RotateCw size={14} aria-hidden /> Girar</button>
         <button type="button" className="vp-btn" disabled={!dup} title={dup ? undefined : 'No hay lugar al lado para otro rack igual'} onClick={() => { if (dup) { commit(() => dup.plan); select({ kind: 'rack', id: dup.id }) } }}><Copy size={14} aria-hidden /> Duplicar</button>
         <button type="button" className="vp-btn" onClick={() => { commit((p) => removeSelection(p, selection, rackLayer)); select(null) }}><Trash2 size={14} aria-hidden /> Borrar</button>
       </div>
+      {defaults.config && <RackParts r={r} rackLayer={rackLayer} config={defaults.config} />}
       <p className="muted small">Arrastralo en el plano o en el 3D para moverlo: no entra en zonas libres ni pasillos{plan.rackAreas?.length ? ' y no sale de la zona de racks' : ''}. Supr lo borra, Esc termina.</p>
     </div>
   )
 }
 
 /** Altura y niveles del rack elegido para todo el depósito (lo que tiene un rack sin medidas propias). */
-export interface RackDefaults { height: number; levels: number }
+export interface RackDefaults { height: number; levels: number; /** El rack de todo el depósito (para editar las piezas de uno). */ config?: RackConfiguration }
 
 /**
  * Altura y niveles propios de uno o varios racks. Si muestran "como el resto", usan los del rack
  * elegido para todo el depósito.
  */
-function RackOverrides({ racks, defaults, onChange }: { racks: RackPlacement[]; defaults: RackDefaults; onChange(patch: Partial<RackPlacement>): void }) {
+function RackOverrides({ racks, defaults, onChange, onlyLevels }: { racks: RackPlacement[]; defaults: RackDefaults; onChange(patch: Partial<RackPlacement>): void; onlyLevels?: boolean }) {
   const same = <K extends 'levels' | 'height'>(k: K) => (racks.every((r) => r[k] === racks[0][k]) ? racks[0][k] : undefined)
   const levels = same('levels'), height = same('height')
   const own = racks.some((r) => r.levels !== undefined || r.height !== undefined)
@@ -164,10 +168,10 @@ function RackOverrides({ racks, defaults, onChange }: { racks: RackPlacement[]; 
       <NumberStepper label={racks.length > 1 ? 'Niveles (todos los elegidos)' : 'Niveles de este rack'} value={levels ?? defaults.levels} min={1} max={10} step={1}
         onChange={(v) => onChange({ levels: v === defaults.levels ? undefined : v })}
         hint={levels === undefined ? `Como el resto (${defaults.levels})` : `Propio · el resto tiene ${defaults.levels}`} />
-      <NumberStepper label={racks.length > 1 ? 'Altura (todos los elegidos)' : 'Altura de este rack'} meters value={height ?? defaults.height} min={2000} max={16_000} step={500} typedStep={10}
+      {!onlyLevels && <NumberStepper label={racks.length > 1 ? 'Altura (todos los elegidos)' : 'Altura de este rack'} meters value={height ?? defaults.height} min={2000} max={16_000} step={500} typedStep={10}
         onChange={(v) => onChange({ height: v === defaults.height ? undefined : v })}
-        hint={height === undefined ? `Como el resto (${metros(defaults.height)})` : `Propia · el resto tiene ${metros(defaults.height)}`} />
-      {own && <button type="button" className="link-btn rack-editor__reset" onClick={() => onChange({ levels: undefined, height: undefined })}>Volver a las medidas de todos</button>}
+        hint={height === undefined ? `Como el resto (${metros(defaults.height)})` : `Propia · el resto tiene ${metros(defaults.height)}`} />}
+      {own && !onlyLevels && <button type="button" className="link-btn rack-editor__reset" onClick={() => onChange({ levels: undefined, height: undefined })}>Volver a las medidas de todos</button>}
     </div>
   )
 }

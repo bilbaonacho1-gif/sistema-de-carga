@@ -74,7 +74,7 @@ export function DepotFlow({ onQuote }: { onQuote(): void }) {
   // lo que se está editando en el plano va arriba de todo en el panel (en lugar de la ayuda del paso)
   const selection = usePlan((s) => s.selection)
   const editing = !rackView && !!selection && ((selection.kind !== 'rack' && selection.kind !== 'racks') || !!rackLayer)
-  const defaults = { height: config.height, levels: config.levels }
+  const defaults = { height: config.height, levels: config.levels, config }
   const area = planArea(plan.outline)
   // revisión del plano (sólo con racks a la vista se revisan los racks)
   const layoutOpts = usePlan((s) => s.layout)

@@ -6,7 +6,7 @@
  * únicamente las piezas nuevas (que entran animadas) y las existentes se reubican.
  * Cada bastidor usa su propia altura y cada módulo su largo de viga, niveles y viga.
  */
-import { useEffect, useMemo, useRef } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { DESIGN_RULES, VISUAL } from '../../shared/rack/technicalSpecs'
 import type { FrameLayout, LevelLayout, ModuleLayout, PositionSlot, RackStructure, RowLayout } from '../../shared/rack/types'
@@ -20,6 +20,18 @@ import { useDesigner } from '../pages/designer/designerStore'
 import { loadOf, stackBoxes } from '../../shared/rack/load'
 
 interface PrevCounts { rows: number; modules: number; levels: number }
+
+/** Pieza elegible del rack: los largueros de un nivel o los parantes. */
+export type PickedPart = { kind: 'beam'; plane: number } | { kind: 'upright' }
+/**
+ * Si está, las piezas del rack se tocan para editarlas (en el plano del depósito, con un rack visto
+ * solo). Si no, se usa la elección de vigas del cotizador de un rack.
+ */
+export const RackPickContext = createContext<{ picked: PickedPart | null; onPick(p: PickedPart): void } | null>(null)
+const hover = {
+  onPointerOver: (e: { stopPropagation(): void }) => { e.stopPropagation(); document.body.style.cursor = 'pointer' },
+  onPointerOut: () => { document.body.style.cursor = '' },
+}
 type V3 = [number, number, number]
 
 /** Paso de la cascada al crecer: rápido si se agregan muchos módulos de golpe. */
@@ -122,12 +134,17 @@ function Frame({ frame, row, structure, isNew, delay }: {
   const guard = acc.guardrails && isEnd && row.facing === 1
   const guardDepth = D + (pairedBehind ? D + gap : 0)
   const gOff = m(VISUAL.guardrail.offset) * (frame.index === 0 ? -1 : 1)
+  // en el plano del depósito, con el rack visto solo, los parantes se tocan para editarlos
+  const pc = useContext(RackPickContext)
+  const upPicked = pc?.picked?.kind === 'upright'
+  const upMat = upPicked ? MATERIALS.yellow : MATERIALS.galvanized
+  const pickUp = pc ? { onClick: (e: { stopPropagation(): void }) => { e.stopPropagation(); pc.onPick({ kind: 'upright' }) }, ...hover } : {}
 
   return (
     <Animated position={[m(frame.x), 0, 0]} appear={isNew ? 'grow-y' : 'none'} delay={delay} duration={0.6}>
-      <mesh geometry={upGeo} material={MATERIALS.galvanized} castShadow />
-      <mesh geometry={upGeo} material={MATERIALS.galvanized} position={[0, 0, -D]} rotation-y={Math.PI} castShadow />
-      <mesh geometry={braceGeo} material={MATERIALS.brace} castShadow />
+      <mesh geometry={upGeo} material={upMat} castShadow {...pickUp} />
+      <mesh geometry={upGeo} material={upMat} position={[0, 0, -D]} rotation-y={Math.PI} castShadow {...pickUp} />
+      <mesh geometry={braceGeo} material={upPicked ? MATERIALS.yellow : MATERIALS.brace} castShadow {...pickUp} />
       <mesh geometry={plateGeo} material={MATERIALS.painted} />
       <mesh geometry={plateGeo} material={MATERIALS.painted} position={[0, 0, -D]} rotation-y={Math.PI} />
       {hasProtector && <mesh geometry={protectorGeometry(upright)} material={MATERIALS.painted} castShadow />}
@@ -234,8 +251,14 @@ function Module({ mod, structure, pallets, slots, isNew, delay, prevLevels }: {
 /** Un plano de carga: viga frontal + viga trasera con sus 4 conectores. */
 function BeamLevel({ structure, mod, plane }: { structure: RackStructure; mod: ModuleLayout; plane: number }) {
   // tocar una viga la elige para editar su altura (se marca en amarillo)
-  const picked = useDesigner((s) => s.pickedBeam === plane)
-  const pick = (e: { stopPropagation(): void }) => { e.stopPropagation(); const st = useDesigner.getState(); st.pickBeam(st.pickedBeam === plane ? null : plane) }
+  const pc = useContext(RackPickContext)
+  const designerPicked = useDesigner((s) => s.pickedBeam === plane)
+  const picked = pc ? pc.picked?.kind === 'beam' && pc.picked.plane === plane : designerPicked
+  const pick = (e: { stopPropagation(): void }) => {
+    e.stopPropagation()
+    if (pc) { pc.onPick({ kind: 'beam', plane }); return }
+    const st = useDesigner.getState(); st.pickBeam(st.pickedBeam === plane ? null : plane)
+  }
   const { config, upright } = structure
   const beam = mod.beam
   const W = m(mod.width)

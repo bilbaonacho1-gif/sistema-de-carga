@@ -688,3 +688,13 @@
 .rack-list__h { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 10px; border: 0; background: none; text-align: left; cursor: pointer; font: 13px var(--f-body); color: var(--ink); }
 .rack-list__h span { color: var(--ink-2); font-size: 12.5px; }
 .rack-list__b { display: flex; flex-direction: column; gap: 8px; padding: 0 10px 10px; }
+
+/* piezas de un rack (vigas y parantes): la tocada en el 3D se marca en amarillo */
+.rack-parts { display: flex; flex-direction: column; gap: 10px; }
+.rack-parts__go { align-self: flex-start; }
+.rack-part { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; transition: background .2s, border-color .2s; }
+.rack-part h4 { margin: 0; font: 700 12px var(--f-body); text-transform: uppercase; letter-spacing: .06em; color: var(--ink-2); }
+.rack-part.is-picked { border-color: #e0a800; background: #fffbea; box-shadow: 0 0 0 2px rgba(224, 168, 0, .25); }
+.rack-part__sub { margin: 2px 0 0; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.rack-part__row { border-radius: 8px; padding: 4px; margin: -4px; transition: background .2s; }
+.rack-part__row.is-picked { background: #fff1b8; }

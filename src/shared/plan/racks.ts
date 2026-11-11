@@ -7,16 +7,24 @@ import { newId } from './edit'
 import { outlinePolygon, pointInPolygon } from './geometry'
 import { placementRect, type LayoutResult, type RackModuleSize } from './layout'
 import type { Plan, PlanPoint, PlanSelection, RackPlacement } from './types'
+import { UPRIGHT_PROFILES } from '../rack/technicalSpecs'
 
 type Rect = { x: number; y: number; w: number; h: number }
+
+/** Medidas del módulo de este rack: las del depósito, o las propias si se cambiaron sus piezas. */
+export function rackDims(p: RackPlacement, size: RackModuleSize): { width: number; depth: number; upright: number } {
+  const up = p.uprightId && p.uprightId !== 'auto' ? UPRIGHT_PROFILES.find((u) => u.id === p.uprightId)?.faceWidth : undefined
+  return { width: p.beamLength ?? size.width, depth: p.frameDepth ?? size.depth, upright: up ?? size.upright }
+}
 
 /** Largo y profundidad de un rack según el módulo elegido (por si cambiaron las medidas del rack). */
 export function fitPlacement(p: RackPlacement, size: RackModuleSize): RackPlacement {
   const modules = Math.max(1, Math.round(p.modules))
+  const d = rackDims(p, size)
   return {
     ...p, modules,
-    length: modules * size.width + (modules + 1) * size.upright,
-    depth: p.pair ? 2 * size.depth + size.backToBackGap : size.depth,
+    length: modules * d.width + (modules + 1) * d.upright,
+    depth: p.pair ? 2 * d.depth + size.backToBackGap : d.depth,
   }
 }
 

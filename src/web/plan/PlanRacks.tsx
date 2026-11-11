@@ -8,6 +8,7 @@
  */
 import { memo, useMemo } from 'react'
 import { placementRect, type RackModuleSize, type RackPlacement } from '../../shared/plan/layout'
+import { rackDims } from '../../shared/plan/racks'
 
 interface Props {
   racks: RackPlacement[]
@@ -32,12 +33,13 @@ function palletShapes(r: RackPlacement, size: RackModuleSize): string {
   if (!n || !pf || !pd) return ''
   const b = placementRect(r)
   const horizontal = r.orientation === 'x'
-  const offsets = r.pair ? [0, size.depth + size.backToBackGap] : [0]
-  const slot = size.width / n
+  const d = rackDims(r, size)
+  const offsets = r.pair ? [0, d.depth + size.backToBackGap] : [0]
+  const slot = d.width / n
   let out = ''
   for (const off of offsets) for (let k = 0; k < r.modules; k++) for (let i = 0; i < n; i++) {
-    const along = size.upright + k * (size.width + size.upright) + i * slot + (slot - pf) / 2
-    const across = off + (size.depth - pd) / 2
+    const along = d.upright + k * (d.width + d.upright) + i * slot + (slot - pf) / 2
+    const across = off + (d.depth - pd) / 2
     const x = Math.round(horizontal ? b.x + along : b.x + across), y = Math.round(horizontal ? b.y + across : b.y + along)
     const w = Math.round(horizontal ? pf : pd), h = Math.round(horizontal ? pd : pf)
     out += `M${x} ${y}h${w}v${h}h${-w}Z`
@@ -49,15 +51,16 @@ function palletShapes(r: RackPlacement, size: RackModuleSize): string {
 function rackShapes(r: RackPlacement, size: RackModuleSize, withFrames: boolean): { rows: string; frames: string } {
   const b = placementRect(r)
   const horizontal = r.orientation === 'x'
-  const offsets = r.pair ? [0, size.depth + size.backToBackGap] : [0]
+  const d = rackDims(r, size)
+  const offsets = r.pair ? [0, d.depth + size.backToBackGap] : [0]
   let rows = '', frames = ''
   for (const off of offsets) {
     const x = Math.round(horizontal ? b.x : b.x + off), y = Math.round(horizontal ? b.y + off : b.y)
-    const w = Math.round(horizontal ? r.length : size.depth), h = Math.round(horizontal ? size.depth : r.length)
+    const w = Math.round(horizontal ? r.length : d.depth), h = Math.round(horizontal ? d.depth : r.length)
     rows += `M${x} ${y}h${w}v${h}h${-w}Z`
     if (withFrames)
       for (let k = 0; k <= r.modules; k++) {
-        const f = Math.round(size.upright / 2 + k * (size.width + size.upright))
+        const f = Math.round(d.upright / 2 + k * (d.width + d.upright))
         frames += horizontal ? `M${x + f} ${y}v${h}` : `M${x} ${y + f}h${w}`
       }
   }

@@ -121,3 +121,23 @@ describe('girar, agrandar y achicar', () => {
     expect(rotatePlan(rotatePlan(rotatePlan(r))).outline.points).toEqual(plan.outline.points)
   })
 })
+
+describe('piezas propias de un rack', () => {
+  it('el largo de viga y el fondo propios cambian lo que ocupa el rack', async () => {
+    const { fitPlacement } = await import('./racks')
+    const size = { width: 2700, depth: 1100, upright: 100, backToBackGap: 200 }
+    const base = fitPlacement(rack(), size)
+    expect(base.length).toBe(3 * 2700 + 4 * 100)
+    const own = fitPlacement(rack({ beamLength: 2000, frameDepth: 900, pair: true }), size)
+    expect(own.length).toBe(3 * 2000 + 4 * 100)
+    expect(own.depth).toBe(2 * 900 + 200)
+  })
+  it('la estructura usa las piezas del rack (largo, perfil y altura de cada viga)', async () => {
+    const { placementStructure } = await import('./depot')
+    const { DEFAULT_CONFIGURATION } = await import('../rack/technicalSpecs')
+    const s = placementStructure(DEFAULT_CONFIGURATION, rack({ beamLength: 1800, beamId: 'V160', uprightId: 'P120' }))
+    expect(s.config.width).toBe(1800)
+    expect(s.upright.id).toBe('P120')
+    expect(s.rows[0].modules[0].beam.id).toBe('V160')
+  })
+})

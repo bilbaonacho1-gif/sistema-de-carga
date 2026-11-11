@@ -40,7 +40,13 @@ export function moduleSize(config: RackConfiguration): { size: RackModuleSize; s
 /** Estructura de un rack ubicado: una fila, o un par espalda con espalda, de `modules` módulos. */
 export function placementStructure(config: RackConfiguration, p: RackPlacement): RackStructure {
   // un rack puede tener su propia altura y cantidad de niveles
-  const c = sanitizeConfiguration({ ...config, height: p.height ?? config.height, levels: p.levels ?? config.levels })
+  const c = sanitizeConfiguration({
+    ...config, height: p.height ?? config.height, levels: p.levels ?? config.levels,
+    // piezas propias: largo de viga, fondo del bastidor, altura de cada viga y perfiles
+    width: p.beamLength ?? config.width, depth: p.frameDepth ?? config.depth,
+    beamElevations: p.beamElevations ?? config.beamElevations,
+    uprightId: p.uprightId ?? config.uprightId, beamId: p.beamId ?? config.beamId,
+  })
   return calculateRackStructure({
     ...c,
     sections: [{ modules: p.modules, width: c.width, height: c.height, levels: c.levels }],
@@ -56,7 +62,7 @@ const structures = new WeakMap<RackConfiguration, Map<string, RackStructure>>()
 function cachedStructure(config: RackConfiguration, p: RackPlacement): RackStructure {
   let byKey = structures.get(config)
   if (!byKey) { byKey = new Map(); structures.set(config, byKey) }
-  const key = `${p.modules}|${p.pair}|${p.levels ?? ''}|${p.height ?? ''}`
+  const key = `${p.modules}|${p.pair}|${p.levels ?? ''}|${p.height ?? ''}|${p.beamLength ?? ''}|${p.frameDepth ?? ''}|${p.beamElevations?.join(',') ?? ''}|${p.uprightId ?? ''}|${p.beamId ?? ''}`
   let s = byKey.get(key)
   if (!s) { s = placementStructure(config, p); byKey.set(key, s) }
   return s

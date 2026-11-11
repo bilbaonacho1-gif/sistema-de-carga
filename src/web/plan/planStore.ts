@@ -5,6 +5,9 @@ import { emptyPlan } from '../../shared/plan/edit'
 import { DEFAULT_LAYOUT, type LayoutOptions } from '../../shared/plan/layout'
 import type { Plan, PlanPoint, PlanSelection, SymbolKind } from '../../shared/plan/types'
 
+/** Una pieza de un rack: los largueros de un nivel (plane = número de viga, de abajo hacia arriba) o los parantes. */
+export type RackPiece = { rack: string; kind: 'beam'; plane: number } | { rack: string; kind: 'upright' }
+
 /**
  * Guardado en el navegador. Mientras se arrastra algo el plano cambia en cada movimiento: se guarda
  * recién cuando se deja de mover (300 ms), así un depósito grande no traba el arrastre.
@@ -98,6 +101,9 @@ interface PlanState {
   /** "Ver solo este": racks que se miran aislados (los demás quedan apagados). */
   isolate: string[] | null
   setIsolate(ids: string[] | null): void
+  /** Pieza de metal tocada en el 3D (de un rack visto solo): una viga (plano de carga) o los parantes. */
+  piece: RackPiece | null
+  setPiece(p: RackPiece | null): void
   /** Símbolo que pone la herramienta Símbolos. */
   symbolKind: SymbolKind
   /** Dibujar fila de racks: simple o doble (espalda con espalda). */
@@ -155,7 +161,9 @@ export const usePlan = create<PlanState>()(
       focusRack: null,
       setFocusRack: (focusRack) => set({ focusRack }),
       isolate: null,
-      setIsolate: (isolate) => set({ isolate }),
+      setIsolate: (isolate) => set((s) => ({ isolate, piece: isolate ? s.piece : null })),
+      piece: null,
+      setPiece: (piece) => set({ piece }),
       symbolKind: 'matafuego',
       rackDrawPair: true,
       setRackDrawPair: (rackDrawPair) => set({ rackDrawPair }),
