@@ -55,11 +55,14 @@ export function sanitizeConfiguration(c: RackConfiguration): RackConfiguration {
   const L = DESIGN_RULES.limits
   const minLevels = c.floorStorage ? 2 : 1
   const levelRange = { min: Math.max(minLevels, L.levels.min), max: L.levels.max }
-  const sections: RackSection[] = (Array.isArray(c.sections) ? c.sections : []).slice(0, L.sections.max).map((s) => ({
+  // (hasta un tramo por módulo: así cada módulo de un rack del plano puede tener sus piezas)
+  const sections: RackSection[] = (Array.isArray(c.sections) ? c.sections : []).slice(0, L.sectionModules.max).map((s) => ({
     modules: range(s?.modules, L.sectionModules, 1),
     width: range(s?.width, L.width),
     height: range(s?.height, L.height),
     levels: range(s?.levels, levelRange, minLevels),
+    ...(Array.isArray(s?.beamElevations) ? { beamElevations: s.beamElevations } : {}),
+    ...(s?.beamId && BEAM_PROFILES.some((b) => b.id === s.beamId) ? { beamId: s.beamId } : {}),
   }))
   const cp = c.customPallet
   const out: RackConfiguration = {
@@ -208,8 +211,9 @@ export function calculateRackStructure(
     sections = [{ modules, width: config.width, height: config.height, levels: config.levels }]
   }
 
-  const forcedBeam = catalog.beams.find((b) => b.id === config.beamId)
   const calcs: SectionCalc[] = sections.map((sec, index) => {
+    // cada tramo puede tener su propio perfil de viga y sus alturas de viga
+    const forcedBeam = catalog.beams.find((b) => b.id === (sec.beamId ?? config.beamId))
     const ppm = ppmFor(sec.width, index)
     const levelLoad = ppm * config.palletWeight
     let beam: BeamProfile, beamCapacity: number, beamOk: boolean
@@ -220,7 +224,7 @@ export function calculateRackStructure(
     } else {
       ({ beam, capacity: beamCapacity, ok: beamOk } = rules.selectBeam(catalog.beams, sec.width, levelLoad))
     }
-    const { levels, tight } = computeLevels(sec.height, sec.levels, config.floorStorage, pallet, beam.height, config.beamElevations)
+    const { levels, tight } = computeLevels(sec.height, sec.levels, config.floorStorage, pallet, beam.height, sec.beamElevations ?? config.beamElevations)
     if (tight) warn({ code: 'clearance', level: 'warning', message: `${label(index)}la altura libre entre niveles es insuficiente para el pallet y la carga. Reducí la cantidad de niveles o aumentá la altura.` })
     if (!beamOk) {
       warn({
@@ -250,9 +254,16 @@ export function calculateRackStructure(
   const perModule = calcs.flatMap((c) => Array.from({ length: c.sec.modules }, () => c))
   const uw = upright.faceWidth
   const framesPerRow = rules.framesPerRow(totalModules)
-  const frameX: number[] = [uw / 2]
-  perModule.forEach((c, i) => frameX.push(frameX[i] + uw + c.sec.width))
-  const frameHeight = (i: number) => Math.max(perModule[i - 1]?.sec.height ?? 0, perModule[i]?.sec.height ?? 0)
+  const autoFrameHeight = (i: number) => Math.max(perModule[i - 1]?.sec.height ?? 0, perModule[i]?.sec.height ?? 0)
+  /** Lo mínimo que puede medir un bastidor: por encima de la viga más alta de los módulos que sostiene. */
+  const minFrameHeight = (i: number) => Math.max(0, ...[perModule[i - 1], perModule[i]].filter(Boolean).map((c) => {
+    const top = c!.levels.filter((l) => l.hasBeam).pop()
+    return top ? top.elevation + c!.beam.height + R.holePitch : 0
+  }))
+  const frameHeight = (i: number) => {
+    const own = config.frameHeights?.[i]
+    return own ? clamp(Math.round(own), Math.max(minFrameHeight(i), R.limits.height.min), R.limits.height.max) : autoFrameHeight(i)
+  }
   const rowLength = perModule.reduce((n, c) => n + c.sec.width, 0) + framesPerRow * uw
 
   const rows: RowLayout[] = []
@@ -270,15 +281,22 @@ export function calculateRackStructure(
     }
     // la cantidad la decide la regla (por defecto módulos + 1, compartidos); si una regla
     // pide más, los bastidores extra se ubican a continuación
+    // la fila de atrás de un par está girada: sus módulos van en orden inverso para quedar
+    // enfrentados con los de adelante (key = número del módulo / bastidor contado desde adelante)
+    const rev = facing === -1
+    const order = rev ? [...perModule].reverse() : perModule
+    const fx: number[] = [uw / 2]
+    order.forEach((c, i) => fx.push(fx[i] + uw + c.sec.width))
+    const last = fx.length - 1
     const frames: FrameLayout[] = Array.from({ length: framesPerRow }, (_, i) => {
-      const last = frameX.length - 1
-      const x = i <= last ? frameX[i] : frameX[last] + (i - last) * uw * 2
-      return { id: `r${r}-f${i}`, row: r, index: i, x, height: frameHeight(Math.min(i, last)) }
+      const x = i <= last ? fx[i] : fx[last] + (i - last) * uw * 2
+      const key = rev ? last - Math.min(i, last) : Math.min(i, last)
+      return { id: `r${r}-f${i}`, row: r, index: i, key, x, height: frameHeight(key) }
     })
-    const modules: ModuleLayout[] = perModule.map((c, m) => {
-      const xStart = frameX[m] + uw / 2
+    const modules: ModuleLayout[] = order.map((c, m) => {
+      const xStart = fx[m] + uw / 2
       return {
-        id: `r${r}-m${m}`, row: r, index: m, xStart, xEnd: xStart + c.sec.width, leftFrame: m, rightFrame: m + 1,
+        id: `r${r}-m${m}`, row: r, index: m, key: rev ? totalModules - 1 - m : m, xStart, xEnd: xStart + c.sec.width, leftFrame: m, rightFrame: m + 1,
         section: c.index, width: c.sec.width, height: c.sec.height, palletsPerModule: c.ppm, levels: c.levels, beam: c.beam,
       }
     })

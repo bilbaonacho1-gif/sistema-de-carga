@@ -17,13 +17,28 @@ export function rackDims(p: RackPlacement, size: RackModuleSize): { width: numbe
   return { width: p.beamLength ?? size.width, depth: p.frameDepth ?? size.depth, upright: up ?? size.upright }
 }
 
+/** Largo de viga de cada módulo del rack (cada uno puede tener el suyo). */
+export function moduleWidths(p: RackPlacement, size: RackModuleSize): number[] {
+  const w = rackDims(p, size).width
+  return Array.from({ length: Math.max(1, Math.round(p.modules)) }, (_, k) => p.mods?.[k]?.width ?? w)
+}
+
+/** Centro de cada parante a lo largo del rack (uno más que módulos). */
+export function frameCenters(p: RackPlacement, size: RackModuleSize): number[] {
+  const up = rackDims(p, size).upright
+  const out = [up / 2]
+  for (const w of moduleWidths(p, size)) out.push(out[out.length - 1] + w + up)
+  return out
+}
+
 /** Largo y profundidad de un rack según el módulo elegido (por si cambiaron las medidas del rack). */
 export function fitPlacement(p: RackPlacement, size: RackModuleSize): RackPlacement {
   const modules = Math.max(1, Math.round(p.modules))
   const d = rackDims(p, size)
+  const widths = moduleWidths(p, size)
   return {
     ...p, modules,
-    length: modules * d.width + (modules + 1) * d.upright,
+    length: widths.reduce((n, w) => n + w, 0) + (modules + 1) * d.upright,
     depth: p.pair ? 2 * d.depth + size.backToBackGap : d.depth,
   }
 }

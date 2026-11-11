@@ -22,7 +22,7 @@ import { loadOf, stackBoxes } from '../../shared/rack/load'
 interface PrevCounts { rows: number; modules: number; levels: number }
 
 /** Pieza elegible del rack: los largueros de un nivel o los parantes. */
-export type PickedPart = { kind: 'beam'; plane: number } | { kind: 'upright' }
+export type PickedPart = { kind: 'beam'; module: number; plane: number } | { kind: 'upright'; frame: number }
 /**
  * Si está, las piezas del rack se tocan para editarlas (en el plano del depósito, con un rack visto
  * solo). Si no, se usa la elección de vigas del cotizador de un rack.
@@ -136,9 +136,9 @@ function Frame({ frame, row, structure, isNew, delay }: {
   const gOff = m(VISUAL.guardrail.offset) * (frame.index === 0 ? -1 : 1)
   // en el plano del depósito, con el rack visto solo, los parantes se tocan para editarlos
   const pc = useContext(RackPickContext)
-  const upPicked = pc?.picked?.kind === 'upright'
+  const upPicked = pc?.picked?.kind === 'upright' && pc.picked.frame === frame.key
   const upMat = upPicked ? MATERIALS.yellow : MATERIALS.galvanized
-  const pickUp = pc ? { onClick: (e: { stopPropagation(): void }) => { e.stopPropagation(); pc.onPick({ kind: 'upright' }) }, ...hover } : {}
+  const pickUp = pc ? { onClick: (e: { stopPropagation(): void }) => { e.stopPropagation(); pc.onPick({ kind: 'upright', frame: frame.key }) }, ...hover } : {}
 
   return (
     <Animated position={[m(frame.x), 0, 0]} appear={isNew ? 'grow-y' : 'none'} delay={delay} duration={0.6}>
@@ -253,10 +253,10 @@ function BeamLevel({ structure, mod, plane }: { structure: RackStructure; mod: M
   // tocar una viga la elige para editar su altura (se marca en amarillo)
   const pc = useContext(RackPickContext)
   const designerPicked = useDesigner((s) => s.pickedBeam === plane)
-  const picked = pc ? pc.picked?.kind === 'beam' && pc.picked.plane === plane : designerPicked
+  const picked = pc ? pc.picked?.kind === 'beam' && pc.picked.plane === plane && pc.picked.module === mod.key : designerPicked
   const pick = (e: { stopPropagation(): void }) => {
     e.stopPropagation()
-    if (pc) { pc.onPick({ kind: 'beam', plane }); return }
+    if (pc) { pc.onPick({ kind: 'beam', module: mod.key, plane }); return }
     const st = useDesigner.getState(); st.pickBeam(st.pickedBeam === plane ? null : plane)
   }
   const { config, upright } = structure

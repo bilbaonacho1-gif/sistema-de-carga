@@ -111,6 +111,18 @@ export interface RackPlacement {
   beamElevations?: number[]
   uprightId?: string
   beamId?: string
+  /** Piezas propias de algunos módulos (índice del módulo, de 0): largo, perfil y altura de sus vigas. */
+  mods?: Record<number, ModulePieces>
+  /** Alto propio de algunos parantes (índice del bastidor, de 0 → mm). */
+  frameHeights?: Record<number, number>
+}
+
+/** Las vigas de un módulo (el hueco entre dos parantes) con medidas propias. */
+export interface ModulePieces {
+  width?: number
+  beamId?: string
+  /** Altura de cada viga de este módulo (de abajo hacia arriba). */
+  beamElevations?: number[]
 }
 
 export interface Plan {

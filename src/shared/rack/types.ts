@@ -39,6 +39,8 @@ export interface RackConfiguration {
    * está (o no coincide con la cantidad de planos), las vigas se reparten parejas.
    */
   beamElevations?: number[]
+  /** Alto propio de algunos bastidores (índice del bastidor → mm). Nunca más bajo que sus vigas. */
+  frameHeights?: Record<number, number>
   /** Cómo es la carga del pallet: un bloque, o cajas apiladas (ver shared/rack/load.ts). */
   load?: { mode: 'block' | 'boxes'; boxW: number; boxD: number; boxH: number; boxKg: number; maxHeight: number }
   /** Perfiles elegidos a mano. 'auto' = el motor elige el más liviano que alcanza. */
@@ -56,6 +58,10 @@ export interface RackSection {
   height: number
   /** Niveles de almacenamiento del tramo (incluye el piso si floorStorage = true). */
   levels: number
+  /** Altura de cada viga del tramo (si no, las del rack). */
+  beamElevations?: number[]
+  /** Perfil de viga del tramo (si no, el del rack). */
+  beamId?: string
 }
 
 export interface AccessoryConfig {
@@ -137,6 +143,8 @@ export interface FrameLayout {
   id: string
   row: number
   index: number
+  /** Número del bastidor contado desde la fila de adelante (en la de atrás de un par, van al revés). */
+  key: number
   /** Centro del bastidor a lo largo de la fila (eje X local de la fila). */
   x: number
   /** Altura del bastidor (la mayor de los dos módulos que sostiene). */
@@ -147,6 +155,8 @@ export interface ModuleLayout {
   id: string
   row: number
   index: number
+  /** Número del módulo contado desde la fila de adelante (en la de atrás de un par, van al revés). */
+  key: number
   /** Inicio de la luz libre (cara interna del parante izquierdo). */
   xStart: number
   xEnd: number

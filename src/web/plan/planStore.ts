@@ -6,7 +6,7 @@ import { DEFAULT_LAYOUT, type LayoutOptions } from '../../shared/plan/layout'
 import type { Plan, PlanPoint, PlanSelection, SymbolKind } from '../../shared/plan/types'
 
 /** Una pieza de un rack: los largueros de un nivel (plane = número de viga, de abajo hacia arriba) o los parantes. */
-export type RackPiece = { rack: string; kind: 'beam'; plane: number } | { rack: string; kind: 'upright' }
+export type RackPiece = { rack: string; kind: 'beam'; module: number; plane: number } | { rack: string; kind: 'upright'; frame: number }
 
 /**
  * Guardado en el navegador. Mientras se arrastra algo el plano cambia en cada movimiento: se guarda

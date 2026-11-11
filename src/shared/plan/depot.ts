@@ -4,7 +4,7 @@
  */
 import { calculateRackStructure, sanitizeConfiguration } from '../rack/calculateRackStructure'
 import { DESIGN_RULES } from '../rack/technicalSpecs'
-import type { ComponentCounts, MaterialLine, RackConfiguration, RackStructure } from '../rack/types'
+import type { ComponentCounts, MaterialLine, RackConfiguration, RackSection, RackStructure } from '../rack/types'
 import { planArea } from './geometry'
 import { autoLayout, type LayoutOptions, type LayoutResult, type RackModuleSize } from './layout'
 import { manualLayout, rackIssues } from './racks'
@@ -37,6 +37,30 @@ export function moduleSize(config: RackConfiguration): { size: RackModuleSize; s
     pallets: sample.palletsPerModule, palletFront: sample.pallet.front, palletDeep: sample.pallet.deep } }
 }
 
+/**
+ * Los tramos del rack: uno solo si todos sus módulos son iguales; si algún módulo tiene sus propias
+ * vigas (largo, perfil o alturas), un tramo por cada grupo de módulos seguidos iguales.
+ */
+function rackSections(p: RackPlacement, c: RackConfiguration): RackSection[] {
+  const base: RackSection = { modules: p.modules, width: c.width, height: c.height, levels: c.levels }
+  const mods = p.mods ? Object.entries(p.mods).filter(([k]) => Number(k) < p.modules) : []
+  if (!mods.length) return [base]
+  const out: RackSection[] = []
+  let lastKey = ''
+  for (let m = 0; m < p.modules; m++) {
+    const o = p.mods?.[m]
+    const sec: RackSection = {
+      modules: 1, width: o?.width ?? c.width, height: c.height, levels: c.levels,
+      ...(o?.beamElevations ? { beamElevations: o.beamElevations } : {}),
+      ...(o?.beamId ? { beamId: o.beamId } : {}),
+    }
+    const key = JSON.stringify({ ...sec, modules: 0 })
+    if (key === lastKey) out[out.length - 1].modules++
+    else { out.push(sec); lastKey = key }
+  }
+  return out
+}
+
 /** Estructura de un rack ubicado: una fila, o un par espalda con espalda, de `modules` módulos. */
 export function placementStructure(config: RackConfiguration, p: RackPlacement): RackStructure {
   // un rack puede tener su propia altura y cantidad de niveles
@@ -49,7 +73,8 @@ export function placementStructure(config: RackConfiguration, p: RackPlacement):
   })
   return calculateRackStructure({
     ...c,
-    sections: [{ modules: p.modules, width: c.width, height: c.height, levels: c.levels }],
+    sections: rackSections(p, c),
+    frameHeights: p.frameHeights,
     layout: { ...c.layout, rows: p.pair ? 2 : 1, backToBack: p.pair, warehouseLength: 0, warehouseWidth: 0 },
   })
 }
@@ -62,7 +87,7 @@ const structures = new WeakMap<RackConfiguration, Map<string, RackStructure>>()
 function cachedStructure(config: RackConfiguration, p: RackPlacement): RackStructure {
   let byKey = structures.get(config)
   if (!byKey) { byKey = new Map(); structures.set(config, byKey) }
-  const key = `${p.modules}|${p.pair}|${p.levels ?? ''}|${p.height ?? ''}|${p.beamLength ?? ''}|${p.frameDepth ?? ''}|${p.beamElevations?.join(',') ?? ''}|${p.uprightId ?? ''}|${p.beamId ?? ''}`
+  const key = `${p.modules}|${p.pair}|${p.levels ?? ''}|${p.height ?? ''}|${p.beamLength ?? ''}|${p.frameDepth ?? ''}|${p.beamElevations?.join(',') ?? ''}|${p.uprightId ?? ''}|${p.beamId ?? ''}|${p.mods ? JSON.stringify(p.mods) : ''}|${p.frameHeights ? JSON.stringify(p.frameHeights) : ''}`
   let s = byKey.get(key)
   if (!s) { s = placementStructure(config, p); byKey.set(key, s) }
   return s

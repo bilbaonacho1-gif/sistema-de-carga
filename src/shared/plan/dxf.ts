@@ -5,7 +5,7 @@
  */
 import { dxfBulge, edges } from './geometry'
 import { placementRect, type RackModuleSize } from './layout'
-import { rackDims } from './racks'
+import { frameCenters, rackDims } from './racks'
 import type { Plan, PlanPoint, RackPlacement } from './types'
 import { metros } from '../units'
 
@@ -70,8 +70,9 @@ export function planToDxf(plan: Plan, racks: RackPlacement[] = [], size?: RackMo
       const x = horizontal ? b.x : b.x + off, y = horizontal ? b.y + off : b.y
       const rw = horizontal ? r.length : D, rh = horizontal ? D : r.length
       rect('RACKS', x, y, rw, rh)
+      const fc = size ? frameCenters(r, size) : []
       if (dims) for (let k = 0; k <= r.modules; k++) {
-        const f = dims.upright / 2 + k * (dims.width + dims.upright)
+        const f = fc[k]
         line('BASTIDORES', horizontal ? { x: x + f, y } : { x, y: y + f }, horizontal ? { x: x + f, y: y + rh } : { x: x + rw, y: y + f })
       }
     }

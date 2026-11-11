@@ -436,9 +436,9 @@ function IsolateCamera({ racks = [], center, span }: { racks?: PlacedRack[]; cen
 function PickableRack({ rack, showLoads }: { rack: PlacedRack; showLoads: boolean }) {
   const id = rack.placement.id
   const piece = usePlan((s) => (s.piece?.rack === id ? s.piece : null))
-  const key = piece ? (piece.kind === 'beam' ? `b${piece.plane}` : 'u') : ''
+  const key = piece ? (piece.kind === 'beam' ? `b${piece.module}-${piece.plane}` : `u${piece.frame}`) : ''
   const value = useMemo(() => ({
-    picked: piece ? (piece.kind === 'beam' ? { kind: 'beam' as const, plane: piece.plane } : { kind: 'upright' as const }) : null,
+    picked: piece ? (piece.kind === 'beam' ? { kind: 'beam' as const, module: piece.module, plane: piece.plane } : { kind: 'upright' as const, frame: piece.frame }) : null,
     onPick: (p: PickedPart) => {
       const s = usePlan.getState()
       s.select({ kind: 'rack', id })

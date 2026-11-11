@@ -8,7 +8,7 @@
  */
 import { memo, useMemo } from 'react'
 import { placementRect, type RackModuleSize, type RackPlacement } from '../../shared/plan/layout'
-import { rackDims } from '../../shared/plan/racks'
+import { frameCenters, moduleWidths, rackDims } from '../../shared/plan/racks'
 
 interface Props {
   racks: RackPlacement[]
@@ -35,10 +35,11 @@ function palletShapes(r: RackPlacement, size: RackModuleSize): string {
   const horizontal = r.orientation === 'x'
   const d = rackDims(r, size)
   const offsets = r.pair ? [0, d.depth + size.backToBackGap] : [0]
-  const slot = d.width / n
+  const fc = frameCenters(r, size), ws = moduleWidths(r, size)
   let out = ''
   for (const off of offsets) for (let k = 0; k < r.modules; k++) for (let i = 0; i < n; i++) {
-    const along = d.upright + k * (d.width + d.upright) + i * slot + (slot - pf) / 2
+    const slot = ws[k] / n
+    const along = fc[k] + d.upright / 2 + i * slot + (slot - pf) / 2
     const across = off + (d.depth - pd) / 2
     const x = Math.round(horizontal ? b.x + along : b.x + across), y = Math.round(horizontal ? b.y + across : b.y + along)
     const w = Math.round(horizontal ? pf : pd), h = Math.round(horizontal ? pd : pf)
@@ -53,6 +54,7 @@ function rackShapes(r: RackPlacement, size: RackModuleSize, withFrames: boolean)
   const horizontal = r.orientation === 'x'
   const d = rackDims(r, size)
   const offsets = r.pair ? [0, d.depth + size.backToBackGap] : [0]
+  const fc = withFrames ? frameCenters(r, size) : []
   let rows = '', frames = ''
   for (const off of offsets) {
     const x = Math.round(horizontal ? b.x : b.x + off), y = Math.round(horizontal ? b.y + off : b.y)
@@ -60,7 +62,7 @@ function rackShapes(r: RackPlacement, size: RackModuleSize, withFrames: boolean)
     rows += `M${x} ${y}h${w}v${h}h${-w}Z`
     if (withFrames)
       for (let k = 0; k <= r.modules; k++) {
-        const f = Math.round(d.upright / 2 + k * (d.width + d.upright))
+        const f = Math.round(fc[k])
         frames += horizontal ? `M${x + f} ${y}v${h}` : `M${x} ${y + f}h${w}`
       }
   }

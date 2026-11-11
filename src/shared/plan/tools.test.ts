@@ -141,3 +141,41 @@ describe('piezas propias de un rack', () => {
     expect(s.rows[0].modules[0].beam.id).toBe('V160')
   })
 })
+
+describe('una pieza sola de un rack', () => {
+  it('cambiar una viga de un módulo no cambia los otros módulos', async () => {
+    const { placementStructure } = await import('./depot')
+    const { DEFAULT_CONFIGURATION } = await import('../rack/technicalSpecs')
+    const plain = placementStructure(DEFAULT_CONFIGURATION, rack({ modules: 4 }))
+    const elev = plain.rows[0].modules[0].levels.filter((l) => l.hasBeam).map((l) => l.elevation)
+    const changed = [...elev]; changed[0] = elev[0] + 300
+    const s = placementStructure(DEFAULT_CONFIGURATION, rack({ modules: 4, mods: { 2: { beamElevations: changed, width: 1800 } } }))
+    const beamsOf = (m: number) => s.rows[0].modules.find((x) => x.key === m)!.levels.filter((l) => l.hasBeam).map((l) => l.elevation)
+    expect(beamsOf(2)[0]).toBe(changed[0])
+    expect(beamsOf(1)).toEqual(elev)
+    expect(beamsOf(3)).toEqual(elev)
+    expect(s.rows[0].modules.find((x) => x.key === 2)!.width).toBe(1800)
+    expect(s.rows[0].modules.find((x) => x.key === 1)!.width).toBe(DEFAULT_CONFIGURATION.width)
+  })
+  it('un parante solo cambia de alto, pero nunca queda más bajo que sus vigas', async () => {
+    const { placementStructure } = await import('./depot')
+    const { DEFAULT_CONFIGURATION } = await import('../rack/technicalSpecs')
+    const tall = placementStructure(DEFAULT_CONFIGURATION, rack({ modules: 3, frameHeights: { 1: 8000 } }))
+    expect(tall.rows[0].frames.find((f) => f.key === 1)!.height).toBe(8000)
+    expect(tall.rows[0].frames.find((f) => f.key === 2)!.height).toBe(DEFAULT_CONFIGURATION.height)
+    const low = placementStructure(DEFAULT_CONFIGURATION, rack({ modules: 3, frameHeights: { 1: 500 } }))
+    const top = low.rows[0].modules[0].levels.filter((l) => l.hasBeam).pop()!
+    expect(low.rows[0].frames.find((f) => f.key === 1)!.height).toBeGreaterThan(top.elevation)
+  })
+  it('en un rack doble, la fila de atrás queda enfrentada con la de adelante', async () => {
+    const { placementStructure } = await import('./depot')
+    const { DEFAULT_CONFIGURATION } = await import('../rack/technicalSpecs')
+    const s = placementStructure(DEFAULT_CONFIGURATION, rack({ modules: 3, pair: true, mods: { 0: { width: 1800 } } }))
+    const [front, back] = s.rows
+    const total = s.totalWidth
+    const f0 = front.modules.find((x) => x.key === 0)!, b0 = back.modules.find((x) => x.key === 0)!
+    expect(b0.width).toBe(1800)
+    // la de atrás está girada 180°: su posición se mide desde el otro extremo
+    expect(total - b0.xEnd).toBeCloseTo(f0.xStart)
+  })
+})
