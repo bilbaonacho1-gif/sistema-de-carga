@@ -4,7 +4,7 @@
  * se arma como un email para la empresa (con el depósito y la lista de materiales) y también se
  * puede copiar o descargar.
  */
-import { Calculator, Copy, Download, Mail, RotateCcw } from 'lucide-react'
+import { Calculator, Compass, Copy, Download, Mail, RotateCcw } from 'lucide-react'
 import { useState } from 'react'
 import { depotSummaryText, type Depot } from '../shared/plan/depot'
 import { planArea } from '../shared/plan/geometry'
@@ -18,12 +18,16 @@ import { useDesigner } from '../web/pages/designer/designerStore'
 import { usePlan } from '../web/plan/planStore'
 import { DepotFlow, DepotPlate, useDepot } from './DepotFlow'
 import { Intro, useIntro } from './Intro'
+import { Tour, tourSeen } from './Tour'
 
 export function CotizadorApp() {
   const resetRack = useDesigner((x) => x.reset)
   const resetPlan = usePlan((x) => x.resetAll)
   const [quote, setQuote] = useState(false)
   const [intro, closeIntro] = useIntro()
+  // recorrido guiado: la primera vez, apenas se cierra la intro; después, con el botón "Recorrido"
+  const [tour, setTour] = useState(false)
+  const startApp = () => { closeIntro(); if (!tourSeen()) setTimeout(() => setTour(true), 350) }
   const reset = () => {
     if (!window.confirm('¿Empezar de nuevo? Se borran el plano y el rack.')) return
     resetRack()
@@ -38,6 +42,7 @@ export function CotizadorApp() {
           <h1>Cotizador 3D<span className="cz-long"> de depósitos</span></h1>
         </div>
         <div className="cz-top__actions">
+          <Button variant="ghost" icon={Compass} onClick={() => setTour(true)}><span className="cz-long">Recorrido</span></Button>
           <Button variant="ghost" icon={RotateCcw} onClick={reset}><span className="cz-long">Empezar de nuevo</span></Button>
           <Button variant="primary" icon={Calculator} onClick={() => setQuote(true)}><span className="cz-long">Pedir presupuesto</span><span className="cz-short">Presupuesto</span></Button>
         </div>
@@ -46,7 +51,8 @@ export function CotizadorApp() {
         <DepotFlow onQuote={() => setQuote(true)} />
       </main>
       {quote && <QuoteDialog onClose={() => setQuote(false)} />}
-      {intro && <Intro onStart={closeIntro} />}
+      {intro && <Intro onStart={startApp} />}
+      {tour && <Tour onClose={() => setTour(false)} />}
     </div>
   )
 }

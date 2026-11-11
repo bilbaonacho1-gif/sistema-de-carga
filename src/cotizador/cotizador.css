@@ -57,3 +57,21 @@
 @keyframes intro-draw { to { stroke-dashoffset: 0 } }
 @keyframes intro-box { from { opacity: 0; transform: translateY(-8px) } to { opacity: 1; transform: none } }
 @media (prefers-reduced-motion: reduce) { .intro, .intro__line, .intro__box { animation: none; opacity: 1; stroke-dashoffset: 0 } }
+
+/* ------------------------------ Recorrido guiado ------------------------------ */
+.tour { position: fixed; inset: 0; z-index: 3000; }
+.tour__shade { position: absolute; inset: 0; }
+.tour__card { position: absolute; display: flex; flex-direction: column; gap: 8px; padding: 18px 18px 14px; background: #fff; border-radius: 14px; box-shadow: 0 20px 50px rgba(15, 18, 22, .35); animation: intro-in .25s ease-out both; }
+.tour__x { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 8px; background: none; color: var(--ink-2); cursor: pointer; }
+.tour__x:hover { background: var(--red-tint); color: var(--red); }
+.tour__k { font: 700 11px var(--f-body); text-transform: uppercase; letter-spacing: .1em; color: var(--red); }
+.tour__t { margin: 0; font: 800 19px/1.15 var(--f-display, var(--f-body)); text-transform: uppercase; color: var(--ink); }
+.tour__p { margin: 0; color: var(--ink-2); font-size: 14.5px; line-height: 1.45; }
+.tour__nav { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.tour__skip { margin-right: auto; padding: 6px 2px; border: 0; background: none; color: var(--ink-2); font: 600 13px var(--f-body); cursor: pointer; }
+.tour__skip:hover { color: var(--red); }
+.tour__dots { display: flex; gap: 4px; }
+.tour__dots i { width: 6px; height: 6px; border-radius: 50%; background: #d4d8dd; }
+.tour__dots i.is-on { background: var(--red); }
+.tour__b { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font: 700 14px var(--f-body); cursor: pointer; }
+.tour__b--go { border-color: var(--red); background: var(--red); color: #fff; }
