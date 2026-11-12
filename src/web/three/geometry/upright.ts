@@ -53,7 +53,7 @@ function perforatedPlate(u0: number, u1: number, h: number, t: number, holeU: nu
 const store = new Map<string, THREE.BufferGeometry>()
 
 export function uprightGeometry(profile: UprightProfile, heightMm: number): THREE.BufferGeometry {
-  return cached(store, `${profile.id}-${heightMm}`, () => {
+  return cached(store, `${profile.id}:${profile.faceWidth}x${profile.depth}x${profile.thickness}-${heightMm}`, () => {
     const H = m(heightMm)
     const w = m(profile.faceWidth) / 2
     const d = m(profile.depth)

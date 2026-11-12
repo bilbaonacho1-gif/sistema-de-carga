@@ -698,3 +698,8 @@
 .rack-part__sub { margin: 2px 0 0; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
 .rack-part__row { border-radius: 8px; padding: 4px; margin: -4px; transition: background .2s; }
 .rack-part__row.is-picked { background: #fff1b8; }
+
+/* mis piezas: catálogo propio de vigas y parantes */
+.my-pieces { display: flex; flex-direction: column; gap: 8px; }
+.my-pieces__add { align-self: flex-start; }
+.my-pieces .rack-list__h strong { font-weight: 700; }

@@ -13,7 +13,8 @@ import { placementRect } from '../shared/plan/layout'
 import { addRack, freezeRacks, rackSelection } from '../shared/plan/racks'
 import { calculateRackStructure } from '../shared/rack/calculateRackStructure'
 import { beamCapacityForSpan } from '../shared/rack/rules'
-import { BEAM_PROFILES, CONTACT, DESIGN_RULES, OFFICIAL_REFERENCE, UPRIGHT_PROFILES } from '../shared/rack/technicalSpecs'
+import { CONTACT, DESIGN_RULES, OFFICIAL_REFERENCE } from '../shared/rack/technicalSpecs'
+import { isOwnProfile, profilesOf } from '../shared/rack/profiles'
 import type { RackStructure } from '../shared/rack/types'
 import { NumberStepper, Switch } from '../web/components/fields'
 import { Button, Field, KeyValue, Segmented, Select } from '../web/components/ui'
@@ -229,6 +230,7 @@ function RackStep({ s }: { s: RackStructure }) {
   const minLevels = config.floorStorage ? 2 : 1
   const autoUpright = !config.uprightId || config.uprightId === 'auto'
   const autoBeam = !config.beamId || config.beamId === 'auto'
+  const all = profilesOf(config)
   return (
     <div className="cot-fields">
       <NumberStepper label="Largo de viga (ancho del módulo)" meters value={config.width} min={L.width.min} max={L.width.max} step={50} typedStep={10} slider onChange={(width) => update({ width })}
@@ -249,15 +251,16 @@ function RackStep({ s }: { s: RackStructure }) {
         <Field label="Parante" hint={autoUpright ? `Automático: ${s.upright.name}.` : undefined}>{(id) => (
           <Select id={id} value={config.uprightId ?? 'auto'} onChange={(e) => update({ uprightId: e.target.value })}>
             <option value="auto">Automático (el más liviano que alcanza)</option>
-            {UPRIGHT_PROFILES.map((u) => <option key={u.id} value={u.id}>{u.name} · hasta {kg(u.maxFrameLoad)}</option>)}
+            {all.uprights.map((u) => <option key={u.id} value={u.id}>{u.name}{isOwnProfile(config, u.id) ? ' (mía)' : ''} · hasta {kg(u.maxFrameLoad)}</option>)}
           </Select>
         )}</Field>
         <Field label="Viga" hint={autoBeam ? `Automática: ${s.beam.name} para ${kg(s.levelLoad)} por nivel.` : `Carga por nivel: ${kg(s.levelLoad)}.`}>{(id) => (
           <Select id={id} value={config.beamId ?? 'auto'} onChange={(e) => update({ beamId: e.target.value })}>
             <option value="auto">Automática (la más liviana que alcanza)</option>
-            {BEAM_PROFILES.map((b) => <option key={b.id} value={b.id}>{b.name} · {kg(beamCapacityForSpan(b, s.config.width))} con {mm(s.config.width)}</option>)}
+            {all.beams.map((b) => <option key={b.id} value={b.id}>{b.name}{isOwnProfile(config, b.id) ? ' (mía)' : ''} · {kg(beamCapacityForSpan(b, s.config.width))} con {mm(s.config.width)}</option>)}
           </Select>
         )}</Field>
+        <button type="button" className="link-btn" onClick={() => usePlan.getState().setSection('piezas')}>Crear mis propias piezas…</button>
       </details>
     </div>
   )

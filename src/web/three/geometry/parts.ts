@@ -13,7 +13,7 @@ const store = new Map<string, THREE.BufferGeometry>()
 
 /* ---------- Bastidor: travesaños + diagonales en zigzag ---------- */
 export function bracingGeometry(profile: UprightProfile, heightMm: number, depthMm: number) {
-  return cached(store, `brace-${profile.id}-${heightMm}-${depthMm}`, () => {
+  return cached(store, `brace-${profile.id}:${profile.faceWidth}x${profile.depth}x${profile.thickness}-${heightMm}-${depthMm}`, () => {
     const d = m(profile.depth)
     const D = m(depthMm)
     const bw = m(VISUAL.brace.width)
@@ -41,7 +41,7 @@ export function bracingGeometry(profile: UprightProfile, heightMm: number, depth
 
 /* ---------- Placa base roja con 4 bulones ---------- */
 export function basePlateGeometry(profile: UprightProfile) {
-  return cached(store, `plate-${profile.id}`, () => {
+  return cached(store, `plate-${profile.id}:${profile.faceWidth}x${profile.depth}x${profile.thickness}`, () => {
     const { width, depth, thickness } = VISUAL.basePlate
     const k = profile.faceWidth / 80
     const W = m(width) * k
@@ -61,7 +61,7 @@ export function basePlateGeometry(profile: UprightProfile) {
 
 /* ---------- Protector: chapa plegada con punta en V + pestañas abulonadas ---------- */
 export function protectorGeometry(profile: UprightProfile) {
-  return cached(store, `prot-${profile.id}`, () => {
+  return cached(store, `prot-${profile.id}:${profile.faceWidth}x${profile.depth}x${profile.thickness}`, () => {
     const h = m(VISUAL.protector.height)
     const e = m(VISUAL.protector.thickness)
     const xs = m(profile.faceWidth) / 2 + 0.045
@@ -89,7 +89,7 @@ export function protectorGeometry(profile: UprightProfile) {
 
 /* ---------- Viga caja: largo 1 m sobre X (se escala al largo real) ---------- */
 export function beamGeometry(beam: BeamProfile) {
-  return cached(store, `beam-${beam.id}`, () => {
+  return cached(store, `beam-${beam.id}:${beam.height}x${beam.depth}`, () => {
     const g = new RoundedBoxGeometry(1, m(beam.height), m(beam.depth), 2, 0.006)
     return g
   })
@@ -102,7 +102,7 @@ export function beamGeometry(beam: BeamProfile) {
  *  - ala lateral: corre por el costado del parante; ahí se suelda la viga
  */
 export function connectorGeometry(side: 1 | -1, profile: UprightProfile, beam: BeamProfile) {
-  return cached(store, `conn-${side}-${profile.id}-${beam.id}`, () => {
+  return cached(store, `conn-${side}-${profile.id}:${profile.faceWidth}x${profile.depth}x${profile.thickness}-${beam.id}:${beam.height}x${beam.depth}`, () => {
     const e = 0.005
     const H = m(VISUAL.connectorHeight)
     const y0 = 0.02 - H

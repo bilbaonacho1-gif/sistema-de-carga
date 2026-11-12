@@ -4,7 +4,7 @@
  * se arma como un email para la empresa (con el depósito y la lista de materiales) y también se
  * puede copiar o descargar.
  */
-import { Calculator, Compass, Copy, Download, Mail, RotateCcw } from 'lucide-react'
+import { Calculator, Compass, Copy, Download, Mail, RotateCcw, Shapes, Warehouse } from 'lucide-react'
 import { useState } from 'react'
 import { depotSummaryText, type Depot } from '../shared/plan/depot'
 import { planArea } from '../shared/plan/geometry'
@@ -18,12 +18,16 @@ import { useDesigner } from '../web/pages/designer/designerStore'
 import { usePlan } from '../web/plan/planStore'
 import { DepotFlow, DepotPlate, useDepot } from './DepotFlow'
 import { Intro, useIntro } from './Intro'
+import { PiecesSection } from './PiecesSection'
 import { Tour, tourSeen } from './Tour'
 
 export function CotizadorApp() {
   const resetRack = useDesigner((x) => x.reset)
   const resetPlan = usePlan((x) => x.resetAll)
   const [quote, setQuote] = useState(false)
+  // dos secciones: el depósito (plano y racks) y el taller de piezas propias
+  const section = usePlan((x) => x.section)
+  const setSection = usePlan((x) => x.setSection)
   const [intro, closeIntro] = useIntro()
   // recorrido guiado: la primera vez, apenas se cierra la intro; después, con el botón "Recorrido"
   const [tour, setTour] = useState(false)
@@ -41,14 +45,18 @@ export function CotizadorApp() {
           <span className="cz-top__eyebrow">Sistemas de Carga S.A.</span>
           <h1>Sistema<span className="cz-long"> de depósitos</span></h1>
         </div>
+        <nav className="cz-tabs" aria-label="Secciones">
+          <button type="button" className={section === 'deposito' ? 'is-on' : ''} aria-current={section === 'deposito' ? 'page' : undefined} onClick={() => setSection('deposito')}><Warehouse size={15} aria-hidden /> Depósito</button>
+          <button type="button" className={section === 'piezas' ? 'is-on' : ''} aria-current={section === 'piezas' ? 'page' : undefined} onClick={() => setSection('piezas')}><Shapes size={15} aria-hidden /> Mis piezas</button>
+        </nav>
         <div className="cz-top__actions">
-          <Button variant="ghost" icon={Compass} onClick={() => setTour(true)}><span className="cz-long">Recorrido</span></Button>
+          <Button variant="ghost" icon={Compass} onClick={() => { setSection('deposito'); setTour(true) }}><span className="cz-long">Recorrido</span></Button>
           <Button variant="ghost" icon={RotateCcw} onClick={reset}><span className="cz-long">Empezar de nuevo</span></Button>
           <Button variant="primary" icon={Calculator} onClick={() => setQuote(true)}><span className="cz-long">Pedir presupuesto</span><span className="cz-short">Presupuesto</span></Button>
         </div>
       </header>
       <main className="cz-main">
-        <DepotFlow onQuote={() => setQuote(true)} />
+        {section === 'piezas' ? <PiecesSection /> : <DepotFlow onQuote={() => setQuote(true)} />}
       </main>
       {quote && <QuoteDialog onClose={() => setQuote(false)} />}
       {intro && <Intro onStart={startApp} />}

@@ -13,6 +13,7 @@ import {
   BEAM_PROFILES, DEFAULT_ACCESSORIES, DESIGN_RULES, OFFICIAL_REFERENCE, PALLET_TYPES, UPRIGHT_PROFILES,
 } from './technicalSpecs'
 import { beamCapacityForSpan, defaultRules, type StructuralRules } from './rules'
+import { profilesOf, sanitizeProfiles } from './profiles'
 import { metros } from '../units'
 import type {
   AccessoryConfig, BeamLayout, BeamProfile, FrameLayout, LevelLayout, ModuleLayout, PalletType, PositionSlot,
@@ -56,13 +57,16 @@ export function sanitizeConfiguration(c: RackConfiguration): RackConfiguration {
   const minLevels = c.floorStorage ? 2 : 1
   const levelRange = { min: Math.max(minLevels, L.levels.min), max: L.levels.max }
   // (hasta un tramo por módulo: así cada módulo de un rack del plano puede tener sus piezas)
+  // piezas de fábrica + las creadas por el usuario
+  const customProfiles = sanitizeProfiles(c.customProfiles)
+  const all = profilesOf({ customProfiles })
   const sections: RackSection[] = (Array.isArray(c.sections) ? c.sections : []).slice(0, L.sectionModules.max).map((s) => ({
     modules: range(s?.modules, L.sectionModules, 1),
     width: range(s?.width, L.width),
     height: range(s?.height, L.height),
     levels: range(s?.levels, levelRange, minLevels),
     ...(Array.isArray(s?.beamElevations) ? { beamElevations: s.beamElevations } : {}),
-    ...(s?.beamId && BEAM_PROFILES.some((b) => b.id === s.beamId) ? { beamId: s.beamId } : {}),
+    ...(s?.beamId && all.beams.some((b) => b.id === s.beamId) ? { beamId: s.beamId } : {}),
   }))
   const cp = c.customPallet
   const out: RackConfiguration = {
@@ -88,8 +92,9 @@ export function sanitizeConfiguration(c: RackConfiguration): RackConfiguration {
       deep: range(cp?.deep, L.palletDeep, 1200),
       height: range(cp?.height, L.palletHeight, 144),
     },
-    uprightId: UPRIGHT_PROFILES.some((u) => u.id === c.uprightId) ? c.uprightId : 'auto',
-    beamId: BEAM_PROFILES.some((b) => b.id === c.beamId) ? c.beamId : 'auto',
+    uprightId: all.uprights.some((u) => u.id === c.uprightId) ? c.uprightId : 'auto',
+    beamId: all.beams.some((b) => b.id === c.beamId) ? c.beamId : 'auto',
+    ...(customProfiles.uprights.length || customProfiles.beams.length ? { customProfiles } : { customProfiles: undefined }),
     accessories: sanitizeAccessories(c.accessories),
   }
   // con tramos, los valores generales describen el rack completo (los usan cotas y resumen)
@@ -176,9 +181,11 @@ interface SectionCalc {
 export function calculateRackStructure(
   input: RackConfiguration,
   rules: StructuralRules = defaultRules,
-  catalog: Catalog = defaultCatalog,
+  baseCatalog: Catalog = defaultCatalog,
 ): RackStructure {
   const config = sanitizeConfiguration(input)
+  // el catálogo con el que se calcula: el de fábrica más las piezas propias del usuario
+  const catalog: Catalog = config.customProfiles ? { ...baseCatalog, ...profilesOf(config, baseCatalog) } : baseCatalog
   const warnings: RackWarning[] = []
   const warn = (w: RackWarning) => { if (!warnings.some((x) => x.code === w.code)) warnings.push(w) }
   const R = DESIGN_RULES

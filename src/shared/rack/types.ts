@@ -46,6 +46,8 @@ export interface RackConfiguration {
   /** Perfiles elegidos a mano. 'auto' = el motor elige el más liviano que alcanza. */
   uprightId?: string
   beamId?: string
+  /** "Mis piezas": tipos de parante y de viga creados por el usuario, además de los de fábrica. */
+  customProfiles?: { uprights: UprightProfile[]; beams: BeamProfile[] }
   accessories?: Partial<AccessoryConfig>
 }
 

@@ -24,3 +24,31 @@ describe('altura de cada viga', () => {
     expect(elevations({ ...base, levels: 4, beamElevations: [1500, 4000] })).toHaveLength(3)
   })
 })
+
+describe('mis piezas (catálogo propio)', () => {
+  const own = {
+    uprights: [{ id: 'mp-1', name: 'Parante 90 × 75', faceWidth: 90, depth: 75, thickness: 2.5, maxFrameLoad: 30_000 }],
+    beams: [{ id: 'mv-1', name: 'Viga 110 × 50', height: 110, depth: 50, capacityBySpan: [{ maxSpan: 3600, capacity: 2500 }] }],
+  }
+  it('una viga y un parante propios se pueden elegir y entran en la lista de materiales', async () => {
+    const { calculateRackStructure } = await import('./calculateRackStructure')
+    const { DEFAULT_CONFIGURATION } = await import('./technicalSpecs')
+    const s = calculateRackStructure({ ...DEFAULT_CONFIGURATION, customProfiles: own, beamId: 'mv-1', uprightId: 'mp-1' })
+    expect(s.beam.id).toBe('mv-1')
+    expect(s.upright.id).toBe('mp-1')
+    expect(s.upright.faceWidth).toBe(90)
+    expect(s.materials.some((m) => m.code.includes('mv-1'))).toBe(true)
+  })
+  it('si la pieza propia se borra, el rack vuelve a la elección automática', async () => {
+    const { calculateRackStructure } = await import('./calculateRackStructure')
+    const { DEFAULT_CONFIGURATION, BEAM_PROFILES } = await import('./technicalSpecs')
+    const s = calculateRackStructure({ ...DEFAULT_CONFIGURATION, beamId: 'mv-1' })
+    expect(BEAM_PROFILES.some((b) => b.id === s.beam.id)).toBe(true)
+  })
+  it('las piezas propias también entran en la elección automática', async () => {
+    const { profilesOf } = await import('./profiles')
+    const all = profilesOf({ customProfiles: own })
+    expect(all.beams.map((b) => b.id)).toContain('mv-1')
+    expect(all.beams.map((b) => b.height * b.depth)).toEqual([...all.beams.map((b) => b.height * b.depth)].sort((a, b) => a - b))
+  })
+})

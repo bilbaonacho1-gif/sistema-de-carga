@@ -101,6 +101,9 @@ interface PlanState {
   /** "Ver solo este": racks que se miran aislados (los demás quedan apagados). */
   isolate: string[] | null
   setIsolate(ids: string[] | null): void
+  /** Sección a la vista: el depósito (plano y racks) o el taller de piezas propias. */
+  section: 'deposito' | 'piezas'
+  setSection(s: 'deposito' | 'piezas'): void
   /** Pieza de metal tocada en el 3D (de un rack visto solo): una viga (plano de carga) o los parantes. */
   piece: RackPiece | null
   setPiece(p: RackPiece | null): void
@@ -164,6 +167,8 @@ export const usePlan = create<PlanState>()(
       setIsolate: (isolate) => set((s) => ({ isolate, piece: isolate ? s.piece : null })),
       piece: null,
       setPiece: (piece) => set({ piece }),
+      section: 'deposito',
+      setSection: (section) => set({ section }),
       symbolKind: 'matafuego',
       rackDrawPair: true,
       setRackDrawPair: (rackDrawPair) => set({ rackDrawPair }),

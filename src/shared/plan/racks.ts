@@ -13,7 +13,7 @@ type Rect = { x: number; y: number; w: number; h: number }
 
 /** Medidas del módulo de este rack: las del depósito, o las propias si se cambiaron sus piezas. */
 export function rackDims(p: RackPlacement, size: RackModuleSize): { width: number; depth: number; upright: number } {
-  const up = p.uprightId && p.uprightId !== 'auto' ? UPRIGHT_PROFILES.find((u) => u.id === p.uprightId)?.faceWidth : undefined
+  const up = p.uprightId && p.uprightId !== 'auto' ? size.uprightWidths?.[p.uprightId] ?? UPRIGHT_PROFILES.find((u) => u.id === p.uprightId)?.faceWidth : undefined
   return { width: p.beamLength ?? size.width, depth: p.frameDepth ?? size.depth, upright: up ?? size.upright }
 }
 

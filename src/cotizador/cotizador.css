@@ -75,3 +75,49 @@
 .tour__dots i.is-on { background: var(--red); }
 .tour__b { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font: 700 14px var(--f-body); cursor: pointer; }
 .tour__b--go { border-color: var(--red); background: var(--red); color: #fff; }
+
+/* secciones del encabezado: Depósito / Mis piezas */
+.cz-tabs { display: flex; gap: 4px; margin-left: 18px; padding: 4px; border-radius: 10px; background: var(--steel); }
+.cz-tabs button { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 0; border-radius: 7px; background: none; color: var(--ink-2); font: 700 13px var(--f-body); cursor: pointer; white-space: nowrap; }
+.cz-tabs button:hover { color: var(--ink); }
+.cz-tabs button.is-on { background: #fff; color: var(--red); box-shadow: 0 1px 3px rgba(0, 0, 0, .1); }
+@media (max-width: 760px) { .cz-tabs { margin-left: 6px; } .cz-tabs button { padding: 0 8px; font-size: 12px; } .cz-tabs svg { display: none; } }
+
+/* MIS PIEZAS: lista · medidas · cómo queda */
+.pieces { display: grid; grid-template-columns: 280px minmax(320px, 440px) minmax(0, 1fr); gap: 16px; height: calc(100dvh - var(--topbar) - 40px); min-height: 420px; }
+.pieces > * { min-height: 0; overflow-y: auto; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+.pieces__list { display: flex; flex-direction: column; gap: 8px; }
+.pieces__list ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.pieces__back { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; }
+.pieces__h { margin: 8px 0 0; font: 700 11.5px var(--f-body); text-transform: uppercase; letter-spacing: .07em; color: var(--ink-2); }
+.pieces__item { width: 100%; display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: #fff; text-align: left; cursor: pointer; font: inherit; color: var(--ink); }
+.pieces__item span { font-size: 12px; color: var(--ink-2); }
+.pieces__item:hover { border-color: var(--red); }
+.pieces__item.is-on { border-color: var(--red); background: var(--red-tint); box-shadow: inset 3px 0 0 var(--red); }
+.pieces__factory { margin-top: 6px; }
+.pieces__edit { display: flex; flex-direction: column; gap: 10px; }
+.pieces__title { margin: 0; font: 800 18px var(--f-display); text-transform: uppercase; }
+.pieces__fields { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.pieces__fields:disabled { opacity: .75; }
+.pieces__sub { margin: 8px 0 0; font: 700 12px var(--f-body); text-transform: uppercase; letter-spacing: .06em; color: var(--ink-2); }
+.pieces__span { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: end; padding: 8px; border: 1px solid var(--line-2); border-radius: 10px; }
+.pieces__x { width: 34px; height: 40px; border: 0; border-radius: 8px; background: none; color: var(--ink-2); cursor: pointer; }
+.pieces__x:hover { background: var(--red-tint); color: var(--red); }
+.pieces__use { display: flex; flex-wrap: wrap; gap: 8px; }
+.pieces__use--minor { margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--line-2); }
+.pieces__inline { display: inline; padding: 0; }
+.pieces__empty { margin: auto; max-width: 320px; text-align: center; display: flex; flex-direction: column; gap: 10px; }
+.pieces__empty h2 { margin: 0; font: 800 20px var(--f-display); text-transform: uppercase; }
+.pieces__empty p { margin: 0; color: var(--ink-2); }
+.pieces__empty-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.pieces__view { display: flex; flex-direction: column; gap: 12px; }
+.pieces__cut svg { display: block; width: 100%; max-width: 300px; height: auto; margin: 0 auto; }
+.pieces__3d { position: relative; flex: 1; min-height: 260px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: #f2f3f5; }
+.pieces__3d-t { position: absolute; left: 10px; bottom: 8px; padding: 3px 8px; border-radius: 6px; background: rgba(255, 255, 255, .85); font-size: 12px; color: var(--ink-2); pointer-events: none; }
+.pieces__hint { margin: auto; color: var(--ink-2); }
+@media (max-width: 1000px) {
+  .pieces { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .pieces > * { overflow: visible; }
+  .pieces__3d { min-height: 320px; flex: none; height: 320px; }
+}
+.pieces__list > * { flex: none; }

@@ -9,7 +9,7 @@ import { Calculator, ChevronLeft, ChevronRight, Copy, Download, Lightbulb, Plus,
 import { PRODUCT_TYPES, type ProductGroup } from '../../../shared/catalog'
 import { materialsTotal } from '../../../shared/rack/bom'
 import { beamCapacityForSpan } from '../../../shared/rack/rules'
-import { BEAM_PROFILES, DESIGN_RULES, OFFICIAL_REFERENCE, PALLET_TYPES, UPRIGHT_PROFILES } from '../../../shared/rack/technicalSpecs'
+import { DESIGN_RULES, OFFICIAL_REFERENCE, PALLET_TYPES } from '../../../shared/rack/technicalSpecs'
 import type { AccessoryConfig, ComponentCounts, MaterialLine, RackStructure } from '../../../shared/rack/types'
 
 import { NumberStepper, Switch } from '../../components/fields'
@@ -17,6 +17,7 @@ import { Badge, Button, Field, KeyValue, Segmented, Select } from '../../compone
 import { fmt, plural } from '../../lib/format'
 import { STEPS, useDesigner, type StepId } from './designerStore'
 import { metros } from '../../../shared/units'
+import { profilesOf } from '../../../shared/rack/profiles'
 import { loadOf, PALLET_TARE, stackBoxes } from '../../../shared/rack/load'
 
 const L = DESIGN_RULES.limits
@@ -355,13 +356,13 @@ function StructureStep({ s }: { s: RackStructure }) {
       <Field label="Parante" hint={autoUpright ? `Automático: ${s.upright.name}. El bastidor más cargado lleva ${kg(s.maxFrameLoad)}.` : `El bastidor más cargado lleva ${kg(s.maxFrameLoad)}.`}>{(id) => (
         <Select id={id} value={config.uprightId ?? 'auto'} onChange={(e) => update({ uprightId: e.target.value })}>
           <option value="auto">Automático (el más liviano que alcanza)</option>
-          {UPRIGHT_PROFILES.map((u) => <option key={u.id} value={u.id}>{u.name} · hasta {kg(u.maxFrameLoad)}</option>)}
+          {profilesOf(config).uprights.map((u) => <option key={u.id} value={u.id}>{u.name} · hasta {kg(u.maxFrameLoad)}</option>)}
         </Select>
       )}</Field>
       <Field label="Viga" hint={autoBeam ? `Automático: se elige por tramo según la luz y la carga del nivel (${kg(s.levelLoad)}).` : `Carga por nivel: ${kg(s.levelLoad)}.`}>{(id) => (
         <Select id={id} value={config.beamId ?? 'auto'} onChange={(e) => update({ beamId: e.target.value })}>
           <option value="auto">Automática (la más liviana que alcanza)</option>
-          {BEAM_PROFILES.map((b) => <option key={b.id} value={b.id}>{b.name} · {kg(beamCapacityForSpan(b, s.config.width))} con {mm(s.config.width)}</option>)}
+          {profilesOf(config).beams.map((b) => <option key={b.id} value={b.id}>{b.name} · {kg(beamCapacityForSpan(b, s.config.width))} con {mm(s.config.width)}</option>)}
         </Select>
       )}</Field>
       <NumberStepper label="Filas de rack" value={config.layout.rows} min={L.rows.min} max={L.rows.max} step={1} onChange={(rows) => updateLayout({ rows })} />

@@ -11,7 +11,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { placementStructure } from '../../shared/plan/depot'
 import { freezeRacks, guarded, mapRacks } from '../../shared/plan/racks'
 import type { ModulePieces, RackPlacement } from '../../shared/plan/types'
-import { BEAM_PROFILES, DESIGN_RULES, UPRIGHT_PROFILES } from '../../shared/rack/technicalSpecs'
+import { isOwnProfile, profilesOf } from '../../shared/rack/profiles'
+import { DESIGN_RULES } from '../../shared/rack/technicalSpecs'
 import type { LevelLayout, RackConfiguration } from '../../shared/rack/types'
 import { metros } from '../../shared/units'
 import { NumberStepper } from '../components/fields'
@@ -52,6 +53,7 @@ export function RackParts({ r, rackLayer, config }: { r: RackPlacement; rackLaye
   const [note, setNote] = useState<string | null>(null)
   const s = useMemo(() => placementStructure(config, r), [config, r])
   const mine = piece?.rack === r.id ? piece : null
+  const all = profilesOf(config)
   const pickedKey = mine ? (mine.kind === 'beam' ? `b${mine.module}-${mine.plane}` : `u${mine.frame}`) : ''
   // al tocar una pieza en el 3D, su lugar en el panel queda a la vista
   useEffect(() => {
@@ -106,7 +108,7 @@ export function RackParts({ r, rackLayer, config }: { r: RackPlacement; rackLaye
           <Field label="Perfil de esta viga" hint={o?.beamId ? 'Propio de este módulo (todas sus vigas)' : `Como el resto · ahora ${mod.beam.name}`}>{(id) => (
             <Select id={id} value={o?.beamId ?? ''} onChange={(e) => setMod(m, { beamId: e.target.value || undefined })}>
               <option value="">Como el resto</option>
-              {BEAM_PROFILES.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {all.beams.map((p) => <option key={p.id} value={p.id}>{p.name}{isOwnProfile(config, p.id) ? ' (mía)' : ''}</option>)}
             </Select>
           )}</Field>
           {o && <button type="button" className="link-btn" onClick={() => setMod(m, { width: undefined, beamId: undefined, beamElevations: undefined })}>Dejar este módulo como el resto</button>}
@@ -153,7 +155,7 @@ export function RackParts({ r, rackLayer, config }: { r: RackPlacement; rackLaye
             <Select id={id} value={r.beamId ?? ''} onChange={(e) => set({ beamId: e.target.value || undefined })}>
               <option value="">Como el resto</option>
               <option value="auto">Automática (la más liviana que alcanza)</option>
-              {BEAM_PROFILES.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              {all.beams.map((b) => <option key={b.id} value={b.id}>{b.name}{isOwnProfile(config, b.id) ? ' (mía)' : ''}</option>)}
             </Select>
           )}</Field>
           <p className="rack-part__sub">Altura de cada viga (desde el piso)</p>
@@ -175,10 +177,11 @@ export function RackParts({ r, rackLayer, config }: { r: RackPlacement; rackLaye
             <Select id={id} value={r.uprightId ?? ''} onChange={(e) => set({ uprightId: e.target.value || undefined })}>
               <option value="">Como el resto</option>
               <option value="auto">Automático (el más liviano que alcanza)</option>
-              {UPRIGHT_PROFILES.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              {all.uprights.map((u) => <option key={u.id} value={u.id}>{u.name}{isOwnProfile(config, u.id) ? ' (mío)' : ''}</option>)}
             </Select>
           )}</Field>
         </section>
+        <button type="button" className="link-btn" onClick={() => usePlan.getState().setSection('piezas')}>Crear mis propias piezas…</button>
       </details>
 
       {own && <button type="button" className="link-btn rack-editor__reset"

@@ -76,8 +76,9 @@ export const useDesigner = create<DesignerState>()(
       })),
       duplicateSection: (i) => set((s) => ({ config: withSections(s.config, (list) => [...list.slice(0, i + 1), { ...list[i] }, ...list.slice(i + 1)]) })),
       removeSection: (i) => set((s) => ({ config: withSections(s.config, (list) => list.filter((_, j) => j !== i)) })),
-      load: (config) => set((s) => ({ config: { ...DEFAULT_CONFIGURATION, ...config }, productId: 'selectivo', step: 'medidas', view: 'iso', viewRequest: s.viewRequest + 1 })),
-      reset: () => set((s) => ({ config: DEFAULT_CONFIGURATION, step: 'producto', view: 'iso', viewRequest: s.viewRequest + 1 })),
+      load: (config) => set((s) => ({ config: { ...DEFAULT_CONFIGURATION, ...config, customProfiles: config.customProfiles ?? s.config.customProfiles }, productId: 'selectivo', step: 'medidas', view: 'iso', viewRequest: s.viewRequest + 1 })),
+      // "mis piezas" (el catálogo propio) no se borra al empezar de nuevo
+      reset: () => set((s) => ({ config: { ...DEFAULT_CONFIGURATION, customProfiles: s.config.customProfiles }, step: 'producto', view: 'iso', viewRequest: s.viewRequest + 1 })),
       setProduct: (productId) => set({ productId }),
       setMode: (mode) => set({ mode }),
       goTo: (step) => set({ step }),

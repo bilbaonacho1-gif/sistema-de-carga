@@ -10,6 +10,7 @@ import { autoLayout, type LayoutOptions, type LayoutResult, type RackModuleSize 
 import { manualLayout, rackIssues } from './racks'
 import type { Plan, RackPlacement } from './types'
 import { metros } from '../units'
+import { profilesOf } from '../rack/profiles'
 
 export interface PlacedRack { placement: RackPlacement; structure: RackStructure }
 
@@ -34,6 +35,7 @@ export function moduleSize(config: RackConfiguration): { size: RackModuleSize; s
   const c = sanitizeConfiguration({ ...config, sections: [], layout: { ...config.layout, rows: 1, backToBack: false, warehouseLength: 0, warehouseWidth: 0 } })
   const sample = calculateRackStructure({ ...c, positions: 1 })
   return { sample, size: { width: c.width, depth: c.depth, upright: sample.upright.faceWidth, backToBackGap: DESIGN_RULES.backToBackGap,
+    uprightWidths: Object.fromEntries(profilesOf(c).uprights.map((u) => [u.id, u.faceWidth])),
     pallets: sample.palletsPerModule, palletFront: sample.pallet.front, palletDeep: sample.pallet.deep } }
 }
 
