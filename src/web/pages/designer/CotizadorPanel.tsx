@@ -24,10 +24,10 @@ const mm = metros
 const kg = (n: number) => `${fmt(n)} kg`
 
 const META: Record<StepId, { title: string; short: string; help: string }> = {
-  producto: { title: 'Qué querés cotizar', short: 'Producto', help: 'Elegí el sistema. Los que dicen "Próximamente" se van sumando al cotizador.' },
+  producto: { title: 'Qué querés cotizar', short: 'Producto', help: 'Elegí el sistema. Los que dicen "Próximamente" se van sumando al sistema.' },
   medidas: { title: 'Medidas del rack', short: 'Medidas', help: 'Alto, profundidad y largo de viga. Si una parte del rack tiene otra altura u otro largo de viga, activá "Tramos con medidas distintas".' },
   carga: { title: 'Pallet y carga', short: 'Carga', help: 'El pallet define cuántos entran por módulo. Si el cliente usa uno especial, elegí "A medida" y cargá sus medidas.' },
-  estructura: { title: 'Estructura y distribución', short: 'Estructura', help: 'El parante y la viga se eligen solos según la carga. Si querés otro, elegilo y el cotizador te avisa si no alcanza.' },
+  estructura: { title: 'Estructura y distribución', short: 'Estructura', help: 'El parante y la viga se eligen solos según la carga. Si querés otro, elegilo y el sistema te avisa si no alcanza.' },
   accesorios: { title: 'Accesorios', short: 'Accesorios', help: 'Protección, seguridad y piso de los niveles. Cada accesorio suma sus piezas a la lista de materiales.' },
   resumen: { title: 'Resumen y materiales', short: 'Resumen', help: 'Todas las piezas que lleva el rack. Desde acá se pide el presupuesto o se agrega al almacén.' },
 }

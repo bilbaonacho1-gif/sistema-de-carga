@@ -39,7 +39,7 @@ export function CotizadorApp() {
         <Logo size={44} />
         <div className="cz-top__title">
           <span className="cz-top__eyebrow">Sistemas de Carga S.A.</span>
-          <h1>Cotizador 3D<span className="cz-long"> de depósitos</span></h1>
+          <h1>Sistema<span className="cz-long"> de depósitos</span></h1>
         </div>
         <div className="cz-top__actions">
           <Button variant="ghost" icon={Compass} onClick={() => setTour(true)}><span className="cz-long">Recorrido</span></Button>

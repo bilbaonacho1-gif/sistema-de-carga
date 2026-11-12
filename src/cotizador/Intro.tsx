@@ -44,7 +44,7 @@ export function Intro({ onStart }: { onStart(): void }) {
     <div className="intro" role="dialog" aria-modal="true" aria-labelledby="intro-t">
       <div className="intro__card">
         <div className="intro__brand"><Logo size={52} /><span>Sistemas de Carga S.A.</span></div>
-        <h1 id="intro-t" className="intro__t">Cotizador 3D de depósitos</h1>
+        <h1 id="intro-t" className="intro__t">Sistema de depósitos</h1>
         <p className="intro__p">Dibujá tu depósito y mirá cuántos racks entran, en 3D, con la lista de materiales.</p>
         <RackDrawing />
         <ol className="intro__steps">
