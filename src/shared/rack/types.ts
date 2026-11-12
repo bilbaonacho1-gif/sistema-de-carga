@@ -5,6 +5,8 @@
  * Jerarquía: FILA → BASTIDOR | MÓDULO | BASTIDOR … → NIVEL → POSICIÓN → PALLET
  */
 
+import type { SectionShape } from './section'
+
 /** Lo que el usuario configura. */
 export interface RackConfiguration {
   /** Luz libre del módulo = largo de la viga (entre parantes). */
@@ -126,6 +128,8 @@ export interface UprightProfile {
   thickness: number
   /** Carga máxima por bastidor (referencial). */
   maxFrameLoad: number
+  /** Forma propia del corte (dibujada con puntos); si no, la C perforada de siempre. */
+  shape?: SectionShape
 }
 
 export interface BeamProfile {
@@ -135,6 +139,8 @@ export interface BeamProfile {
   depth: number
   /** Capacidad por par de vigas según la luz. Ordenado por maxSpan ascendente. */
   capacityBySpan: { maxSpan: number; capacity: number }[]
+  /** Forma propia del corte (dibujada con puntos); si no, la caja de siempre. */
+  shape?: SectionShape
 }
 
 /* ---------- Resultado del motor ---------- */

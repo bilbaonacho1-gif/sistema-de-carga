@@ -4,6 +4,7 @@
  * Las piezas propias viajan dentro de la configuración del rack (config.customProfiles).
  */
 import { BEAM_PROFILES, UPRIGHT_PROFILES } from './technicalSpecs'
+import { sanitizeShape, sectionSize } from './section'
 import type { BeamProfile, RackConfiguration, UprightProfile } from './types'
 
 export interface CustomProfiles { uprights: UprightProfile[]; beams: BeamProfile[] }
@@ -31,20 +32,25 @@ export function sanitizeProfiles(c: Partial<CustomProfiles> | undefined): Custom
   const seen = new Set<string>([...UPRIGHT_PROFILES, ...BEAM_PROFILES].map((p) => p.id).concat('auto', ''))
   const fresh = (id: unknown) => { const s = typeof id === 'string' ? id : ''; if (seen.has(s)) return false; seen.add(s); return true }
   const uprights = (Array.isArray(c?.uprights) ? c!.uprights : []).filter((u) => u && fresh(u.id)).slice(0, 40).map((u) => {
-    const faceWidth = clamp(u.faceWidth, P.uprightFace.min, P.uprightFace.max, 100), depth = clamp(u.depth, P.uprightDepth.min, P.uprightDepth.max, 85)
+    // con forma propia, el frente y el fondo salen del dibujo
+    const shape = sanitizeShape(u.shape), size = shape && sectionSize(shape)
+    const faceWidth = clamp(size?.w ?? u.faceWidth, P.uprightFace.min, P.uprightFace.max, 100), depth = clamp(size?.h ?? u.depth, P.uprightDepth.min, P.uprightDepth.max, 85)
     return {
       id: u.id, name: text(u.name, uprightName({ faceWidth, depth })), faceWidth, depth,
-      thickness: Math.min(P.uprightThickness.max, Math.max(P.uprightThickness.min, Number(u.thickness) || 2.5)),
+      thickness: Math.min(P.uprightThickness.max, Math.max(P.uprightThickness.min, Number(shape?.thickness ?? u.thickness) || 2.5)),
       maxFrameLoad: clamp(u.maxFrameLoad, P.uprightLoad.min, P.uprightLoad.max, 10_000),
+      ...(shape ? { shape } : {}),
     }
   })
   const beams = (Array.isArray(c?.beams) ? c!.beams : []).filter((b) => b && fresh(b.id)).slice(0, 40).map((b) => {
-    const height = clamp(b.height, P.beamHeight.min, P.beamHeight.max, 100), depth = clamp(b.depth, P.beamDepth.min, P.beamDepth.max, 50)
+    // con forma propia, el alto y el ancho salen del dibujo
+    const shape = sanitizeShape(b.shape), size = shape && sectionSize(shape)
+    const height = clamp(size?.h ?? b.height, P.beamHeight.min, P.beamHeight.max, 100), depth = clamp(size?.w ?? b.depth, P.beamDepth.min, P.beamDepth.max, 50)
     const spans = (Array.isArray(b.capacityBySpan) ? b.capacityBySpan : []).map((s) => ({
       maxSpan: clamp(s?.maxSpan, P.beamSpan.min, P.beamSpan.max, P.beamSpan.max),
       capacity: clamp(s?.capacity, P.beamCapacity.min, P.beamCapacity.max, 2000),
     })).sort((x, y) => x.maxSpan - y.maxSpan)
-    return { id: b.id, name: text(b.name, beamName({ height, depth })), height, depth, capacityBySpan: spans.length ? spans : [{ maxSpan: P.beamSpan.max, capacity: 2000 }] }
+    return { id: b.id, name: text(b.name, beamName({ height, depth })), height, depth, capacityBySpan: spans.length ? spans : [{ maxSpan: P.beamSpan.max, capacity: 2000 }], ...(shape ? { shape } : {}) }
   })
   return { uprights, beams }
 }

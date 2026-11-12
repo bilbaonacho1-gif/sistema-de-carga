@@ -7,6 +7,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { DESIGN_RULES, VISUAL } from '../../../shared/rack/technicalSpecs'
 import type { BeamProfile, PalletType, UprightProfile } from '../../../shared/rack/types'
 import { COLORS, m } from '../materials'
+import { customBeamGeometry } from './custom'
 import { box, cached, hexNut, merge, paint } from './utils'
 
 const store = new Map<string, THREE.BufferGeometry>()
@@ -89,6 +90,7 @@ export function protectorGeometry(profile: UprightProfile) {
 
 /* ---------- Viga caja: largo 1 m sobre X (se escala al largo real) ---------- */
 export function beamGeometry(beam: BeamProfile) {
+  if (beam.shape) return customBeamGeometry(beam.shape)
   return cached(store, `beam-${beam.id}:${beam.height}x${beam.depth}`, () => {
     const g = new RoundedBoxGeometry(1, m(beam.height), m(beam.depth), 2, 0.006)
     return g

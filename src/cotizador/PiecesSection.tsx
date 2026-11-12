@@ -5,23 +5,26 @@
  * Desde acá la pieza se mete en todos los racks o sólo en los racks elegidos en el plano.
  * Las piezas se guardan con el rack y no se borran al empezar de nuevo.
  */
-import { ArrowLeft, Copy, Lock, Plus, Trash2 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { ArrowLeft, Copy, Lock, PenTool, Plus, Trash2, Upload } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
 import { buildDepot } from '../shared/plan/depot'
 import { freezeRacks, mapRacks, selectedRackIds } from '../shared/plan/racks'
 import { calculateRackStructure } from '../shared/rack/calculateRackStructure'
 import { beamName, PIECE_LIMITS as P, uprightName } from '../shared/rack/profiles'
+import { presetShape, sectionSize, shapeFromDxf, type SectionShape } from '../shared/rack/section'
 import { BEAM_PROFILES, UPRIGHT_PROFILES } from '../shared/rack/technicalSpecs'
 import type { BeamProfile, UprightProfile } from '../shared/rack/types'
 import { metros } from '../shared/units'
 import { NumberStepper } from '../web/components/fields'
 import { useToast } from '../web/components/overlays'
-import { Button, Field, Input } from '../web/components/ui'
+import { Button, Field, Input, Segmented } from '../web/components/ui'
 import { fmt, plural } from '../web/lib/format'
 import { Warnings } from '../web/pages/designer/CotizadorView'
 import { useDesigner } from '../web/pages/designer/designerStore'
 import { usePlan } from '../web/plan/planStore'
 import { RackScene } from '../web/three/RackScene'
+import { Piece3D } from './Piece3D'
+import { SectionEditor } from './SectionEditor'
 
 type Kind = 'beam' | 'upright'
 const newId = (prefix: string) => `${prefix}${Math.random().toString(36).slice(2, 7)}`
@@ -35,6 +38,9 @@ export function PiecesSection() {
   const own = useMemo(() => ({ uprights: config.customProfiles?.uprights ?? [], beams: config.customProfiles?.beams ?? [] }), [config.customProfiles])
   const [sel, setSel] = useState<{ kind: Kind; id: string } | null>(() => (own.beams[0] ? { kind: 'beam', id: own.beams[0].id } : own.uprights[0] ? { kind: 'upright', id: own.uprights[0].id } : null))
   const save = (next: typeof own, extra: Partial<typeof config> = {}) => update({ customProfiles: next, ...extra })
+  // qué se ve en 3D: la pieza sola (para girarla y mirarla) o un rack armado con ella
+  const [view3d, setView3d] = useState<'pieza' | 'rack'>('pieza')
+  const dxf = useRef<HTMLInputElement>(null)
 
   const beam = sel?.kind === 'beam' ? own.beams.find((b) => b.id === sel.id) ?? BEAM_PROFILES.find((b) => b.id === sel.id) : undefined
   const upright = sel?.kind === 'upright' ? own.uprights.find((u) => u.id === sel.id) ?? UPRIGHT_PROFILES.find((u) => u.id === sel.id) : undefined
@@ -73,6 +79,26 @@ export function PiecesSection() {
     save({ ...own, uprights: [...own.uprights, u] })
     setSel({ kind: 'upright', id: u.id })
   }
+  // la forma (el corte dibujado con puntos): las medidas de la pieza salen del dibujo
+  const setShape = (shape: SectionShape | undefined) => {
+    if (!sel || locked) return
+    const size = shape && sectionSize(shape)
+    if (sel.kind === 'beam') setBeam(sel.id, size ? { shape, height: size.h, depth: size.w } : { shape: undefined })
+    else setUpright(sel.id, size && shape ? { shape, faceWidth: size.w, depth: size.h, thickness: shape.thickness } : { shape: undefined })
+  }
+  /** Empieza a dibujar desde la forma de siempre: la caja de la viga o la C del parante, con sus medidas. */
+  const startShape = () => {
+    if (beam) setShape(presetShape('caja', beam.depth - 2, beam.height - 2, 2))
+    else if (upright) setShape(presetShape('c', upright.faceWidth - upright.thickness, upright.depth - upright.thickness, upright.thickness))
+  }
+  const loadDxf = async (f: File | undefined) => {
+    if (!f) return
+    const s = shapeFromDxf(await f.text())
+    if (s) { setShape(s); toast.ok('Dibujo cargado. Ajustá el tamaño en "Medida total".') }
+    else toast.error('No encontré ningún dibujo en ese archivo. Guardalo como DXF con el corte dibujado con líneas o una polilínea.')
+  }
+  const shape = (beam ?? upright)?.shape
+
   // al borrar una pieza que se usaba en todos los racks, se vuelve a la elección automática
   const remove = () => {
     if (!sel || locked) return
@@ -104,6 +130,19 @@ export function PiecesSection() {
       layout: { ...base.config.layout, rows: 1, backToBack: false }, [key]: sel.id,
     })
   }, [config, sel, key])
+
+  // la vista 3D (va al lado del dibujo de la forma)
+  const view3dBlock = sample && (
+    <div className="pieces__3dwrap">
+      <div className="pieces__3d-bar">
+        <Segmented label="Qué se ve en 3D" value={view3d} onChange={setView3d} options={[{ value: 'pieza', label: 'La pieza sola' }, { value: 'rack', label: 'En un rack' }]} />
+      </div>
+      <div className="pieces__3d">
+        {view3d === 'pieza' ? <Piece3D beam={beam} upright={upright} /> : <RackScene structure={sample} />}
+        <span className="pieces__3d-t">{view3d === 'pieza' ? 'Un tramo de 1 m · arrastrá para girarlo' : `Rack de muestra · ${metros(sample.config.width)} de viga, ${metros(sample.config.height)} de alto`}</span>
+      </div>
+    </div>
+  )
 
   const item = (kind: Kind, id: string, name: string, info: string, factory = false) => (
     <li key={id}>
@@ -154,10 +193,12 @@ export function PiecesSection() {
           <fieldset className="pieces__fields" disabled={locked}>
             {beam && <>
               <Field label="Nombre">{(id) => <Input id={id} value={beam.name} maxLength={40} onChange={(e) => setBeam(beam.id, { name: e.target.value })} />}</Field>
-              <div className="cot-inline">
-                <NumberStepper label="Alto" unit="mm" value={beam.height} min={P.beamHeight.min} max={P.beamHeight.max} step={10} typedStep={1} onChange={(height) => setBeam(beam.id, { height })} />
-                <NumberStepper label="Ancho" unit="mm" value={beam.depth} min={P.beamDepth.min} max={P.beamDepth.max} step={10} typedStep={1} onChange={(depth) => setBeam(beam.id, { depth })} />
-              </div>
+              {beam.shape
+                ? <p className="pieces__dims">Mide <b>{beam.height} × {beam.depth} mm</b> (alto × ancho). Sale de la forma dibujada a la derecha.</p>
+                : <div className="cot-inline">
+                    <NumberStepper label="Alto" unit="mm" value={beam.height} min={P.beamHeight.min} max={P.beamHeight.max} step={10} typedStep={1} onChange={(height) => setBeam(beam.id, { height })} />
+                    <NumberStepper label="Ancho" unit="mm" value={beam.depth} min={P.beamDepth.min} max={P.beamDepth.max} step={10} typedStep={1} onChange={(depth) => setBeam(beam.id, { depth })} />
+                  </div>}
               <h3 className="pieces__sub">Cuánto aguanta, según el largo de la viga</h3>
               <p className="muted small">Lo que aguanta el par de vigas de un nivel, con la carga repartida. Cuanto más larga la viga, menos aguanta.</p>
               {beam.capacityBySpan.map((c, i) => (
@@ -185,11 +226,15 @@ export function PiecesSection() {
             </>}
             {upright && <>
               <Field label="Nombre">{(id) => <Input id={id} value={upright.name} maxLength={40} onChange={(e) => setUpright(upright.id, { name: e.target.value })} />}</Field>
-              <div className="cot-inline">
-                <NumberStepper label="Frente" unit="mm" value={upright.faceWidth} min={P.uprightFace.min} max={P.uprightFace.max} step={10} typedStep={1} onChange={(faceWidth) => setUpright(upright.id, { faceWidth })} />
-                <NumberStepper label="Fondo" unit="mm" value={upright.depth} min={P.uprightDepth.min} max={P.uprightDepth.max} step={5} typedStep={1} onChange={(depth) => setUpright(upright.id, { depth })} />
-              </div>
-              <NumberStepper label="Espesor de la chapa" unit="mm" value={upright.thickness} min={P.uprightThickness.min} max={P.uprightThickness.max} step={0.5} onChange={(thickness) => setUpright(upright.id, { thickness })} />
+              {upright.shape
+                ? <p className="pieces__dims">Mide <b>{upright.faceWidth} × {upright.depth} mm</b> (frente × fondo). Sale de la forma dibujada a la derecha.</p>
+                : <>
+                    <div className="cot-inline">
+                      <NumberStepper label="Frente" unit="mm" value={upright.faceWidth} min={P.uprightFace.min} max={P.uprightFace.max} step={10} typedStep={1} onChange={(faceWidth) => setUpright(upright.id, { faceWidth })} />
+                      <NumberStepper label="Fondo" unit="mm" value={upright.depth} min={P.uprightDepth.min} max={P.uprightDepth.max} step={5} typedStep={1} onChange={(depth) => setUpright(upright.id, { depth })} />
+                    </div>
+                    <NumberStepper label="Espesor de la chapa" unit="mm" value={upright.thickness} min={P.uprightThickness.min} max={P.uprightThickness.max} step={0.5} onChange={(thickness) => setUpright(upright.id, { thickness })} />
+                  </>}
               <NumberStepper label="Cuánto aguanta cada bastidor" unit="kg" value={upright.maxFrameLoad} min={P.uprightLoad.min} max={P.uprightLoad.max} step={500} typedStep={100}
                 onChange={(maxFrameLoad) => setUpright(upright.id, { maxFrameLoad })} />
             </>}
@@ -216,13 +261,22 @@ export function PiecesSection() {
       <section className="pieces__view" aria-label="Cómo queda la pieza">
         {sel && (beam || upright) && sample ? <>
           <div className="pieces__cut">
-            <h3 className="pieces__sub">Corte de la pieza</h3>
-            {beam ? <BeamCut b={beam} /> : upright && <UprightCut u={upright} />}
+            <h3 className="pieces__sub">La forma (el corte de la pieza) y cómo queda en 3D</h3>
+            {shape && !locked
+              ? <SectionEditor kind={sel.kind} shape={shape} onChange={setShape} onRemove={() => setShape(undefined)} onError={toast.error} aside={view3dBlock} />
+              : <>
+                  <div className="sect__top">
+                    <div className="pieces__cutbox">{beam ? <BeamCut b={beam} /> : upright && <UprightCut u={upright} />}</div>
+                    {view3dBlock}
+                  </div>
+                  {!locked && <div className="pieces__shape-go">
+                    <Button variant="primary" icon={PenTool} onClick={startShape}>Dibujar la forma con puntos</Button>
+                    <Button icon={Upload} onClick={() => dxf.current?.click()}>Cargar dibujo de AutoCAD (DXF)</Button>
+                    <input ref={dxf} type="file" accept=".dxf" hidden onChange={(e) => { void loadDxf(e.target.files?.[0]); e.target.value = '' }} />
+                  </div>}
+                </>}
           </div>
-          <div className="pieces__3d">
-            <RackScene structure={sample} />
-            <span className="pieces__3d-t">Rack de muestra con esta pieza · {metros(sample.config.width)} de viga, {metros(sample.config.height)} de alto</span>
-          </div>
+
           <Warnings warnings={sample.warnings.filter((w) => w.level === 'validation')} />
         </> : <p className="pieces__hint">Elegí o creá una pieza para ver cómo queda.</p>}
       </section>
