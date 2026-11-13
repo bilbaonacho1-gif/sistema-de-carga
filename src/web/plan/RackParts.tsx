@@ -13,7 +13,7 @@ import { freezeRacks, guarded, mapRacks } from '../../shared/plan/racks'
 import type { ModulePieces, RackPlacement } from '../../shared/plan/types'
 import { isOwnProfile, profilesOf } from '../../shared/rack/profiles'
 import { DESIGN_RULES } from '../../shared/rack/technicalSpecs'
-import type { LevelLayout, RackConfiguration } from '../../shared/rack/types'
+import type { FrameParts, LevelLayout, RackConfiguration } from '../../shared/rack/types'
 import { metros } from '../../shared/units'
 import { NumberStepper, Switch } from '../components/fields'
 import { Field, Select } from '../components/ui'
@@ -21,7 +21,7 @@ import type { PlanRackLayer } from './PlanEditor'
 import { usePlan } from './planStore'
 
 const L = DESIGN_RULES.limits
-const OWN: (keyof RackPlacement)[] = ['beamLength', 'frameDepth', 'beamElevations', 'uprightId', 'beamId', 'height', 'mods', 'frameHeights']
+const OWN: (keyof RackPlacement)[] = ['beamLength', 'frameDepth', 'beamElevations', 'uprightId', 'beamId', 'height', 'mods', 'frameHeights', 'frameParts']
 const GAP = 200
 
 /** Alturas de viga con una cambiada: sin pasar el tope del parante y sin pisar a las vecinas. */
@@ -76,6 +76,14 @@ export function RackParts({ r, rackLayer, config }: { r: RackPlacement; rackLaye
     set({ frameHeights: Object.keys(clean).length ? clean : undefined })
   }
 
+  /** Cambia las riendas o las bases de un pórtico (lo que queda como "lo de siempre" no se guarda). */
+  const setFrameParts = (f: number, patch: Partial<FrameParts>) => {
+    const one = Object.fromEntries(Object.entries({ ...r.frameParts?.[f], ...patch }).filter(([, v]) => v !== undefined)) as FrameParts
+    const next = { ...r.frameParts }
+    if (Object.keys(one).length) next[f] = one; else delete next[f]
+    set({ frameParts: Object.keys(next).length ? next : undefined })
+  }
+
   const width = r.beamLength ?? config.width, depth = r.frameDepth ?? config.depth, height = r.height ?? config.height
   const row = s.rows[0]
   // módulo "como el resto" (sin vigas propias) para las alturas de todo el rack
@@ -84,7 +92,7 @@ export function RackParts({ r, rackLayer, config }: { r: RackPlacement; rackLaye
   const beams = levels.filter((l) => l.hasBeam)
   const ownElev = !!r.beamElevations && r.beamElevations.length === beams.length
   const own = OWN.some((k) => r[k] !== undefined)
-  const changed = Object.keys(r.mods ?? {}).length + Object.keys(r.frameHeights ?? {}).length
+  const changed = Object.keys(r.mods ?? {}).length + new Set([...Object.keys(r.frameHeights ?? {}), ...Object.keys(r.frameParts ?? {})]).size
   const inIso = view3d && !!isolate?.includes(r.id)
   const profileHint = (id: string | undefined, name: string) => (id === undefined ? `Como el resto · ahora ${name}` : id === 'auto' ? `Automático · ahora ${name}` : 'Propio')
 
@@ -133,15 +141,25 @@ export function RackParts({ r, rackLayer, config }: { r: RackPlacement; rackLaye
   } else if (mine?.kind === 'upright' && row) {
     const f = row.frames.find((x) => x.key === mine.frame)
     if (f) {
-      const ownH = r.frameHeights?.[mine.frame]
+      const k = mine.frame, ownH = r.frameHeights?.[k], op = r.frameParts?.[k]
+      const bases = (f.bases[0] ? 1 : 0) + (f.bases[1] ? 1 : 0)
       pickedCard = (
-        <section className="rack-part is-picked" aria-label="Parante elegido">
-          <h4>Parante elegido · número {mine.frame + 1} de {r.modules + 1}</h4>
-          <NumberStepper label="Alto de este parante" meters value={f.height} min={L.height.min} max={L.height.max} step={100} typedStep={10}
-            onChange={(v) => setFrame(mine.frame, v)}
+        <section className="rack-part is-picked" aria-label="Pórtico elegido">
+          <h4>Pórtico {k + 1} de {r.modules + 1}</h4>
+          <p className="rack-part__sum">2 columnas · {bases === 1 ? '1 base' : `${bases} bases`} · {f.diagonals + f.horizontals} riendas</p>
+          <NumberStepper label="Alto de las columnas" meters value={f.height} min={L.height.min} max={L.height.max} step={100} typedStep={10}
+            onChange={(v) => setFrame(k, v)}
             hint={ownH ? 'Propio · no puede quedar más bajo que las vigas que sostiene' : `Como el resto (${metros(height)})`} />
-          {ownH !== undefined && <button type="button" className="link-btn" onClick={() => setFrame(mine.frame, undefined)}>Dejarlo como el resto</button>}
-          <p className="muted small">El fondo y el perfil son iguales en todos los parantes del rack: se cambian abajo, en "Todo este rack".</p>
+          <div className="plan-xy">
+            <NumberStepper label="Riendas diagonales" value={f.diagonals} min={0} max={60} step={1} onChange={(v) => setFrameParts(k, { diagonals: v })}
+              hint={op?.diagonals === undefined ? 'Las de siempre' : 'Propias'} />
+            <NumberStepper label="Riendas horizontales" value={f.horizontals} min={0} max={20} step={1} onChange={(v) => setFrameParts(k, { horizontals: v })}
+              hint={op?.horizontals === undefined ? 'Las de siempre' : 'Propias'} />
+          </div>
+          <Switch label="Base de adelante" checked={f.bases[0]} onChange={(v) => setFrameParts(k, { noBaseFront: v ? undefined : true })} hint="La de la columna del lado del pasillo." />
+          <Switch label="Base de atrás" checked={f.bases[1]} onChange={(v) => setFrameParts(k, { noBaseBack: v ? undefined : true })} />
+          {(ownH !== undefined || op) && <button type="button" className="link-btn" onClick={() => { const fh = { ...r.frameHeights }, fp = { ...r.frameParts }; delete fh[k]; delete fp[k]; set({ frameHeights: Object.keys(fh).length ? fh : undefined, frameParts: Object.keys(fp).length ? fp : undefined }) }}>Dejar este pórtico como el resto</button>}
+          <p className="muted small">El fondo y el perfil de las columnas son iguales en todo el rack: se cambian abajo, en "Todo este rack".</p>
         </section>
       )
     }
@@ -167,7 +185,20 @@ export function RackParts({ r, rackLayer, config }: { r: RackPlacement; rackLaye
           )
         })}
       </div>
-      {!pickedCard && <p className="muted small">Elegí un módulo para cambiarle o sacarle vigas (por ejemplo, para que pase el autoelevador).</p>}
+      {/* elegir un pórtico (dos columnas con sus bases y sus riendas) */}
+      <div className="mod-chips" role="group" aria-label="Pórticos de este rack">
+        <span>Pórtico</span>
+        {Array.from({ length: r.modules + 1 }, (_, f) => {
+          const on = mine?.kind === 'upright' && mine.frame === f
+          const own = r.frameHeights?.[f] !== undefined || !!r.frameParts?.[f]
+          return (
+            <button key={f} type="button" className={`mod-chip${on ? ' is-on' : ''}${own ? ' is-own' : ''}`} aria-pressed={on}
+              title={own ? `Pórtico ${f + 1} (con cambios propios)` : `Pórtico ${f + 1}`}
+              onClick={() => setPiece(on ? null : { rack: r.id, kind: 'upright', frame: f })}>{f + 1}</button>
+          )
+        })}
+      </div>
+      {!pickedCard && <p className="muted small">Elegí un módulo para cambiarle o sacarle vigas, o un pórtico para cambiarle las riendas o las bases.</p>}
       {pickedCard}
       {note && <p className="rack-editor__issue"><AlertTriangle size={14} aria-hidden /> {note}</p>}
       {changed > 0 && <p className="muted small">{changed === 1 ? 'Una pieza tiene' : `${changed} piezas tienen`} medidas propias.</p>}
@@ -213,7 +244,7 @@ export function RackParts({ r, rackLayer, config }: { r: RackPlacement; rackLaye
       </details>
 
       {own && <button type="button" className="link-btn rack-editor__reset"
-        onClick={() => { set({ beamLength: undefined, frameDepth: undefined, beamElevations: undefined, uprightId: undefined, beamId: undefined, height: undefined, mods: undefined, frameHeights: undefined }); setPiece(null) }}>
+        onClick={() => { set({ beamLength: undefined, frameDepth: undefined, beamElevations: undefined, uprightId: undefined, beamId: undefined, height: undefined, mods: undefined, frameHeights: undefined, frameParts: undefined }); setPiece(null) }}>
         Volver todas las piezas a como el resto</button>}
     </div>
   )

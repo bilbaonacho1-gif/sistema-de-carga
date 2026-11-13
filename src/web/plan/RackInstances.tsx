@@ -64,7 +64,7 @@ function partsFor(s: RackStructure): Parts {
       const H = m(f.height), x = m(f.x)
       put('upright', x, H / 2, -ud / 2, uw, H, ud)
       put('upright', x, H / 2, -D + ud / 2, uw, H, ud)
-      const n = Math.max(2, Math.round((f.height - 300) / 650))
+      const n = f.diagonals
       const y0 = 0.15, y1 = H - 0.15
       for (let i = 0; i < n; i++) {
         const ya = y0 + ((y1 - y0) * i) / n, yb = y0 + ((y1 - y0) * (i + 1)) / n

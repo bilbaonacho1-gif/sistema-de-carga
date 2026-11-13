@@ -81,6 +81,7 @@ export function placementStructure(config: RackConfiguration, p: RackPlacement):
     ...c,
     sections: rackSections(p, c),
     frameHeights: p.frameHeights,
+    frameParts: p.frameParts,
     layout: { ...c.layout, rows: p.pair ? 2 : 1, backToBack: p.pair, warehouseLength: 0, warehouseWidth: 0 },
   })
 }
@@ -93,7 +94,7 @@ const structures = new WeakMap<RackConfiguration, Map<string, RackStructure>>()
 function cachedStructure(config: RackConfiguration, p: RackPlacement): RackStructure {
   let byKey = structures.get(config)
   if (!byKey) { byKey = new Map(); structures.set(config, byKey) }
-  const key = `${p.modules}|${p.pair}|${p.levels ?? ''}|${p.height ?? ''}|${p.beamLength ?? ''}|${p.frameDepth ?? ''}|${p.beamElevations?.join(',') ?? ''}|${p.uprightId ?? ''}|${p.beamId ?? ''}|${p.mods ? JSON.stringify(p.mods) : ''}|${p.frameHeights ? JSON.stringify(p.frameHeights) : ''}`
+  const key = `${p.modules}|${p.pair}|${p.levels ?? ''}|${p.height ?? ''}|${p.beamLength ?? ''}|${p.frameDepth ?? ''}|${p.beamElevations?.join(',') ?? ''}|${p.uprightId ?? ''}|${p.beamId ?? ''}|${p.mods ? JSON.stringify(p.mods) : ''}|${p.frameHeights ? JSON.stringify(p.frameHeights) : ''}|${p.frameParts ? JSON.stringify(p.frameParts) : ''}`
   let s = byKey.get(key)
   if (!s) { s = placementStructure(config, p); byKey.set(key, s) }
   return s

@@ -3,6 +3,8 @@
  * (como se dibuja en pantalla); en el 3D, y del plano pasa a ser z.
  */
 
+import type { FrameParts } from '../rack/types'
+
 export interface PlanPoint { x: number; y: number }
 
 /** Contorno cerrado: la pared i va del punto i al i+1 (la última vuelve al primero). */
@@ -139,6 +141,8 @@ export interface RackPlacement {
   mods?: Record<number, ModulePieces>
   /** Alto propio de algunos parantes (índice del bastidor, de 0 → mm). */
   frameHeights?: Record<number, number>
+  /** Riendas y bases propias de algunos pórticos (índice del pórtico, de 0). */
+  frameParts?: Record<number, FrameParts>
 }
 
 /** Las vigas de un módulo (el hueco entre dos parantes) con medidas propias. */

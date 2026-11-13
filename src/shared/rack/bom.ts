@@ -16,15 +16,15 @@ export function buildMaterials(s: RackStructure): MaterialLine[] {
   }
   const { config, upright, counts, accessories: acc } = s
 
-  // bastidores: uno por cada altura distinta
-  const frameHeights = new Map<number, number>()
-  for (const f of s.frames) frameHeights.set(f.height, (frameHeights.get(f.height) ?? 0) + 1)
-  for (const [height, qty] of [...frameHeights].sort((a, b) => a[0] - b[0]))
-    add({
-      code: `BAST-${upright.id}-${config.depth}-${height}`, group: 'Estructura', qty,
-      name: `Bastidor ${metros(config.depth)} × ${metros(height)}`,
-      detail: `${upright.name}, ${acc.uprightColor === 'galvanizado' ? 'galvanizado' : `pintado ${colorName(acc.uprightColor).toLowerCase()}`}, con diagonales, travesaños y 2 placas base`,
-    })
+  // pórticos, por sus piezas: columnas (por altura), bases y riendas
+  const paint = acc.uprightColor === 'galvanizado' ? 'galvanizada' : `pintada ${colorName(acc.uprightColor).toLowerCase()}`
+  const columns = new Map<number, number>()
+  for (const f of s.frames) columns.set(f.height, (columns.get(f.height) ?? 0) + 2)
+  for (const [height, qty] of [...columns].sort((a, b) => a[0] - b[0]))
+    add({ code: `COL-${upright.id}-${height}`, group: 'Estructura', qty, name: `Columna de pórtico · ${metros(height)}`, detail: `${upright.name}, ${paint} · 2 por pórtico (${s.frames.length} ${s.frames.length === 1 ? 'pórtico' : 'pórticos'} de ${metros(config.depth)} de fondo)` })
+  add({ code: `BASE-${upright.id}`, group: 'Estructura', qty: counts.basePlates, name: 'Base de columna', detail: 'Placa base para abulonar al piso' })
+  add({ code: `RIENDA-D-${config.depth}`, group: 'Estructura', qty: counts.diagonals, name: 'Rienda diagonal', detail: `Para pórtico de ${metros(config.depth)} de fondo` })
+  add({ code: `RIENDA-H-${config.depth}`, group: 'Estructura', qty: counts.horizontals, name: 'Rienda horizontal', detail: `Para pórtico de ${metros(config.depth)} de fondo` })
 
   // vigas: por perfil y largo
   const beams = new Map<string, { qty: number; name: string; length: number; id: string }>()

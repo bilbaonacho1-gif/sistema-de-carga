@@ -328,10 +328,10 @@ export function racksInBox(racks: RackPlacement[], x0: number, y0: number, x1: n
 /* ------------------------------ Partir y unir racks ------------------------------ */
 
 /** Las piezas propias (de módulos y de parantes) de un pedazo del rack: módulos `from`..`to` (sin incluir `to`). */
-function partsOf(r: RackPlacement, from: number, to: number): Pick<RackPlacement, 'mods' | 'frameHeights'> {
+function partsOf(r: RackPlacement, from: number, to: number): Pick<RackPlacement, 'mods' | 'frameHeights' | 'frameParts'> {
   const mods = Object.fromEntries(Object.entries(r.mods ?? {}).filter(([k]) => +k >= from && +k < to).map(([k, v]) => [+k - from, v]))
-  const frames = Object.fromEntries(Object.entries(r.frameHeights ?? {}).filter(([k]) => +k >= from && +k <= to).map(([k, v]) => [+k - from, v]))
-  return { mods: Object.keys(mods).length ? mods : undefined, frameHeights: Object.keys(frames).length ? frames : undefined }
+  const slice = <T,>(o: Record<number, T> | undefined) => { const x = Object.fromEntries(Object.entries(o ?? {}).filter(([k]) => +k >= from && +k <= to).map(([k, v]) => [+k - from, v])); return Object.keys(x).length ? (x as Record<number, T>) : undefined }
+  return { mods: Object.keys(mods).length ? mods : undefined, frameHeights: slice(r.frameHeights), frameParts: slice(r.frameParts) }
 }
 
 const along = (r: RackPlacement, d: number): Pick<RackPlacement, 'x' | 'y'> => (r.orientation === 'x' ? { x: Math.round(r.x + d), y: r.y } : { x: r.x, y: Math.round(r.y + d) })
@@ -377,7 +377,7 @@ export function joinRacks(plan: Plan, ids: string[], size: RackModuleSize): { pl
     const gap = pos(rs[i]) - (pos(rs[i - 1]) + rs[i - 1].length)
     if (gap < -up - 50 || gap > 600) return null
   }
-  const mods: Record<number, ModulePieces> = {}, frames: Record<number, number> = {}
+  const mods: Record<number, ModulePieces> = {}, frames: Record<number, number> = {}, parts: NonNullable<RackPlacement['frameParts']> = {}
   let off = 0
   for (const r of rs) {
     for (let m = 0; m < r.modules; m++) {
@@ -389,9 +389,10 @@ export function joinRacks(plan: Plan, ids: string[], size: RackModuleSize): { pl
       if (Object.keys(e).length) mods[off + m] = e
     }
     for (const [k, v] of Object.entries(r.frameHeights ?? {})) if (frames[off + +k] === undefined) frames[off + +k] = v
+    for (const [k, v] of Object.entries(r.frameParts ?? {})) if (parts[off + +k] === undefined) parts[off + +k] = v
     off += r.modules
   }
-  const merged = fitPlacement({ ...f, modules: off, mods: Object.keys(mods).length ? mods : undefined, frameHeights: Object.keys(frames).length ? frames : undefined }, size)
+  const merged = fitPlacement({ ...f, modules: off, mods: Object.keys(mods).length ? mods : undefined, frameHeights: Object.keys(frames).length ? frames : undefined, frameParts: Object.keys(parts).length ? parts : undefined }, size)
   return { plan: { ...plan, racks: (plan.racks ?? []).filter((r) => r.id === f.id || !set.has(r.id)).map((r) => (r.id === f.id ? merged : r)) }, id: f.id }
 }
 
@@ -413,7 +414,7 @@ export function extendRack(plan: Plan, id: string, side: 'start' | 'end', size: 
   else {
     // las piezas propias de cada módulo y de cada parante se corren n lugares
     const shift = <T,>(o: Record<number, T> | undefined) => (o ? Object.fromEntries(Object.entries(o).map(([k, v]) => [+k + n, v])) as Record<number, T> : undefined)
-    next = { ...r, ...along(r, -n * modulePitch(r, size)), modules: r.modules + n, mods: shift(r.mods), frameHeights: shift(r.frameHeights) }
+    next = { ...r, ...along(r, -n * modulePitch(r, size)), modules: r.modules + n, mods: shift(r.mods), frameHeights: shift(r.frameHeights), frameParts: shift(r.frameParts) }
   }
   const fitted = fitPlacement(next, size)
   if (blockedReason(plan, fitted) && !blockedReason(plan, fitPlacement(r, size))) return null

@@ -187,7 +187,7 @@ describe('lista de materiales con piezas propias en un rack', () => {
     const plain = placementStructure(DEFAULT_CONFIGURATION, rack({ modules: 4 }))
     const own = placementStructure(DEFAULT_CONFIGURATION, rack({ modules: 4, mods: { 1: { width: 1800 }, 2: { beamId: 'V160' } }, frameHeights: { 0: 8000 } }))
     const vigas = (s: typeof own) => s.materials.filter((m) => m.code.startsWith('VIGA-'))
-    const basts = (s: typeof own) => s.materials.filter((m) => m.code.startsWith('BAST-'))
+    const basts = (s: typeof own) => s.materials.filter((m) => m.code.startsWith('COL-'))
     expect(vigas(plain)).toHaveLength(1)
     expect(vigas(own)).toHaveLength(3)                       // la de siempre, la corta y la de otro perfil
     expect(vigas(own).some((m) => m.code.includes('-1800'))).toBe(true)
@@ -195,7 +195,7 @@ describe('lista de materiales con piezas propias en un rack', () => {
     // no se pierden ni se duplican vigas: la cantidad total es la misma
     const total = (s: typeof own) => vigas(s).reduce((n, m) => n + m.qty, 0)
     expect(total(own)).toBe(total(plain))
-    expect(basts(own)).toHaveLength(2)                       // el bastidor alto va aparte
+    expect(basts(own)).toHaveLength(2)                       // las columnas del pórtico alto van aparte
     expect(basts(own).reduce((n, m) => n + m.qty, 0)).toBe(basts(plain).reduce((n, m) => n + m.qty, 0))
   })
   it('el depósito suma las piezas de los racks distintos', async () => {
@@ -239,5 +239,44 @@ describe('borrar una viga de un módulo y dejar el paso libre', () => {
     expect(onFloor(s, 0)).toBe(onFloor(plain, 0))
     // lo de arriba del paso sigue: queda la viga más alta con sus pallets
     expect(s.rows[0].modules[1].levels.filter((l) => l.hasBeam).map((l) => l.elevation)).toEqual(elev.slice(1))
+  })
+})
+
+describe('el pórtico por sus piezas: columnas, bases y riendas', () => {
+  it('cada pórtico lleva 2 columnas, 2 bases y sus riendas, y salen en renglones separados', async () => {
+    const { placementStructure } = await import('./depot')
+    const { DEFAULT_CONFIGURATION } = await import('../rack/technicalSpecs')
+    const s = placementStructure(DEFAULT_CONFIGURATION, rack({ modules: 3 }))
+    const porticos = s.rows[0].frames.length
+    expect(porticos).toBe(4)
+    const qty = (prefix: string) => s.materials.filter((m) => m.code.startsWith(prefix)).reduce((n, m) => n + m.qty, 0)
+    expect(qty('COL-')).toBe(porticos * 2)
+    expect(qty('BASE-')).toBe(porticos * 2)
+    expect(qty('RIENDA-D-')).toBe(s.rows[0].frames.reduce((n, f) => n + f.diagonals, 0))
+    expect(qty('RIENDA-H-')).toBe(porticos * 2)
+    expect(s.materials.some((m) => m.code.startsWith('BAST-'))).toBe(false)
+  })
+  it('agregar riendas o sacar una base a un pórtico cambia sólo ese pórtico y la lista de materiales', async () => {
+    const { placementStructure } = await import('./depot')
+    const { DEFAULT_CONFIGURATION } = await import('../rack/technicalSpecs')
+    const plain = placementStructure(DEFAULT_CONFIGURATION, rack({ modules: 3 }))
+    const d0 = plain.rows[0].frames[0].diagonals
+    const s = placementStructure(DEFAULT_CONFIGURATION, rack({ modules: 3, frameParts: { 1: { diagonals: d0 + 3, noBaseBack: true } } }))
+    const f = (k: number) => s.rows[0].frames.find((x) => x.key === k)!
+    expect(f(1).diagonals).toBe(d0 + 3)
+    expect(f(1).bases).toEqual([true, false])
+    expect(f(0).diagonals).toBe(d0)
+    expect(f(0).bases).toEqual([true, true])
+    expect(s.counts.diagonals).toBe(plain.counts.diagonals + 3)
+    expect(s.counts.basePlates).toBe(plain.counts.basePlates - 1)
+    expect(s.counts.anchorBolts).toBe(plain.counts.anchorBolts - 4)
+  })
+  it('al partir un rack, las riendas propias siguen con su pórtico', async () => {
+    const { splitRack } = await import('./racks')
+    const size = { width: 2700, depth: 1100, upright: 100, backToBackGap: 200 }
+    const plan = { ...rectanglePlan(60_000, 20_000), racks: [rack({ modules: 6, frameParts: { 1: { diagonals: 9 }, 5: { noBaseFront: true } } })] }
+    const [a, b] = splitRack(plan, 'r1', 3, size)!.plan.racks!
+    expect(a.frameParts).toEqual({ 1: { diagonals: 9 } })
+    expect(b.frameParts).toEqual({ 2: { noBaseFront: true } })
   })
 })

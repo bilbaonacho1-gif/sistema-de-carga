@@ -106,8 +106,8 @@ describe('tramos con medidas distintas', () => {
   it('separa en la lista de materiales los bastidores y vigas de cada medida', () => {
     const s = calculateRackStructure(tramos)
     const codes = s.materials.map((l) => l.code)
-    expect(codes).toContain('BAST-P80-1100-6000')
-    expect(codes).toContain('BAST-P80-1100-8000')
+    expect(codes).toContain('COL-P80-6000')
+    expect(codes).toContain('COL-P80-8000')
     expect(s.materials.find((l) => l.code.startsWith('VIGA-') && l.code.endsWith('-1800'))?.qty).toBe(8)
   })
 })

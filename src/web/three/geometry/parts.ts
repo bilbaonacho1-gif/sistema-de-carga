@@ -13,8 +13,8 @@ import { box, cached, hexNut, merge, paint } from './utils'
 const store = new Map<string, THREE.BufferGeometry>()
 
 /* ---------- Bastidor: travesaños + diagonales en zigzag ---------- */
-export function bracingGeometry(profile: UprightProfile, heightMm: number, depthMm: number) {
-  return cached(store, `brace-${profile.id}:${profile.faceWidth}x${profile.depth}x${profile.thickness}-${heightMm}-${depthMm}`, () => {
+export function bracingGeometry(profile: UprightProfile, heightMm: number, depthMm: number, diagonals?: number, horizontals = 2) {
+  return cached(store, `brace-${profile.id}:${profile.faceWidth}x${profile.depth}x${profile.thickness}-${heightMm}-${depthMm}-${diagonals ?? 'a'}-${horizontals}`, () => {
     const d = m(profile.depth)
     const D = m(depthMm)
     const bw = m(VISUAL.brace.width)
@@ -24,8 +24,9 @@ export function bracingGeometry(profile: UprightProfile, heightMm: number, depth
     const z2 = -(D - d + 0.03)
     const y0 = 0.15
     const y1 = m(heightMm) - 0.15
-    const n = Math.max(2, Math.round((heightMm - 300) / DESIGN_RULES.diagonalPitch))
-    const ys = Array.from({ length: n + 1 }, (_, i) => y0 + ((y1 - y0) * i) / n)
+    // las riendas del pórtico: las diagonales en zigzag (las que diga el pórtico, o las de la regla) y las horizontales
+    const n = diagonals ?? Math.max(2, Math.round((heightMm - 300) / DESIGN_RULES.diagonalPitch))
+    const ys = Array.from({ length: n + 1 }, (_, i) => y0 + ((y1 - y0) * i) / Math.max(1, n))
 
     const bar = (za: number, ya: number, zb: number, yb: number) => {
       const dz = zb - za
@@ -33,9 +34,13 @@ export function bracingGeometry(profile: UprightProfile, heightMm: number, depth
       const len = Math.hypot(dz, dy)
       return box([0, (ya + yb) / 2, (za + zb) / 2], [bw, bt, len], new THREE.Euler(Math.atan2(-dy, dz), 0, 0))
     }
-    const parts = [bar(z1, y0, z2, y0), bar(z1, y1, z2, y1)]
+    // horizontales: la primera abajo, la segunda arriba y las demás repartidas entre medio
+    const hy = horizontals <= 0 ? [] : horizontals === 1 ? [y0] : Array.from({ length: horizontals }, (_, i) => y0 + ((y1 - y0) * i) / (horizontals - 1))
+    const parts = hy.map((y) => bar(z1, y, z2, y))
     for (let i = 0; i < n; i++)
       parts.push(i % 2 === 0 ? bar(z1, ys[i], z2, ys[i + 1]) : bar(z2, ys[i], z1, ys[i + 1]))
+    // un pórtico sin ninguna rienda: una pieza mínima invisible para no romper el dibujo
+    if (!parts.length) parts.push(box([0, -1, 0], [0.001, 0.001, 0.001]))
     return merge(parts)
   })
 }

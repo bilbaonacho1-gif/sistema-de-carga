@@ -68,7 +68,7 @@ describe('accesorios y colores de la galería de la empresa', () => {
     expect(codes).toContain('PISO-CHAPA')
     expect(s.counts.backMesh).toBe(s.modules.length)
     expect(s.materials.find((m) => m.code.startsWith('VIGA-'))!.detail).toContain('naranja')
-    expect(s.materials.find((m) => m.code.startsWith('BAST-'))!.detail).toContain('azul')
+    expect(s.materials.find((m) => m.code.startsWith('COL-'))!.detail).toContain('azul')
     expect(s.materials.find((m) => m.code === 'PROT-POSTE')!.detail).toContain('amarillo')
   })
   it('un rack guardado antes de estos cambios sigue igual: protector en ángulo rojo, vigas rojas, parantes galvanizados', async () => {

@@ -143,8 +143,9 @@ describe('depósito completo', () => {
     const d = buildDepot(plan, { ...DEFAULT_CONFIGURATION, levels: 4 }, opt)
     // 20 filas × 14 módulos × 2 pallets × 4 niveles
     expect(d.positions).toBe(20 * 14 * 2 * 4)
-    const bastidores = d.materials.filter((l) => l.code.startsWith('BAST-')).reduce((n, l) => n + l.qty, 0)
-    expect(bastidores).toBe(20 * 15)   // 15 bastidores por fila de 14 módulos
+    const columnas = d.materials.filter((l) => l.code.startsWith('COL-')).reduce((n, l) => n + l.qty, 0)
+    expect(columnas).toBe(20 * 15 * 2)   // 15 pórticos por fila de 14 módulos, 2 columnas cada uno
+    expect(d.materials.find((l) => l.code.startsWith('BASE-'))?.qty).toBe(20 * 15 * 2)
     const vigas = d.materials.filter((l) => l.code.startsWith('VIGA-')).reduce((n, l) => n + l.qty, 0)
     expect(vigas).toBe(20 * 14 * 3 * 2) // 3 planos de vigas (el piso no lleva), 2 vigas por plano
     expect(d.materials.find((l) => l.code === 'DIST-ESP')?.qty).toBeGreaterThan(0)   // los pares llevan distanciadores

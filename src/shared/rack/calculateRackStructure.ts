@@ -311,7 +311,14 @@ export function calculateRackStructure(
     const frames: FrameLayout[] = Array.from({ length: framesPerRow }, (_, i) => {
       const x = i <= last ? fx[i] : fx[last] + (i - last) * uw * 2
       const key = rev ? last - Math.min(i, last) : Math.min(i, last)
-      return { id: `r${r}-f${i}`, row: r, index: i, key, x, height: frameHeight(key) }
+      // el pórtico: dos columnas, sus riendas (las de la regla, o las que se le pusieron) y sus bases
+      const h = frameHeight(key), own = config.frameParts?.[key]
+      const count = (v: number | undefined, auto: number, max: number) => (Number.isFinite(v) ? clamp(Math.round(v as number), 0, max) : auto)
+      return {
+        id: `r${r}-f${i}`, row: r, index: i, key, x, height: h,
+        diagonals: count(own?.diagonals, rules.diagonalsPerFrame(h), 60), horizontals: count(own?.horizontals, rules.horizontalsPerFrame(h), 20),
+        bases: [!own?.noBaseFront, !own?.noBaseBack] as [boolean, boolean],
+      }
     })
     const modules: ModuleLayout[] = order.map((c, m) => {
       const xStart = fx[m] + uw / 2
@@ -372,16 +379,17 @@ export function calculateRackStructure(
   const rowBlocks = layout.backToBack ? Math.ceil(layout.rows / 2) : layout.rows
   const tiedJoins = layout.backToBack ? pairs : layout.rows - 1
   const protectorsPerRow = acc.protectors === 'all' ? framesPerRow : acc.protectors === 'ends' ? Math.min(2, framesPerRow) : 0
+  const basePlates = allFrames.reduce((n, f) => n + (f.bases[0] ? 1 : 0) + (f.bases[1] ? 1 : 0), 0)
   const counts = {
     frames: allFrames.length,
     uprights: allFrames.length * 2,
     beams: beamCount,
     connectors: beamCount * 2,
     safetyPins: beamCount * 2,
-    diagonals: allFrames.reduce((n, f) => n + rules.diagonalsPerFrame(f.height), 0),
-    horizontals: allFrames.reduce((n, f) => n + rules.horizontalsPerFrame(f.height), 0),
-    basePlates: allFrames.length * 2,
-    anchorBolts: allFrames.length * 2 * R.anchorBoltsPerPlate,
+    diagonals: allFrames.reduce((n, f) => n + f.diagonals, 0),
+    horizontals: allFrames.reduce((n, f) => n + f.horizontals, 0),
+    basePlates: basePlates,
+    anchorBolts: basePlates * R.anchorBoltsPerPlate,
     protectors: layout.rows * protectorsPerRow,
     spacers: pairs * rules.spacersPerPair(framesPerRow),
     guardrails: acc.guardrails ? rowBlocks * 2 : 0,

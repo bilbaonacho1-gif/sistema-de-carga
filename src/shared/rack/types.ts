@@ -47,6 +47,8 @@ export interface RackConfiguration {
   beamElevations?: number[]
   /** Alto propio de algunos bastidores (índice del bastidor → mm). Nunca más bajo que sus vigas. */
   frameHeights?: Record<number, number>
+  /** Piezas propias de algunos pórticos (índice → riendas y bases). Si no, las que salen de la regla. */
+  frameParts?: Record<number, FrameParts>
   /** Cómo es la carga del pallet: un bloque, o cajas apiladas (ver shared/rack/load.ts). */
   load?: { mode: 'block' | 'boxes'; boxW: number; boxD: number; boxH: number; boxKg: number; maxHeight: number }
   /** Perfiles elegidos a mano. 'auto' = el motor elige el más liviano que alcanza. */
@@ -173,6 +175,19 @@ export interface BeamProfile {
 
 export type Facing = 1 | -1
 
+/**
+ * Las piezas de un pórtico que se pueden cambiar: cuántas riendas lleva (diagonales y horizontales)
+ * y si le falta alguna base. Las dos columnas van siempre.
+ */
+export interface FrameParts {
+  diagonals?: number
+  horizontals?: number
+  /** Sin la base de la columna del lado del pasillo. */
+  noBaseFront?: boolean
+  /** Sin la base de la columna de atrás. */
+  noBaseBack?: boolean
+}
+
 export interface FrameLayout {
   id: string
   row: number
@@ -183,6 +198,11 @@ export interface FrameLayout {
   x: number
   /** Altura del bastidor (la mayor de los dos módulos que sostiene). */
   height: number
+  /** Riendas del pórtico: diagonales y horizontales. */
+  diagonals: number
+  horizontals: number
+  /** Si lleva base la columna de adelante (lado del pasillo) y la de atrás. */
+  bases: [boolean, boolean]
 }
 
 export interface ModuleLayout {

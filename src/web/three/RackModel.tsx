@@ -125,7 +125,7 @@ function Frame({ frame, row, structure, isNew, delay }: {
   const D = m(config.depth)
   const H = m(frame.height)
   const upGeo = uprightGeometry(upright, frame.height)
-  const braceGeo = bracingGeometry(upright, frame.height, config.depth)
+  const braceGeo = bracingGeometry(upright, frame.height, config.depth, frame.diagonals, frame.horizontals)
   const plateGeo = basePlateGeometry(upright)
   const last = row.frames.length - 1
   const isEnd = frame.index === 0 || frame.index === last
@@ -153,8 +153,9 @@ function Frame({ frame, row, structure, isNew, delay }: {
       <mesh geometry={upGeo} material={upMat} castShadow {...pickUp} />
       <mesh geometry={upGeo} material={upMat} position={[0, 0, -D]} rotation-y={Math.PI} castShadow {...pickUp} />
       <mesh geometry={braceGeo} material={brMat} castShadow {...pickUp} />
-      <mesh geometry={plateGeo} material={MATERIALS.painted} />
-      <mesh geometry={plateGeo} material={MATERIALS.painted} position={[0, 0, -D]} rotation-y={Math.PI} />
+      {/* las bases del pórtico: una por columna (alguna puede faltar) */}
+      {frame.bases[0] && <mesh geometry={plateGeo} material={MATERIALS.painted} />}
+      {frame.bases[1] && <mesh geometry={plateGeo} material={MATERIALS.painted} position={[0, 0, -D]} rotation-y={Math.PI} />}
       {hasProtector && <mesh geometry={protectorGeometry(upright, acc.protectorType, paintHex(acc.protectorColor))} material={MATERIALS.painted} castShadow />}
       {pairedBehind && [0.35, 0.7].map((k) => (
         <mesh key={k} material={paintMaterial(acc.beamColor)} position={[0, H * k, -D - gap / 2]}>
