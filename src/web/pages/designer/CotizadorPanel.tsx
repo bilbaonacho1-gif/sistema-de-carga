@@ -4,12 +4,12 @@
  *  - Ver todo: todas las opciones juntas, para quien ya sabe qué quiere.
  * Cada cambio rearma la estructura y el 3D al instante.
  */
-import { useEffect } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Calculator, ChevronLeft, ChevronRight, Copy, Download, Lightbulb, Plus, Trash2, Warehouse } from 'lucide-react'
 import { PRODUCT_TYPES, type ProductGroup } from '../../../shared/catalog'
 import { materialsTotal } from '../../../shared/rack/bom'
 import { beamCapacityForSpan } from '../../../shared/rack/rules'
-import { DESIGN_RULES, GALVANIZED, OFFICIAL_REFERENCE, PAINT_COLORS, PALLET_TYPES } from '../../../shared/rack/technicalSpecs'
+import { colorName, DESIGN_RULES, GALVANIZED, OFFICIAL_REFERENCE, PAINT_COLORS, PALLET_TYPES } from '../../../shared/rack/technicalSpecs'
 import type { AccessoryConfig, ComponentCounts, MaterialLine, RackStructure } from '../../../shared/rack/types'
 
 import { NumberStepper, Switch } from '../../components/fields'
@@ -384,59 +384,88 @@ function StructureStep({ s }: { s: RackStructure }) {
 
 /* ------------------------------ 5. Accesorios ------------------------------ */
 
-/** Accesorios. En el depósito, `counts` trae las cantidades de todos los racks juntos. */
+/**
+ * Accesorios, en grupos que se abren y se cierran: a la vista queda la protección (lo de todos los
+ * días) y lo demás plegado, con un resumen de lo elegido. En el depósito, `counts` trae las
+ * cantidades de todos los racks juntos.
+ */
 export function AccessoriesStep({ s, counts, multiRow }: { s: RackStructure; counts?: ComponentCounts; multiRow?: boolean }) {
   const { updateAccessories, config } = useDesigner()
   const a = s.accessories
   const c = counts ?? s.counts
   const set = (patch: Partial<AccessoryConfig>) => updateAccessories(patch)
   const qty = (n: number) => (n ? ` · ${plural(n, 'pieza', 'piezas')}` : '')
+  const on = (...flags: boolean[]) => { const n = flags.filter(Boolean).length; return n ? `${n} ${n === 1 ? 'elegido' : 'elegidos'}` : 'nada elegido' }
   return (
     <div className="cot-fields">
-      <Field label="Protectores de columna" hint={`Del lado del pasillo, contra golpes de autoelevador${qty(c.protectors)}.`}>{() => (
-        <Segmented label="Protectores" value={a.protectors} onChange={(protectors) => set({ protectors })}
-          options={[{ value: 'none', label: 'Sin' }, { value: 'ends', label: 'Extremos' }, { value: 'all', label: 'Todos' }]} />
-      )}</Field>
-      {a.protectors !== 'none' && (
-        <Field label="Tipo de protector" hint={{ angulo: 'Chapa plegada con la punta en V, abulonada al piso.', u: 'Chapa en U que envuelve el parante, abulonada al piso.', poste: 'Poste de tubo cuadrado delante del parante, con su placa al piso.', bajo: 'Protector petiso de seis caras, abulonado al piso.' }[a.protectorType]}>{() => (
-          <Segmented label="Tipo de protector" value={a.protectorType} onChange={(protectorType) => set({ protectorType })}
-            options={[{ value: 'angulo', label: 'En ángulo' }, { value: 'u', label: 'En U' }, { value: 'poste', label: 'Poste' }, { value: 'bajo', label: 'Bajo' }]} />
+      <AccGroup title="Protección" summary={on(a.protectors !== 'none', a.guardrails)} defaultOpen>
+        <Field label="Protectores de columna" hint={`Del lado del pasillo, contra golpes de autoelevador${qty(c.protectors)}.`}>{() => (
+          <Segmented label="Protectores" value={a.protectors} onChange={(protectors) => set({ protectors })}
+            options={[{ value: 'none', label: 'Sin' }, { value: 'ends', label: 'Extremos' }, { value: 'all', label: 'Todos' }]} />
         )}</Field>
-      )}
-      <Switch label="Defensas de cabecera" checked={a.guardrails} onChange={(guardrails) => set({ guardrails })}
-        hint={`Barrera en los extremos de cada fila${qty(c.guardrails)}.`} />
-      {a.guardrails && (
-        <Field label="Tipo de defensa" hint={a.guardrailType === 'arco' ? 'Marco de tubo en arco delante de la cabecera.' : 'Dos postes con una baranda de tres largueros.'}>{() => (
-          <Segmented label="Tipo de defensa" value={a.guardrailType} onChange={(guardrailType) => set({ guardrailType })}
-            options={[{ value: 'baranda', label: 'Baranda' }, { value: 'arco', label: 'Arco' }]} />
+        {a.protectors !== 'none' && (
+          <Field label="Tipo de protector" hint={{ angulo: 'Chapa plegada con la punta en V, abulonada al piso.', u: 'Chapa en U que envuelve el parante, abulonada al piso.', poste: 'Poste de tubo cuadrado delante del parante, con su placa al piso.', bajo: 'Protector petiso de seis caras, abulonado al piso.' }[a.protectorType]}>{() => (
+            <Segmented label="Tipo de protector" value={a.protectorType} onChange={(protectorType) => set({ protectorType })}
+              options={[{ value: 'angulo', label: 'En ángulo' }, { value: 'u', label: 'En U' }, { value: 'poste', label: 'Poste' }, { value: 'bajo', label: 'Bajo' }]} />
+          )}</Field>
+        )}
+        <Switch label="Defensas de cabecera" checked={a.guardrails} onChange={(guardrails) => set({ guardrails })}
+          hint={`Barrera en los extremos de cada fila${qty(c.guardrails)}.`} />
+        {a.guardrails && (
+          <Field label="Tipo de defensa" hint={a.guardrailType === 'arco' ? 'Marco de tubo en arco delante de la cabecera.' : 'Dos postes con una baranda de tres largueros.'}>{() => (
+            <Segmented label="Tipo de defensa" value={a.guardrailType} onChange={(guardrailType) => set({ guardrailType })}
+              options={[{ value: 'baranda', label: 'Baranda' }, { value: 'arco', label: 'Arco' }]} />
+          )}</Field>
+        )}
+      </AccGroup>
+
+      <AccGroup title="Pisos y niveles" summary={on(a.decking !== 'none', a.backMesh, a.palletSupports)} defaultOpen={a.decking !== 'none' || a.backMesh || a.palletSupports}>
+        <Field label="Piso en los niveles" hint={`Para mercadería suelta o pallets que no apoyan bien${qty(c.deckPanels)}.`}>{() => (
+          <Segmented label="Piso" value={a.decking} onChange={(decking) => set({ decking })}
+            options={[{ value: 'none', label: 'Sin piso' }, { value: 'wood', label: 'Madera' }, { value: 'mesh', label: 'Malla' }, { value: 'steel', label: 'Chapa' }]} />
         )}</Field>
-      )}
-      {(a.protectors !== 'none' || a.guardrails) && (
-        <ColorSwatches label="Color de las protecciones" value={a.protectorColor} options={PAINT_COLORS} onChange={(protectorColor) => set({ protectorColor })} />
-      )}
-      <Switch label="Conectores superiores" checked={a.topTies} onChange={(topTies) => set({ topTies })}
-        hint={(multiRow ?? config.layout.rows > 1) ? `Unen las filas por arriba y les dan rigidez${qty(c.topTies)}.` : 'Unen filas entre sí: sirven con dos filas o más.'} />
-      <Switch label="Cruces de arriostramiento" checked={a.crossBracing} onChange={(crossBracing) => set({ crossBracing })}
-        hint={`Cruz en la cara posterior, una cada ${DESIGN_RULES.modulesPerCrossBrace} módulos${qty(c.crossBraces)}.`} />
-      <Switch label="Carteles de capacidad" checked={a.capacitySigns} onChange={(capacitySigns) => set({ capacitySigns })}
-        hint={`Uno por módulo con la carga máxima por nivel${qty(c.capacitySigns)}.`} />
-      <Field label="Piso en los niveles" hint={`Para mercadería suelta o pallets que no apoyan bien${qty(c.deckPanels)}.`}>{() => (
-        <Segmented label="Piso" value={a.decking} onChange={(decking) => set({ decking })}
-          options={[{ value: 'none', label: 'Sin piso' }, { value: 'wood', label: 'Madera' }, { value: 'mesh', label: 'Malla' }, { value: 'steel', label: 'Chapa' }]} />
-      )}</Field>
-      <Switch label="Carteles de fila" checked={a.rowSigns} onChange={(rowSigns) => set({ rowSigns })}
-        hint={`Un cartel en cada cabecera, para la letra o el número de la fila${qty(c.rowSigns)}.`} />
-      <Switch label="Guía en el piso" checked={a.floorGuide} onChange={(floorGuide) => set({ floorGuide })}
-        hint={`Perfil en el piso a lo largo de cada fila, para guiar al autoelevador${qty(c.floorGuides)}.`} />
-      <Switch label="Malla de fondo" checked={a.backMesh} onChange={(backMesh) => set({ backMesh })}
-        hint={`Cierra la cara de atrás para que no se caiga mercadería${qty(c.backMesh)}.`} />
-      <Switch label="Travesaños de apoyo de pallet" checked={a.palletSupports} onChange={(palletSupports) => set({ palletSupports })}
-        hint={`Refuerzo de viga a viga debajo de cada pallet${qty(c.palletSupports)}.`} />
-      <h3 className="cot-sub">Colores</h3>
-      <ColorSwatches label="Vigas" value={a.beamColor} options={PAINT_COLORS} onChange={(beamColor) => set({ beamColor })} />
-      <ColorSwatches label="Parantes" value={a.uprightColor} options={[GALVANIZED, ...PAINT_COLORS]} onChange={(uprightColor) => set({ uprightColor })} />
+        <Switch label="Malla de fondo" checked={a.backMesh} onChange={(backMesh) => set({ backMesh })}
+          hint={`Cierra la cara de atrás para que no se caiga mercadería${qty(c.backMesh)}.`} />
+        <Switch label="Travesaños de apoyo de pallet" checked={a.palletSupports} onChange={(palletSupports) => set({ palletSupports })}
+          hint={`Refuerzo de viga a viga debajo de cada pallet${qty(c.palletSupports)}.`} />
+      </AccGroup>
+
+      <AccGroup title="Refuerzos" summary={on(a.topTies, a.crossBracing)} defaultOpen={a.topTies || a.crossBracing}>
+        <Switch label="Conectores superiores" checked={a.topTies} onChange={(topTies) => set({ topTies })}
+          hint={(multiRow ?? config.layout.rows > 1) ? `Unen las filas por arriba y les dan rigidez${qty(c.topTies)}.` : 'Unen filas entre sí: sirven con dos filas o más.'} />
+        <Switch label="Cruces de arriostramiento" checked={a.crossBracing} onChange={(crossBracing) => set({ crossBracing })}
+          hint={`Cruz en la cara posterior, una cada ${DESIGN_RULES.modulesPerCrossBrace} módulos${qty(c.crossBraces)}.`} />
+      </AccGroup>
+
+      <AccGroup title="Señalización" summary={on(a.capacitySigns, a.rowSigns, a.floorGuide)} defaultOpen={a.capacitySigns || a.rowSigns || a.floorGuide}>
+        <Switch label="Carteles de capacidad" checked={a.capacitySigns} onChange={(capacitySigns) => set({ capacitySigns })}
+          hint={`Uno por módulo con la carga máxima por nivel${qty(c.capacitySigns)}.`} />
+        <Switch label="Carteles de fila" checked={a.rowSigns} onChange={(rowSigns) => set({ rowSigns })}
+          hint={`Un cartel en cada cabecera, para la letra o el número de la fila${qty(c.rowSigns)}.`} />
+        <Switch label="Guía en el piso" checked={a.floorGuide} onChange={(floorGuide) => set({ floorGuide })}
+          hint={`Perfil en el piso a lo largo de cada fila, para guiar al autoelevador${qty(c.floorGuides)}.`} />
+      </AccGroup>
+
+      <AccGroup title="Colores" summary={`vigas ${colorName(a.beamColor).toLowerCase()} · parantes ${colorName(a.uprightColor).toLowerCase()}`}
+        defaultOpen={a.beamColor !== 'rojo' || a.uprightColor !== 'galvanizado' || a.protectorColor !== 'rojo'}>
+        <ColorSwatches label="Vigas" value={a.beamColor} options={PAINT_COLORS} onChange={(beamColor) => set({ beamColor })} />
+        <ColorSwatches label="Parantes" value={a.uprightColor} options={[GALVANIZED, ...PAINT_COLORS]} onChange={(uprightColor) => set({ uprightColor })} />
+        <ColorSwatches label="Protecciones" value={a.protectorColor} options={PAINT_COLORS} onChange={(protectorColor) => set({ protectorColor })} />
+      </AccGroup>
       {c.spacers > 0 && <p className="note note--blue">Las filas espalda con espalda llevan {plural(c.spacers, 'distanciador', 'distanciadores')} (se suman solos).</p>}
     </div>
+  )
+}
+
+/** Un grupo de accesorios que se abre y se cierra; cerrado muestra un resumen de lo elegido. */
+function AccGroup({ title, summary, defaultOpen = false, children }: { title: string; summary: string; defaultOpen?: boolean; children: ReactNode }) {
+  // se abre solo la primera vez si ya tiene algo elegido; después manda quien lo usa
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <details className="plan-more acc-group" open={open} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+      <summary><span>{title}</span><small>{summary}</small></summary>
+      <div className="acc-group__b">{children}</div>
+    </details>
   )
 }
 

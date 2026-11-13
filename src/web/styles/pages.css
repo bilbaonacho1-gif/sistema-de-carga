@@ -715,3 +715,9 @@
 .swatch i { width: 20px; height: 20px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, .18); }
 .swatch:hover { border-color: var(--ink-2); }
 .swatch.is-on { border-color: var(--red); color: var(--ink); box-shadow: 0 0 0 2px var(--red-tint); }
+
+/* accesorios en grupos: cerrado muestra un resumen de lo elegido */
+.acc-group > summary { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; cursor: pointer; font-weight: 700; }
+.acc-group > summary small { font-weight: 500; font-size: 12px; color: var(--ink-3, #8a9099); text-align: right; }
+.acc-group__b { display: flex; flex-direction: column; gap: 12px; }
+.rack-split[open] { gap: 8px; }

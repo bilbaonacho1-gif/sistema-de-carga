@@ -225,13 +225,13 @@ function SplitRack({ r, base, size }: { r: RackPlacement; base: Plan; size: Plan
     select(rackSelection(out.ids))
   }
   return (
-    <div className="rack-split">
-      <h3 className="rack-list__t">Partir este rack</h3>
+    <details className="plan-more rack-split">
+      <summary>Partir este rack en dos</summary>
       <NumberStepper label="Después del módulo" value={at} min={1} max={r.modules - 1} step={1} onChange={(v) => { setAt(v); setFailed(false) }}
         hint={`Quedan dos racks: uno de ${at} y otro de ${r.modules - at} ${r.modules - at === 1 ? 'módulo' : 'módulos'}`} />
       <button type="button" className="vp-btn" onClick={split}><Scissors size={14} aria-hidden /> Partir en dos</button>
       {failed && <p className="rack-editor__issue"><AlertTriangle size={14} aria-hidden /> No entra partido: los dos racks juntos son un poquito más largos (llevan un parante más). Sacale un módulo o corré el rack.</p>}
-    </div>
+    </details>
   )
 }
 
