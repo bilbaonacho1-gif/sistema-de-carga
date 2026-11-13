@@ -6,7 +6,7 @@
  */
 import { AlignStartHorizontal, AlignStartVertical, ClipboardCopy, Combine, Copy, Focus, Maximize, Minus, Plus, RotateCw, Scissors, SlidersHorizontal, Trash2 } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { removeItem, removeVertex, setTotal } from '../../shared/plan/edit'
+import { addObject, objectFootprint, removeItem, removeVertex, setTotal, updateObject } from '../../shared/plan/edit'
 import { placementRect, type RackModuleSize } from '../../shared/plan/layout'
 import { duplicateWithin, fitPlacement, freezeRacks, guarded, joinRacks, mapRacks, rackSelection, removeRacks, rotateRack, selectedRackIds, setRackModules, setRackPair, splitRack } from '../../shared/plan/racks'
 import { fitToDepot, growRect, growWall, rotatePlan, rotateRect, rotateWall, type Rect } from '../../shared/plan/transform'
@@ -135,6 +135,19 @@ export function ObjectBar({ vb, size, layer, onFit }: Props) {
       body = <>
         <Step label="Letra" value={metros(t.size)} onMinus={() => ch(-100)} onPlus={() => ch(100)} minusOff={t.size <= 100} />
         <Btn title="Borrar" onClick={() => del((pl) => removeItem(pl, 'text', t.id))}><Trash2 size={15} aria-hidden /></Btn>
+      </>
+      break
+    }
+    case 'object': {
+      const o = plan.objects?.find((x) => x.id === selection.id)
+      if (!o) return null
+      const f = objectFootprint(o)
+      box = { x: f.x, y: f.y, w: f.w, h: f.h }
+      body = <>
+        <span className="obar__v obar__v--info">{o.name} · {metros(o.w)}{o.shape === 'caja' ? ` × ${metros(o.d)}` : ''} × {metros(o.h)}</span>
+        <Btn title="Girar 90°" onClick={() => commit((pl) => updateObject(pl, o.id, { rot: o.rot + 90 }))}><RotateCw size={15} aria-hidden /></Btn>
+        <Btn title="Duplicar al lado" onClick={() => { let id = ''; commit((pl) => { const r = addObject(pl, o, { x: o.x + f.w + 500, y: o.y }, o.typeId); id = r.id; return updateObject(r.plan, r.id, { rot: o.rot, z: o.z }) }); select({ kind: 'object', id }) }}><Copy size={15} aria-hidden /></Btn>
+        <Btn title="Borrar" onClick={() => del((pl) => removeItem(pl, 'object', o.id))}><Trash2 size={15} aria-hidden /></Btn>
       </>
       break
     }

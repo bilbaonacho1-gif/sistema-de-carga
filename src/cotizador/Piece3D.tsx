@@ -5,6 +5,8 @@
 import { Grid, OrbitControls } from '@react-three/drei'
 import { Canvas } from '@react-three/fiber'
 import { useMemo } from 'react'
+import * as THREE from 'three'
+import type { ObjectShape } from '../shared/plan/types'
 import type { BeamProfile, UprightProfile } from '../shared/rack/types'
 import { beamGeometry } from '../web/three/geometry/parts'
 import { uprightGeometry } from '../web/three/geometry/upright'
@@ -27,6 +29,25 @@ export function Piece3D({ beam, upright }: { beam?: BeamProfile; upright?: Uprig
         ? <mesh geometry={geo} material={MATERIALS.red} position={[0, lift, 0]} castShadow />
         : <mesh geometry={geo} material={MATERIALS.galvanized} position={[0, 0, upright!.depth / 2000]} castShadow />}
       <OrbitControls makeDefault enableDamping target={beam ? [0, lift, 0] : [0, 0.5, 0]} minDistance={Math.max(0.15, size * 1.5)} maxDistance={6} />
+    </Canvas>
+  )
+}
+
+/** Un objeto propio (caja o cilindro) solo, para girarlo y ver cómo queda. */
+export function Object3D({ o }: { o: ObjectShape }) {
+  const w = o.w / 1000, d = (o.shape === 'cilindro' ? o.w : o.d) / 1000, h = o.h / 1000
+  const size = Math.max(w, d, h)
+  const mat = useMemo(() => new THREE.MeshStandardMaterial({ color: o.color, roughness: 0.7, metalness: 0.1 }), [o.color])
+  return (
+    <Canvas shadows dpr={[1, 2]} camera={{ fov: 35, near: 0.01, far: 500, position: [size * 1.5, size * 1.2 + h / 2, size * 1.9] }} key={Math.round(size * 2)}>
+      <color attach="background" args={['#f2f3f5']} />
+      <hemisphereLight args={['#ffffff', '#c9cdd2', 1.1]} />
+      <directionalLight position={[size * 2, size * 3, size * 2]} intensity={1.6} castShadow />
+      <Grid position={[0, 0, 0]} infiniteGrid cellSize={size > 4 ? 1 : 0.1} sectionSize={size > 4 ? 5 : 0.5} cellColor="#dfe2e6" sectionColor="#c9cdd2" fadeDistance={size * 12} />
+      <mesh material={mat} position={[0, h / 2, 0]} castShadow>
+        {o.shape === 'cilindro' ? <cylinderGeometry args={[w / 2, w / 2, h, 40]} /> : <boxGeometry args={[w, h, d]} />}
+      </mesh>
+      <OrbitControls makeDefault enableDamping target={[0, h / 2, 0]} minDistance={size * 0.6} maxDistance={size * 8} />
     </Canvas>
   )
 }

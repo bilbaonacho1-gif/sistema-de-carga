@@ -85,3 +85,6 @@
 .plan-stage__bar .vp-btn { white-space: nowrap; flex: none; }
 .walk .plan-stage__hint { top: auto; bottom: 10px; }
 .plan-stage__bar .segmented { flex: none; }
+
+/* textos del plano: que las letras no se junten al achicar o agrandar el plano */
+.plan-editor svg text { text-rendering: geometricPrecision; font-kerning: none; }

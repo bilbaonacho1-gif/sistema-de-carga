@@ -4,9 +4,10 @@
  */
 import { Box, Circle, DoorOpen, Footprints, Grid3x3, LayoutGrid, Minus as WallIcon, MousePointer2, MoveHorizontal, PenLine, Redo2, RotateCcw, RotateCw, Ruler, Shapes, Square, Trash2, Type, Undo2, type LucideIcon } from 'lucide-react'
 import { useState } from 'react'
-import { columnGrid, itemsOutside, removeItem, removeOutside, removeVertex, rotateAisle, setEdgeLength, setSag, splitEdge, updateRect } from '../../shared/plan/edit'
+import { columnGrid, itemsOutside, removeItem, removeOutside, removeVertex, rotateAisle, setEdgeLength, setSag, splitEdge, updateObject, updateRect } from '../../shared/plan/edit'
 import { arcOf, edgeLength, edges, planArea, planPerimeter, rectanglePlan } from '../../shared/plan/geometry'
-import type { Plan } from '../../shared/plan/types'
+import type { ObjectShape, Plan } from '../../shared/plan/types'
+import { OBJECT_COLORS } from '../../shared/rack/technicalSpecs'
 import { NumberStepper } from '../components/fields'
 import { Button, Field, Input, KeyValue, Segmented, Select } from '../components/ui'
 import { fmt } from '../lib/format'
@@ -332,6 +333,26 @@ export function Selection() {
     )
   }
 
+  if (selection.kind === 'object') {
+    const o = plan.objects?.find((x) => x.id === selection.id)
+    if (!o) return null
+    const upd = (patch: Partial<typeof o>) => commit((pl) => updateObject(pl, o.id, patch))
+    return (
+      <div className="plan-sel">
+        <h2 className="section-label">Objeto</h2>
+        <Field label="Nombre">{(id) => <Input id={id} value={o.name} maxLength={40} onChange={(e) => upd({ name: e.target.value })} />}</Field>
+        <ObjectFields o={o} onChange={upd} />
+        <NumberStepper label="Altura desde el piso" meters value={o.z} min={0} max={20_000} step={100} typedStep={10} onChange={(z) => upd({ z })} hint={o.z ? undefined : 'Apoyado en el piso'} />
+        <NumberStepper label="Giro" unit="°" value={o.rot} min={0} max={345} step={15} typedStep={1} onChange={(rot) => upd({ rot })} />
+        <div className="plan-xy">
+          <NumberStepper label="X" meters value={o.x} min={-500_000} max={500_000} step={1000} typedStep={10} onChange={(x) => upd({ x })} />
+          <NumberStepper label="Y" meters value={o.y} min={-500_000} max={500_000} step={1000} typedStep={10} onChange={(y) => upd({ y })} />
+        </div>
+        <Button size="sm" variant="ghost" icon={Trash2} onClick={() => del((pl) => removeItem(pl, 'object', o.id))}>Quitar objeto</Button>
+      </div>
+    )
+  }
+
   if (selection.kind === 'symbol') {
     const sy = plan.symbols?.find((x) => x.id === selection.id)
     if (!sy) return null
@@ -447,4 +468,28 @@ export function MarkTools() {
       </p>
     </div>
   )
+}
+
+/** Forma, medidas y color de un objeto propio (se usa acá y en "Mis piezas"). */
+export function ObjectFields({ o, onChange }: { o: ObjectShape; onChange(patch: Partial<ObjectShape>): void }) {
+  return <>
+    <Field label="Forma">{() => (
+      <Segmented label="Forma" value={o.shape} onChange={(shape) => onChange({ shape })} options={[{ value: 'caja', label: 'Caja (rectángulo)' }, { value: 'cilindro', label: 'Cilindro' }]} />
+    )}</Field>
+    <div className="plan-xy">
+      <NumberStepper label={o.shape === 'cilindro' ? 'Diámetro' : 'Largo'} meters value={o.w} min={50} max={30_000} step={100} typedStep={10} onChange={(w) => onChange({ w })} />
+      {o.shape === 'caja' && <NumberStepper label="Ancho" meters value={o.d} min={50} max={30_000} step={100} typedStep={10} onChange={(d) => onChange({ d })} />}
+    </div>
+    <NumberStepper label="Alto" meters value={o.h} min={10} max={20_000} step={100} typedStep={10} onChange={(h) => onChange({ h })} />
+    <div className="field">
+      <span className="field__label">Color</span>
+      <div className="swatches" role="radiogroup" aria-label="Color">
+        {OBJECT_COLORS.map((c) => (
+          <button key={c.id} type="button" role="radio" aria-checked={o.color === c.hex} className={`swatch swatch--dot${o.color === c.hex ? ' is-on' : ''}`} title={c.name} aria-label={c.name} onClick={() => onChange({ color: c.hex })}>
+            <i style={{ background: c.hex }} aria-hidden />
+          </button>
+        ))}
+      </div>
+    </div>
+  </>
 }

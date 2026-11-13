@@ -51,10 +51,14 @@ function rackSections(p: RackPlacement, c: RackConfiguration): RackSection[] {
   let lastKey = ''
   for (let m = 0; m < p.modules; m++) {
     const o = p.mods?.[m]
+    // este módulo puede tener menos vigas (las que se borraron) y el piso libre (un paso)
+    const floor = c.floorStorage && !o?.noFloor
+    const beams = o?.beamElevations?.length ?? (c.floorStorage ? c.levels - 1 : c.levels)
     const sec: RackSection = {
-      modules: 1, width: o?.width ?? c.width, height: c.height, levels: c.levels,
+      modules: 1, width: o?.width ?? c.width, height: c.height, levels: beams + (floor ? 1 : 0),
       ...(o?.beamElevations ? { beamElevations: o.beamElevations } : {}),
       ...(o?.beamId ? { beamId: o.beamId } : {}),
+      ...(o?.noFloor ? { floorStorage: false } : {}),
     }
     const key = JSON.stringify({ ...sec, modules: 0 })
     if (key === lastKey) out[out.length - 1].modules++

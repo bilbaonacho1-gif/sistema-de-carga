@@ -74,7 +74,9 @@ export function sanitizeConfiguration(c: RackConfiguration): RackConfiguration {
     modules: range(s?.modules, L.sectionModules, 1),
     width: range(s?.width, L.width),
     height: range(s?.height, L.height),
-    levels: range(s?.levels, levelRange, minLevels),
+    // un tramo puede no usar el piso (paso para el autoelevador): ahí alcanza con un nivel
+    levels: range(s?.levels, typeof s?.floorStorage === 'boolean' && !s.floorStorage ? { min: 1, max: L.levels.max } : levelRange, minLevels),
+    ...(typeof s?.floorStorage === 'boolean' ? { floorStorage: s.floorStorage } : {}),
     ...(Array.isArray(s?.beamElevations) ? { beamElevations: s.beamElevations } : {}),
     ...(s?.beamId && all.beams.some((b) => b.id === s.beamId) ? { beamId: s.beamId } : {}),
   }))
@@ -104,7 +106,7 @@ export function sanitizeConfiguration(c: RackConfiguration): RackConfiguration {
     },
     uprightId: all.uprights.some((u) => u.id === c.uprightId) ? c.uprightId : 'auto',
     beamId: all.beams.some((b) => b.id === c.beamId) ? c.beamId : 'auto',
-    ...(customProfiles.uprights.length || customProfiles.beams.length ? { customProfiles } : { customProfiles: undefined }),
+    ...(customProfiles.uprights.length || customProfiles.beams.length || customProfiles.objects?.length ? { customProfiles } : { customProfiles: undefined }),
     accessories: sanitizeAccessories(c.accessories),
   }
   // con tramos, los valores generales describen el rack completo (los usan cotas y resumen)
@@ -241,7 +243,8 @@ export function calculateRackStructure(
     } else {
       ({ beam, capacity: beamCapacity, ok: beamOk } = rules.selectBeam(catalog.beams, sec.width, levelLoad))
     }
-    const { levels, tight } = computeLevels(sec.height, sec.levels, config.floorStorage, pallet, beam.height, sec.beamElevations ?? config.beamElevations)
+    const floor = sec.floorStorage ?? config.floorStorage
+    const { levels, tight } = computeLevels(sec.height, sec.levels, floor, pallet, beam.height, sec.beamElevations ?? config.beamElevations)
     if (tight) warn({ code: 'clearance', level: 'warning', message: `${label(index)}la altura libre entre niveles es insuficiente para el pallet y la carga. Reducí la cantidad de niveles o aumentá la altura.` })
     if (!beamOk) {
       warn({
@@ -251,7 +254,7 @@ export function calculateRackStructure(
           : `${label(index)}ninguna viga del catálogo cubre ${fmt(levelLoad)} kg en una luz de ${metros(sec.width)}. La configuración ingresada requiere validación técnica.`,
       })
     }
-    return { index, sec, ppm, levelLoad, beam, beamCapacity, beamOk, levels, beamLevels: config.floorStorage ? sec.levels - 1 : sec.levels }
+    return { index, sec, ppm, levelLoad, beam, beamCapacity, beamOk, levels, beamLevels: floor ? sec.levels - 1 : sec.levels }
   })
 
   /* ---- 3. Parante: uno para todo el rack, según el bastidor más cargado ---- */

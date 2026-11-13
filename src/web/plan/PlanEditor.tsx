@@ -12,7 +12,7 @@
  * Rueda o pellizco: zoom. Arrastrar el fondo: mover. Ctrl+Z / Ctrl+Y: deshacer / rehacer.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { drawnRect, itemsOutside, setEdgeLength, setTotal, moveVertex, newId, pointAtLength, removeItem, removeVertex, sagFromPoint, setOutline, splitEdge, updateRect } from '../../shared/plan/edit'
+import { drawnRect, itemsOutside, setEdgeLength, setTotal, moveVertex, newId, pointAtLength, removeItem, removeVertex, sagFromPoint, setOutline, splitEdge, updateRect, addObject } from '../../shared/plan/edit'
 import { rectanglePlan } from '../../shared/plan/geometry'
 import { metrosNum, parseMetros } from '../../shared/units'
 import './plan-extra.css'
@@ -40,7 +40,7 @@ type Drag =
   | { type: 'pan'; cx: number; cy: number; vb: VB; moved: boolean }
   | { type: 'racks'; ids: string[]; start: PlanPoint; done: PlanPoint; started: boolean; clicked: string }
   | { type: 'box'; a: PlanPoint }
-  | { type: 'anno'; kind: 'text' | 'symbol' | 'dim'; id: string; start: PlanPoint; started: boolean }
+  | { type: 'anno'; kind: 'text' | 'symbol' | 'dim' | 'object'; id: string; start: PlanPoint; started: boolean }
   | { type: 'calco'; start: PlanPoint; x: number; y: number }
   | { type: 'rackdraw'; a: PlanPoint }
   | { type: 'rside'; kind: RectKind; id: string; sides: Side[]; started: boolean }
@@ -289,7 +289,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
       if (drawing && e.key === 'Enter' && typedRef.current) { e.preventDefault(); placeTyped(); return }
       if (e.key === 'Escape') {
         setTyped(''); setMeasure(null); setTwoPoint(null); setCalib(null)
-        if (s.draft.length) s.setDraft([]); else if (s.tool === 'calibrate' || s.tool === 'measure' || s.tool === 'dim' || s.tool === 'rackdraw' || s.tool === 'rackpaste') s.setTool('select'); else if (!s.selection && s.isolate) s.setIsolate(null); else s.select(null)
+        if (s.draft.length) s.setDraft([]); else if (s.tool === 'calibrate' || s.tool === 'measure' || s.tool === 'dim' || s.tool === 'rackdraw' || s.tool === 'rackpaste') s.setTool('select'); else if (s.tool === 'object') s.setPlaceObject(null); else if (!s.selection && s.isolate) s.setIsolate(null); else s.select(null)
         return
       }
       // copiar, pegar, duplicar
@@ -450,6 +450,15 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         drag.current = { type: 'rackdraw', a: p }
         setRackDraft({ a: p, b: p })
         break
+      case 'object': {
+        // poner el objeto elegido en "Mis piezas" con el centro donde se tocó (queda para poner más)
+        const shape = usePlan.getState().placeObject
+        if (!shape) break
+        let id = ''
+        commit((pl) => { const r = addObject(pl, shape, p, shape.id); id = r.id; return r.plan })
+        select({ kind: 'object', id })
+        break
+      }
       case 'rackpaste': {
         // pegar lo copiado donde se tocó; si queda a continuación de otro rack, se une a él
         const layer = layerRef.current, ghosts = pasteGhosts(raw, e.altKey)
@@ -861,7 +870,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         })}
 
         {/* anotaciones: cotas propias, textos y símbolos */}
-        <PlanAnnotations texts={plan.texts ?? []} symbols={plan.symbols ?? []} dims={plan.dims ?? []} px={px}
+        <PlanAnnotations texts={plan.texts ?? []} symbols={plan.symbols ?? []} dims={plan.dims ?? []} objects={plan.objects ?? []} px={px}
           selectedId={selection && 'id' in selection ? selection.id : undefined}
           showTexts={!hidden.textos} showSymbols={!hidden.simbolos} showDims={!hidden.cotasPropias}
           onDown={tool === 'select' ? (e, kind, id) => { select({ kind, id }); startDrag(e, { type: 'anno', kind, id, start: toPlan(e.clientX, e.clientY), started: false }) } : undefined} />
@@ -1145,6 +1154,7 @@ const TOOL_HINT: Partial<Record<string, (first: boolean, done: boolean) => strin
   text: () => 'Texto: clic donde va, escribilo y Enter.',
   symbol: () => 'Símbolo: clic donde va cada uno. Elegí cuál en el panel Herramientas.',
   rackdraw: () => 'Módulo inicial: un clic donde va. Arrastrando de punta a punta salen varios módulos de una. Si queda a continuación de otro rack, se une a él. Esc termina.',
+  object: () => 'Objeto: clic donde va (se pueden poner varios). Después se mueve, se gira y se le cambian las medidas. Esc termina.',
   rackpaste: () => 'Pegar: clic donde va la copia (se puede pegar varias veces). Si queda a continuación de otro rack, se une a él. Esc termina.',
   calibrate: (first) => (first ? 'Ahora clic en el otro punto de esa medida conocida.' : 'Escala del plano de fondo: clic en dos puntos de una medida que conozcas (por ejemplo, una pared).'),
 }

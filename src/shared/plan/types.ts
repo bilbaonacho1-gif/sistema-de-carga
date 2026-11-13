@@ -84,6 +84,30 @@ export interface PlanText { id: string; x: number; y: number; text: string; size
 
 /** Símbolos que se pueden poner en el plano (matafuegos, salidas, baños…). */
 export type SymbolKind = 'matafuego' | 'hidrante' | 'salida' | 'botiquin' | 'banio' | 'tablero' | 'cargador' | 'autoelevador' | 'picking' | 'anden' | 'persona'
+/** Forma y medidas de un objeto propio: una caja o un cilindro, con su nombre y su color. */
+export interface ObjectShape {
+  name: string
+  shape: 'caja' | 'cilindro'
+  /** Largo, ancho y alto (mm). En un cilindro, el largo es el diámetro. */
+  w: number
+  d: number
+  h: number
+  /** Color (#rrggbb). */
+  color: string
+}
+/** Un objeto propio puesto en el depósito: dónde está su centro, cuánto está girado y a qué altura del piso. */
+export interface PlanObject extends ObjectShape {
+  id: string
+  x: number
+  y: number
+  /** Giro en grados. */
+  rot: number
+  /** Altura desde el piso (mm): 0 = apoyado en el piso. */
+  z: number
+  /** Tipo de "Mis piezas" del que salió. */
+  typeId?: string
+}
+
 export interface PlanSymbol { id: string; x: number; y: number; kind: SymbolKind }
 
 /** Cota puesta a mano entre dos puntos (como DIM en AutoCAD); `offset` corre la línea hacia un costado. */
@@ -121,8 +145,10 @@ export interface RackPlacement {
 export interface ModulePieces {
   width?: number
   beamId?: string
-  /** Altura de cada viga de este módulo (de abajo hacia arriba). */
+  /** Altura de cada viga de este módulo (de abajo hacia arriba). Pueden ser menos que en el resto: las que se borraron. */
   beamElevations?: number[]
+  /** Sin pallets en el piso de este módulo: queda el paso libre (por ejemplo, para el autoelevador). */
+  noFloor?: boolean
 }
 
 export interface Plan {
@@ -140,6 +166,8 @@ export interface Plan {
   /** Anotaciones: textos, símbolos y cotas propias. */
   texts?: PlanText[]
   symbols?: PlanSymbol[]
+  /** Objetos propios puestos en el depósito (los que se crean en "Mis piezas"). */
+  objects?: PlanObject[]
   dims?: PlanDim[]
   /**
    * Racks ubicados a mano. Si no hay, los ubica la distribución automática; al mover, girar o
@@ -160,6 +188,7 @@ export type PlanSelection =
   | { kind: 'aisle'; id: string }
   | { kind: 'text'; id: string }
   | { kind: 'symbol'; id: string }
+  | { kind: 'object'; id: string }
   | { kind: 'dim'; id: string }
   | { kind: 'rack'; id: string }
   /** Varios racks a la vez (Shift + clic, o Shift + arrastrar un recuadro). */

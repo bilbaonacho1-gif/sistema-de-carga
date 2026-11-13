@@ -145,6 +145,12 @@ export const PAINT_COLORS: { id: 'rojo' | 'naranja' | 'amarillo' | 'azul' | 'gri
   { id: 'azul', name: 'Azul', hex: '#1f4fa3' },
   { id: 'gris', name: 'Gris', hex: '#6f7780' },
 ]
+/** Colores para los objetos propios (los de pintura y algunos más). */
+export const OBJECT_COLORS: { id: string; name: string; hex: string }[] = [
+  { id: 'gris', name: 'Gris', hex: '#8f969d' }, { id: 'rojo', name: 'Rojo', hex: '#c3241f' }, { id: 'naranja', name: 'Naranja', hex: '#ea5b17' },
+  { id: 'amarillo', name: 'Amarillo', hex: '#f2c230' }, { id: 'azul', name: 'Azul', hex: '#1f4fa3' }, { id: 'verde', name: 'Verde', hex: '#2e8b57' },
+  { id: 'madera', name: 'Madera', hex: '#c9a273' }, { id: 'negro', name: 'Negro', hex: '#30353c' }, { id: 'blanco', name: 'Blanco', hex: '#f4f4f2' },
+]
 export const GALVANIZED = { id: 'galvanizado' as const, name: 'Galvanizado', hex: '#c3c8cd' }
 export const colorName = (id: string) => (id === 'galvanizado' ? GALVANIZED.name : PAINT_COLORS.find((c) => c.id === id)?.name ?? id)
 

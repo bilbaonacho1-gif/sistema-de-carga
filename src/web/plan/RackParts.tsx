@@ -6,7 +6,7 @@
  *  - un parante: su alto (nunca más bajo que las vigas que sostiene).
  * Más abajo, plegado, lo que vale para todo el rack (largo, perfiles, alturas, alto y fondo).
  */
-import { AlertTriangle, Focus } from 'lucide-react'
+import { AlertTriangle, Focus, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { placementStructure } from '../../shared/plan/depot'
 import { freezeRacks, guarded, mapRacks } from '../../shared/plan/racks'
@@ -15,7 +15,7 @@ import { isOwnProfile, profilesOf } from '../../shared/rack/profiles'
 import { DESIGN_RULES } from '../../shared/rack/technicalSpecs'
 import type { LevelLayout, RackConfiguration } from '../../shared/rack/types'
 import { metros } from '../../shared/units'
-import { NumberStepper } from '../components/fields'
+import { NumberStepper, Switch } from '../components/fields'
 import { Field, Select } from '../components/ui'
 import type { PlanRackLayer } from './PlanEditor'
 import { usePlan } from './planStore'
@@ -111,7 +111,19 @@ export function RackParts({ r, rackLayer, config }: { r: RackPlacement; rackLaye
               {all.beams.map((p) => <option key={p.id} value={p.id}>{p.name}{isOwnProfile(config, p.id) ? ' (mía)' : ''}</option>)}
             </Select>
           )}</Field>
-          {o && <button type="button" className="link-btn" onClick={() => setMod(m, { width: undefined, beamId: undefined, beamElevations: undefined })}>Dejar este módulo como el resto</button>}
+          {/* borrar sólo esta viga (por ejemplo, las de abajo de un módulo para que pase el autoelevador) */}
+          <div className="rack-part__del">
+            <button type="button" className="vp-btn" disabled={mbeams.length <= 1}
+              title={mbeams.length <= 1 ? 'Es la última viga de este módulo: para dejar el hueco entero, partí el rack' : 'Saca sólo esta viga (y los pallets que apoyan en ella)'}
+              onClick={() => { setMod(m, { beamElevations: mbeams.filter((_, k) => k !== mine.plane).map((x) => x.elevation) }); setPiece(null) }}>
+              <Trash2 size={14} aria-hidden /> Borrar esta viga
+            </button>
+          </div>
+          {config.floorStorage && (
+            <Switch label="Paso libre abajo" checked={!!o?.noFloor} onChange={(v) => setMod(m, { noFloor: v || undefined })}
+              hint="Sin pallets en el piso de este módulo, para que pase el autoelevador." />
+          )}
+          {o && <button type="button" className="link-btn" onClick={() => setMod(m, { width: undefined, beamId: undefined, beamElevations: undefined, noFloor: undefined })}>Dejar este módulo como el resto</button>}
         </section>
       )
     }

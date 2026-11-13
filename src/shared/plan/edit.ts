@@ -3,7 +3,7 @@
  * Las usa el editor; al no tocar el plano original, deshacer/rehacer es guardar copias.
  */
 import { arcOf, edges, leftNormal, midpoint, outlinePolygon, pointInPolygon } from './geometry'
-import type { Plan, PlanColumn, PlanDoor, PlanPoint } from './types'
+import type { ObjectShape, Plan, PlanColumn, PlanDoor, PlanObject, PlanPoint } from './types'
 
 let seq = 0
 export const newId = (prefix: string) => `${prefix}${Date.now().toString(36)}${(seq++).toString(36)}`
@@ -142,7 +142,7 @@ export function removeOutside(plan: Plan): Plan {
 }
 
 /** Borra lo seleccionado. */
-export function removeItem(plan: Plan, kind: 'column' | 'wall' | 'door' | 'zone' | 'area' | 'aisle' | 'rack' | 'text' | 'symbol' | 'dim', id: string): Plan {
+export function removeItem(plan: Plan, kind: 'column' | 'wall' | 'door' | 'zone' | 'area' | 'aisle' | 'rack' | 'text' | 'symbol' | 'dim' | 'object', id: string): Plan {
   switch (kind) {
     case 'column': return { ...plan, columns: plan.columns.filter((x) => x.id !== id) }
     case 'wall': return { ...plan, walls: plan.walls.filter((x) => x.id !== id) }
@@ -152,6 +152,7 @@ export function removeItem(plan: Plan, kind: 'column' | 'wall' | 'door' | 'zone'
     case 'aisle': return { ...plan, aisles: (plan.aisles ?? []).filter((x) => x.id !== id) }
     case 'text': return { ...plan, texts: (plan.texts ?? []).filter((x) => x.id !== id) }
     case 'symbol': return { ...plan, symbols: (plan.symbols ?? []).filter((x) => x.id !== id) }
+    case 'object': return { ...plan, objects: (plan.objects ?? []).filter((x) => x.id !== id) }
     case 'dim': return { ...plan, dims: (plan.dims ?? []).filter((x) => x.id !== id) }
     case 'rack': return { ...plan, racks: (plan.racks ?? []).filter((x) => x.id !== id) }
   }
@@ -224,4 +225,44 @@ export function pointAtLength(last: PlanPoint, toward: PlanPoint | null, prev: P
   let ang = Math.atan2(dy, dx)
   if (snapAngle) ang = Math.round(ang / (Math.PI / 2)) * (Math.PI / 2)
   return { x: Math.round(last.x + Math.cos(ang) * length), y: Math.round(last.y + Math.sin(ang) * length) }
+}
+
+/* ------------------------------ Objetos propios ------------------------------ */
+
+const lim = (v: unknown, min: number, max: number, fallback: number) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback }
+
+/** Deja la forma de un objeto con medidas válidas (5 cm a 30 m). */
+export function sanitizeObjectShape(o: Partial<ObjectShape> | undefined): ObjectShape {
+  const w = lim(o?.w, 50, 30_000, 1000)
+  return {
+    name: typeof o?.name === 'string' && o.name.trim() ? o.name.slice(0, 40) : 'Objeto',
+    shape: o?.shape === 'cilindro' ? 'cilindro' : 'caja',
+    w, d: o?.shape === 'cilindro' ? w : lim(o?.d, 50, 30_000, 1000), h: lim(o?.h, 10, 20_000, 1000),
+    color: typeof o?.color === 'string' && /^#[0-9a-f]{6}$/i.test(o.color) ? o.color : '#8f969d',
+  }
+}
+
+/** Pone un objeto en el depósito, con su centro en `at`. */
+export function addObject(plan: Plan, shape: ObjectShape, at: PlanPoint, typeId?: string): { plan: Plan; id: string } {
+  const id = newId('o')
+  const obj: PlanObject = { ...sanitizeObjectShape(shape), id, x: Math.round(at.x), y: Math.round(at.y), rot: 0, z: 0, ...(typeId ? { typeId } : {}) }
+  return { plan: { ...plan, objects: [...(plan.objects ?? []), obj] }, id }
+}
+
+/** Cambia un objeto del depósito (medidas, nombre, color, giro, altura…). */
+export function updateObject(plan: Plan, id: string, patch: Partial<PlanObject>): Plan {
+  return {
+    ...plan, objects: (plan.objects ?? []).map((o) => {
+      if (o.id !== id) return o
+      const next = { ...o, ...patch }
+      return { ...next, ...sanitizeObjectShape(next), rot: ((Math.round(next.rot) % 360) + 360) % 360, z: lim(next.z, 0, 20_000, 0) }
+    }),
+  }
+}
+
+/** El rectángulo que ocupa un objeto en el plano (ya girado: a 90° o 270° se cruzan largo y ancho). */
+export function objectFootprint(o: Pick<PlanObject, 'x' | 'y' | 'w' | 'd' | 'rot'>): { x: number; y: number; w: number; h: number } {
+  const a = (o.rot * Math.PI) / 180, c = Math.abs(Math.cos(a)), s = Math.abs(Math.sin(a))
+  const w = o.w * c + o.d * s, h = o.w * s + o.d * c
+  return { x: o.x - w / 2, y: o.y - h / 2, w, h }
 }

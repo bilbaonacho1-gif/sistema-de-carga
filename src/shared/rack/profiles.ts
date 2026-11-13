@@ -5,9 +5,10 @@
  */
 import { BEAM_PROFILES, UPRIGHT_PROFILES } from './technicalSpecs'
 import { sanitizeShape, sectionSize } from './section'
-import type { BeamProfile, RackConfiguration, UprightProfile } from './types'
+import { sanitizeObjectShape } from '../plan/edit'
+import type { BeamProfile, ObjectType, RackConfiguration, UprightProfile } from './types'
 
-export interface CustomProfiles { uprights: UprightProfile[]; beams: BeamProfile[] }
+export interface CustomProfiles { uprights: UprightProfile[]; beams: BeamProfile[]; objects?: ObjectType[] }
 
 const clamp = (v: unknown, min: number, max: number, fallback: number) => {
   const n = Math.round(Number(v))
@@ -52,7 +53,8 @@ export function sanitizeProfiles(c: Partial<CustomProfiles> | undefined): Custom
     })).sort((x, y) => x.maxSpan - y.maxSpan)
     return { id: b.id, name: text(b.name, beamName({ height, depth })), height, depth, capacityBySpan: spans.length ? spans : [{ maxSpan: P.beamSpan.max, capacity: 2000 }], ...(shape ? { shape } : {}) }
   })
-  return { uprights, beams }
+  const objects = (Array.isArray(c?.objects) ? c!.objects : []).filter((o) => o && fresh(o.id)).slice(0, 60).map((o) => ({ ...sanitizeObjectShape(o), id: o.id }))
+  return { uprights, beams, ...(objects.length ? { objects } : {}) }
 }
 
 /** Todas las piezas que se pueden elegir: las de fábrica y las propias, de la más liviana a la más pesada. */
@@ -60,6 +62,7 @@ export function profilesOf(config: Pick<RackConfiguration, 'customProfiles'> | u
   const own = config?.customProfiles
   if (!own || (!own.uprights?.length && !own.beams?.length)) return base
   return {
+    ...(own.objects?.length ? { objects: own.objects } : {}),
     uprights: [...base.uprights, ...(own.uprights ?? [])].sort((a, b) => a.maxFrameLoad - b.maxFrameLoad),
     beams: [...base.beams, ...(own.beams ?? [])].sort((a, b) => a.height * a.depth - b.height * b.depth),
   }

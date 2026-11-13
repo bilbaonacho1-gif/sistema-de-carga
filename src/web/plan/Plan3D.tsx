@@ -10,7 +10,7 @@ import { memo, useEffect, useMemo, useRef, useState, type MutableRefObject } fro
 import * as THREE from 'three'
 import { edges, nearestOnEdge, outlinePolygon, planBounds, pointOnEdge, tangentOnEdge } from '../../shared/plan/geometry'
 import type { PlacedRack } from '../../shared/plan/depot'
-import { moveVertex, updateRect, newId } from '../../shared/plan/edit'
+import { addObject, moveVertex, updateRect, newId } from '../../shared/plan/edit'
 import { placementRect, type RackModuleSize } from '../../shared/plan/layout'
 import { freezeRacks, moveRack, moveRackWithin, rackSelection, selectedRackIds, pasteRacks } from '../../shared/plan/racks'
 import type { Plan, PlanPoint, PlanSelection, RackPlacement } from '../../shared/plan/types'
@@ -249,12 +249,28 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, size, span, on
             s.commit((pl) => { const r = pasteRacks(freezeRacks(pl, placements), s.clipRacks!, at, size); ids = r.ids; return r.plan })
             s.select(rackSelection(ids))
           }
+          else if (s.tool === 'object' && s.placeObject) {
+            // poner el objeto elegido en "Mis piezas" donde se tocó el piso
+            e.stopPropagation()
+            let id = ''
+            s.commit((pl) => { const r = addObject(pl, s.placeObject!, at, s.placeObject!.id); id = r.id; return r.plan })
+            s.select({ kind: 'object', id })
+          }
           else if (s.tool === 'symbol' && (s.symbolKind === 'persona' || s.symbolKind === 'autoelevador')) {
             e.stopPropagation()
             s.commit((pl) => ({ ...pl, symbols: [...(pl.symbols ?? []), { id: newId('s'), ...at, kind: s.symbolKind }] }))
             s.setTool('select')
           }
         }} />
+
+      {/* objetos propios (los de "Mis piezas"): cajas y cilindros con sus medidas, giro y altura */}
+      {(plan.objects ?? []).map((o) => (
+        <mesh key={o.id} position={[m(o.x), m(o.z) + m(o.h) / 2, m(o.y)]} rotation-y={(-o.rot * Math.PI) / 180} castShadow
+          material={isSel('object', o.id) ? MAT.selected : objectMaterial(o.color)}
+          {...drag({ kind: 'object', id: o.id }, (dx, dy, free) => live((pl) => ({ ...pl, objects: pl.objects?.map((q) => (q.id === o.id ? { ...q, x: snapTo(o.x + dx, free), y: snapTo(o.y + dy, free) } : q)) })))}>
+          {o.shape === 'cilindro' ? <cylinderGeometry args={[m(o.w) / 2, m(o.w) / 2, m(o.h), 32]} /> : <boxGeometry args={[m(o.w), m(o.h), m(o.d)]} />}
+        </mesh>
+      ))}
 
       {/* figuras para ver la escala: personas y autoelevadores puestos en el plano */}
       {(plan.symbols ?? []).filter((f) => f.kind === 'persona' || f.kind === 'autoelevador').map((f) => (
@@ -561,4 +577,12 @@ function WalkControls({ center, span }: { center: THREE.Vector3; span: number })
     }
   }, [active, gl])
   return null
+}
+
+const objectMats = new Map<string, THREE.Material>()
+/** Material de un objeto propio, por color (uno por color, compartido). */
+export function objectMaterial(color: string): THREE.Material {
+  let mat = objectMats.get(color)
+  if (!mat) { mat = new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.1 }); objectMats.set(color, mat) }
+  return mat
 }

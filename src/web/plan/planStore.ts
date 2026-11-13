@@ -3,7 +3,7 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { emptyPlan } from '../../shared/plan/edit'
 import { DEFAULT_LAYOUT, type LayoutOptions } from '../../shared/plan/layout'
-import type { Plan, PlanPoint, PlanSelection, SymbolKind, RackPlacement } from '../../shared/plan/types'
+import type { ObjectShape, Plan, PlanPoint, PlanSelection, SymbolKind, RackPlacement } from '../../shared/plan/types'
 
 /** Una pieza de un rack: los largueros de un nivel (plane = número de viga, de abajo hacia arriba) o los parantes. */
 /** Persona parada en el depósito: posición en el plano (mm), hacia dónde mira y cuánto levanta la vista. */
@@ -25,7 +25,7 @@ const safeStorage = {
   removeItem: (k: string) => { try { localStorage.removeItem(k) } catch { /* sin memoria */ } },
 }
 
-export type PlanTool = 'select' | 'outline' | 'column' | 'wall' | 'door' | 'zone' | 'area' | 'aisle' | 'measure' | 'dim' | 'text' | 'symbol' | 'calibrate' | 'rackdraw' | 'rackpaste'
+export type PlanTool = 'select' | 'outline' | 'column' | 'wall' | 'door' | 'zone' | 'area' | 'aisle' | 'measure' | 'dim' | 'text' | 'symbol' | 'calibrate' | 'rackdraw' | 'rackpaste' | 'object'
 
 /** Capas del plano que se pueden apagar (como en AutoCAD). */
 export type PlanLayer = 'grilla' | 'calco' | 'zonas' | 'areas' | 'pasillos' | 'racks' | 'numeros' | 'columnas' | 'tabiques' | 'portones' | 'textos' | 'simbolos' | 'cotasPropias'
@@ -114,6 +114,9 @@ interface PlanState {
   /** En el 3D, edición bloqueada: se puede girar y elegir, pero nada se mueve arrastrando (así no se corre algo sin querer). */
   lock3d: boolean
   setLock3d(v: boolean): void
+  /** Objeto propio que se está poniendo en el depósito (se pone uno con cada clic). */
+  placeObject: (ObjectShape & { id?: string }) | null
+  setPlaceObject(o: (ObjectShape & { id?: string }) | null): void
   /** Racks copiados (Ctrl+C o "Copiar"), listos para pegar donde se toque el plano. */
   clipRacks: RackPlacement[] | null
   setClipRacks(r: RackPlacement[] | null): void
@@ -187,6 +190,8 @@ export const usePlan = create<PlanState>()(
       setSection: (section) => set({ section }),
       lock3d: true,
       setLock3d: (lock3d) => set({ lock3d }),
+      placeObject: null,
+      setPlaceObject: (placeObject) => set({ placeObject, tool: placeObject ? 'object' : 'select', draft: [] }),
       clipRacks: null,
       setClipRacks: (clipRacks) => set({ clipRacks }),
       walk: null,

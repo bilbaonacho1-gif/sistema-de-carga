@@ -81,6 +81,7 @@ export function moveSelection(plan: Plan, sel: PlanSelection, dx: number, dy: nu
     case 'aisle': return { ...plan, aisles: mv(plan.aisles, sel.id) }
     case 'text': return { ...plan, texts: mv(plan.texts, sel.id) }
     case 'symbol': return { ...plan, symbols: mv(plan.symbols, sel.id) }
+    case 'object': return { ...plan, objects: mv(plan.objects, sel.id) }
     case 'wall': return { ...plan, walls: plan.walls.map((w) => (w.id === sel.id ? { ...w, a: { x: w.a.x + dx, y: w.a.y + dy }, b: { x: w.b.x + dx, y: w.b.y + dy } } : w)) }
     case 'dim': return { ...plan, dims: plan.dims?.map((d) => (d.id === sel.id ? { ...d, a: { x: d.a.x + dx, y: d.a.y + dy }, b: { x: d.b.x + dx, y: d.b.y + dy } } : d)) }
     case 'rack': case 'racks': return mapRacks(freezeRacks(plan, racks), selectedRackIds(sel), (r) => ({ ...r, x: r.x + dx, y: r.y + dy }))

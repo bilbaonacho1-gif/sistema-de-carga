@@ -5,7 +5,11 @@
  * Jerarquía: FILA → BASTIDOR | MÓDULO | BASTIDOR … → NIVEL → POSICIÓN → PALLET
  */
 
+import type { ObjectShape } from '../plan/types'
 import type { SectionShape } from './section'
+
+/** Un objeto propio del catálogo "Mis piezas" (una caja o un cilindro con nombre), para poner en el depósito. */
+export type ObjectType = ObjectShape & { id: string }
 
 /** Lo que el usuario configura. */
 export interface RackConfiguration {
@@ -49,7 +53,7 @@ export interface RackConfiguration {
   uprightId?: string
   beamId?: string
   /** "Mis piezas": tipos de parante y de viga creados por el usuario, además de los de fábrica. */
-  customProfiles?: { uprights: UprightProfile[]; beams: BeamProfile[] }
+  customProfiles?: { uprights: UprightProfile[]; beams: BeamProfile[]; objects?: ObjectType[] }
   accessories?: Partial<AccessoryConfig>
 }
 
@@ -66,6 +70,8 @@ export interface RackSection {
   beamElevations?: number[]
   /** Perfil de viga del tramo (si no, el del rack). */
   beamId?: string
+  /** Si este tramo usa el piso como primer nivel (si no está, como el rack). false = paso libre abajo. */
+  floorStorage?: boolean
 }
 
 export interface AccessoryConfig {

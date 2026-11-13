@@ -105,7 +105,8 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
         )}
         {placing && <p className="plan-stage__hint plan-stage__hint--place">Tocá el piso donde va {placing === 'persona' ? 'la persona' : 'el autoelevador'}{view3d ? '' : ' (después miralo en 3D)'} · Esc termina</p>}
         {tool === 'rackpaste' && view3d && <p className="plan-stage__hint plan-stage__hint--place">Tocá el piso donde va la copia · Esc termina</p>}
-        {view3d && !isoOn && !walk && !placing && tool !== 'rackpaste' && (
+        {tool === 'object' && view3d && <p className="plan-stage__hint plan-stage__hint--place">Tocá el piso donde va el objeto (podés poner varios) · Esc termina</p>}
+        {view3d && !isoOn && !walk && !placing && tool !== 'rackpaste' && tool !== 'object' && (
           <p className="plan-stage__hint">{lock3d ? 'Edición bloqueada: arrastrá para girar la vista · para mover cosas, tocá el candado' : 'Tocá algo para elegirlo y arrastralo para moverlo · arrastrá el fondo para girar'}</p>
         )}
       </div>
@@ -156,7 +157,7 @@ function useKeys3d(active: boolean, layer?: PlanRackLayer) {
         if (picked.length) { e.preventDefault(); s.setClipRacks(picked) }
       }
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') { if (s.clipRacks?.length) { e.preventDefault(); s.setTool('rackpaste') } }
-      else if (e.key === 'Escape') { if (s.tool !== 'select') s.setTool('select'); else if (!s.selection && s.isolate) s.setIsolate(null); else s.select(null) }
+      else if (e.key === 'Escape') { if (s.tool === 'object') s.setPlaceObject(null); else if (s.tool !== 'select') s.setTool('select'); else if (!s.selection && s.isolate) s.setIsolate(null); else s.select(null) }
       else if ((e.key === 'Delete' || e.key === 'Backspace') && s.selection && s.selection.kind !== 'edge') {
         e.preventDefault()
         const sel = s.selection

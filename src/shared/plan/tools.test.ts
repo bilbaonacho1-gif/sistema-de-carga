@@ -209,3 +209,35 @@ describe('lista de materiales con piezas propias en un rack', () => {
     expect(vigas.reduce((n, m) => n + m.qty, 0)).toBe(depot.racks.reduce((n, r) => n + r.structure.counts.beams, 0))
   })
 })
+
+describe('borrar una viga de un módulo y dejar el paso libre', () => {
+  it('sacando la viga de abajo de un módulo, sólo ese módulo pierde ese nivel', async () => {
+    const { placementStructure } = await import('./depot')
+    const { DEFAULT_CONFIGURATION } = await import('../rack/technicalSpecs')
+    const plain = placementStructure(DEFAULT_CONFIGURATION, rack({ modules: 4 }))
+    const elev = plain.rows[0].modules[0].levels.filter((l) => l.hasBeam).map((l) => l.elevation)
+    expect(elev.length).toBeGreaterThan(1)
+    const s = placementStructure(DEFAULT_CONFIGURATION, rack({ modules: 4, mods: { 1: { beamElevations: elev.slice(1) } } }))
+    const beams = (m: number) => s.rows[0].modules.find((x) => x.key === m)!.levels.filter((l) => l.hasBeam).map((l) => l.elevation)
+    expect(beams(1)).toEqual(elev.slice(1))
+    expect(beams(0)).toEqual(elev)
+    expect(beams(2)).toEqual(elev)
+    // hay menos vigas y menos posiciones que en el rack entero
+    expect(s.counts.beams).toBe(plain.counts.beams - 2)
+    expect(s.positionsAvailable).toBeLessThan(plain.positionsAvailable)
+  })
+  it('con el paso libre abajo, ese módulo no lleva pallets en el piso', async () => {
+    const { placementStructure } = await import('./depot')
+    const { DEFAULT_CONFIGURATION } = await import('../rack/technicalSpecs')
+    const config = { ...DEFAULT_CONFIGURATION, floorStorage: true, levels: 3 }
+    const plain = placementStructure(config, rack({ modules: 3 }))
+    const elev = plain.rows[0].modules[0].levels.filter((l) => l.hasBeam).map((l) => l.elevation)
+    const s = placementStructure(config, rack({ modules: 3, mods: { 1: { noFloor: true, beamElevations: elev.slice(1) } } }))
+    const onFloor = (st: typeof s, m: number) => st.pallets.filter((p) => p.module === m && p.elevation === 0).length
+    expect(onFloor(plain, 1)).toBeGreaterThan(0)
+    expect(onFloor(s, 1)).toBe(0)
+    expect(onFloor(s, 0)).toBe(onFloor(plain, 0))
+    // lo de arriba del paso sigue: queda la viga más alta con sus pallets
+    expect(s.rows[0].modules[1].levels.filter((l) => l.hasBeam).map((l) => l.elevation)).toEqual(elev.slice(1))
+  })
+})

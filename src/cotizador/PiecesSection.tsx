@@ -7,12 +7,14 @@
  */
 import { ArrowLeft, Copy, Lock, MousePointerClick, PenTool, Plus, Trash2, Upload } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
+import { sanitizeObjectShape } from '../shared/plan/edit'
 import { selectedRackIds } from '../shared/plan/racks'
+import type { ObjectShape } from '../shared/plan/types'
 import { calculateRackStructure } from '../shared/rack/calculateRackStructure'
 import { beamName, PIECE_LIMITS as P, uprightName } from '../shared/rack/profiles'
 import { presetShape, sectionSize, shapeFromDxf, type SectionShape } from '../shared/rack/section'
 import { BEAM_PROFILES, UPRIGHT_PROFILES } from '../shared/rack/technicalSpecs'
-import type { BeamProfile, UprightProfile } from '../shared/rack/types'
+import type { BeamProfile, ObjectType, UprightProfile } from '../shared/rack/types'
 import { metros } from '../shared/units'
 import { NumberStepper } from '../web/components/fields'
 import { useToast } from '../web/components/overlays'
@@ -20,13 +22,14 @@ import { Button, Field, Input, Segmented } from '../web/components/ui'
 import { fmt } from '../web/lib/format'
 import { Warnings } from '../web/pages/designer/CotizadorView'
 import { useDesigner } from '../web/pages/designer/designerStore'
+import { ObjectFields } from '../web/plan/PlanPanel'
 import { usePlan } from '../web/plan/planStore'
 import { RackScene } from '../web/three/RackScene'
-import { Piece3D } from './Piece3D'
+import { Object3D, Piece3D } from './Piece3D'
 import { RackPicker } from './RackPicker'
 import { SectionEditor } from './SectionEditor'
 
-type Kind = 'beam' | 'upright'
+type Kind = 'beam' | 'upright' | 'object'
 const newId = (prefix: string) => `${prefix}${Math.random().toString(36).slice(2, 7)}`
 const kg = (n: number) => `${fmt(n)} kg`
 const topCapacity = (b: BeamProfile) => Math.max(...b.capacityBySpan.map((c) => c.capacity))
@@ -35,7 +38,7 @@ export function PiecesSection() {
   const { config, update } = useDesigner()
   const toast = useToast()
   const { setSection, selection } = usePlan()
-  const own = useMemo(() => ({ uprights: config.customProfiles?.uprights ?? [], beams: config.customProfiles?.beams ?? [] }), [config.customProfiles])
+  const own = useMemo(() => ({ uprights: config.customProfiles?.uprights ?? [], beams: config.customProfiles?.beams ?? [], objects: config.customProfiles?.objects ?? [] }), [config.customProfiles])
   const [sel, setSel] = useState<{ kind: Kind; id: string } | null>(() => (own.beams[0] ? { kind: 'beam', id: own.beams[0].id } : own.uprights[0] ? { kind: 'upright', id: own.uprights[0].id } : null))
   const save = (next: typeof own, extra: Partial<typeof config> = {}) => update({ customProfiles: next, ...extra })
   // qué se ve en 3D: la pieza sola (para girarla y mirarla) o un rack armado con ella
@@ -44,7 +47,27 @@ export function PiecesSection() {
 
   const beam = sel?.kind === 'beam' ? own.beams.find((b) => b.id === sel.id) ?? BEAM_PROFILES.find((b) => b.id === sel.id) : undefined
   const upright = sel?.kind === 'upright' ? own.uprights.find((u) => u.id === sel.id) ?? UPRIGHT_PROFILES.find((u) => u.id === sel.id) : undefined
-  const locked = !!sel && !own.beams.some((b) => b.id === sel.id) && !own.uprights.some((u) => u.id === sel.id)
+  const obj = sel?.kind === 'object' ? own.objects.find((o) => o.id === sel.id) : undefined
+  const locked = !!sel && sel.kind !== 'object' && !own.beams.some((b) => b.id === sel.id) && !own.uprights.some((u) => u.id === sel.id)
+  // objetos propios: cajas y cilindros con nombre, para poner donde se quiera en el depósito
+  const setObj = (id: string, patch: Partial<ObjectShape>) => save({ ...own, objects: own.objects.map((o) => (o.id === id ? { ...o, ...sanitizeObjectShape({ ...o, ...patch }), name: patch.name ?? o.name } : o)) })
+  const addObj = (from?: ObjectType) => {
+    const o: ObjectType = from ? { ...from, id: newId('mo-'), name: `${from.name} (copia)` } : { id: newId('mo-'), name: `Objeto ${own.objects.length + 1}`, shape: 'caja', w: 1000, d: 1000, h: 1000, color: '#8f969d' }
+    save({ ...own, objects: [...own.objects, o] })
+    setSel({ kind: 'object', id: o.id })
+  }
+  const placedCount = usePlan((s) => (obj ? (s.plan.objects ?? []).filter((x) => x.typeId === obj.id).length : 0))
+  const hasDepot = usePlan((s) => s.plan.outline.points.length >= 3)
+  /** Pasa al depósito con el objeto en la mano: se pone con un clic donde se quiera (varias veces). */
+  const placeObj = () => {
+    if (!obj) return
+    if (!hasDepot) { toast.error('Primero dibujá el depósito (en la sección Depósito), y después ponés el objeto.'); return }
+    const st = usePlan.getState()
+    if (st.flowStep === 'rack' || st.flowStep === 'carga') st.setFlowStep('distribucion')
+    st.setWalk(null)
+    st.setPlaceObject(obj)
+    setSection('deposito')
+  }
 
   const setBeam = (id: string, patch: Partial<BeamProfile>) => save({
     ...own, beams: own.beams.map((b) => {
@@ -102,7 +125,8 @@ export function PiecesSection() {
   // al borrar una pieza que se usaba en todos los racks, se vuelve a la elección automática
   const remove = () => {
     if (!sel || locked) return
-    if (sel.kind === 'beam') save({ ...own, beams: own.beams.filter((b) => b.id !== sel.id) }, config.beamId === sel.id ? { beamId: 'auto' } : {})
+    if (sel.kind === 'object') save({ ...own, objects: own.objects.filter((o) => o.id !== sel.id) })
+    else if (sel.kind === 'beam') save({ ...own, beams: own.beams.filter((b) => b.id !== sel.id) }, config.beamId === sel.id ? { beamId: 'auto' } : {})
     else save({ ...own, uprights: own.uprights.filter((u) => u.id !== sel.id) }, config.uprightId === sel.id ? { uprightId: 'auto' } : {})
     setSel(null)
   }
@@ -143,7 +167,7 @@ export function PiecesSection() {
     <li key={id}>
       <button type="button" className={`pieces__item${sel?.id === id ? ' is-on' : ''}`} onClick={() => setSel({ kind, id })}>
         <strong>{name}</strong>
-        <span>{factory && <Lock size={11} aria-hidden />} {info}{config[kind === 'beam' ? 'beamId' : 'uprightId'] === id ? ' · en todos los racks' : ''}</span>
+        <span>{factory && <Lock size={11} aria-hidden />} {info}{kind !== 'object' && config[kind === 'beam' ? 'beamId' : 'uprightId'] === id ? ' · en todos los racks' : ''}</span>
       </button>
     </li>
   )
@@ -161,6 +185,10 @@ export function PiecesSection() {
         {!own.uprights.length && <p className="muted small">Todavía no creaste ninguno.</p>}
         <ul>{own.uprights.map((u) => item('upright', u.id, u.name || uprightName(u), `aguanta ${kg(u.maxFrameLoad)}`))}</ul>
         <Button icon={Plus} onClick={() => addUpright()} block>Nuevo parante</Button>
+        <h2 className="pieces__h">Mis objetos</h2>
+        {!own.objects.length && <p className="muted small">Cajas, mesas, máquinas… lo que quieras poner en el depósito.</p>}
+        <ul>{own.objects.map((o) => item('object', o.id, o.name, `${metros(o.w)}${o.shape === 'caja' ? ` × ${metros(o.d)}` : ''} × ${metros(o.h)}`))}</ul>
+        <Button icon={Plus} onClick={() => addObj()} block>Nuevo objeto</Button>
         <details className="plan-more pieces__factory">
           <summary>Piezas de fábrica</summary>
           <p className="muted small">No se cambian, pero se pueden copiar para hacer una propia.</p>
@@ -173,13 +201,32 @@ export function PiecesSection() {
 
       {/* ---------- las medidas ---------- */}
       <section className="pieces__edit" aria-label="Medidas de la pieza">
-        {!sel || (!beam && !upright) ? (
+        {obj ? <>
+          <h2 className="pieces__title">Objeto</h2>
+          <div className="pieces__fields">
+            <Field label="Nombre">{(id) => <Input id={id} value={obj.name} maxLength={40} onChange={(e) => setObj(obj.id, { name: e.target.value })} />}</Field>
+            <ObjectFields o={obj} onChange={(patch) => setObj(obj.id, patch)} />
+          </div>
+          <h3 className="pieces__sub">Ponerlo en el depósito</h3>
+          <div className="pieces__use">
+            <Button variant="primary" icon={MousePointerClick} onClick={placeObj}>Poner en el depósito</Button>
+          </div>
+          <p className="muted small">
+            Vas al plano con el objeto y lo ponés con un clic donde quieras, las veces que quieras (también en el 3D). Ahí lo movés, lo girás, lo subís del piso o le cambiás las medidas.
+            {placedCount ? ` Ya hay ${placedCount === 1 ? 'uno puesto' : `${placedCount} puestos`}.` : ''}
+          </p>
+          <div className="pieces__use pieces__use--minor">
+            <Button size="sm" icon={Copy} onClick={() => addObj(obj)}>Duplicar</Button>
+            <Button size="sm" icon={Trash2} onClick={remove}>Borrar</Button>
+          </div>
+        </> : !sel || (!beam && !upright) ? (
           <div className="pieces__empty">
             <h2>Creá tus propias piezas</h2>
-            <p>Armá tus tipos de viga y de parante con las medidas que quieras. Después los metés en todos los racks o en un rack solo.</p>
+            <p>Armá tus tipos de viga y de parante con las medidas que quieras y metelos en los racks. O creá objetos (cajas, mesas, máquinas) y ponelos donde quieras en el depósito.</p>
             <div className="pieces__empty-actions">
               <Button variant="primary" icon={Plus} onClick={() => addBeam()}>Nueva viga</Button>
               <Button icon={Plus} onClick={() => addUpright()}>Nuevo parante</Button>
+              <Button icon={Plus} onClick={() => addObj()}>Nuevo objeto</Button>
             </div>
           </div>
         ) : <>
@@ -256,11 +303,17 @@ export function PiecesSection() {
 
       {/* ---------- cómo queda ---------- */}
       <section className="pieces__view" aria-label="Cómo queda la pieza">
-        {sel && (beam || upright) && sample ? <>
+        {obj ? <>
+          <h3 className="pieces__sub">Cómo queda</h3>
+          <div className="pieces__3d pieces__3d--solo">
+            <Object3D o={obj} />
+            <span className="pieces__3d-t">Arrastrá para girarlo</span>
+          </div>
+        </> : sel && (beam || upright) && sample ? <>
           <div className="pieces__cut">
             <h3 className="pieces__sub">La forma (el corte de la pieza) y cómo queda en 3D</h3>
             {shape && !locked
-              ? <SectionEditor kind={sel.kind} shape={shape} onChange={setShape} onRemove={() => setShape(undefined)} onError={toast.error} aside={view3dBlock} />
+              ? <SectionEditor kind={sel.kind === 'beam' ? 'beam' : 'upright'} shape={shape} onChange={setShape} onRemove={() => setShape(undefined)} onError={toast.error} aside={view3dBlock} />
               : <>
                   <div className="sect__top">
                     <div className="pieces__cutbox">{beam ? <BeamCut b={beam} /> : upright && <UprightCut u={upright} />}</div>

@@ -3,7 +3,7 @@
  * mano. Se dibujan en el plano (SVG en mm) y se tocan para elegirlas y arrastrarlas.
  */
 import { Ambulance, BatteryCharging, Droplets, FireExtinguisher, Forklift, LogOut, PackageSearch, Toilet, Truck, Zap, type LucideIcon, PersonStanding } from 'lucide-react'
-import type { PlanDim, PlanSymbol, PlanText, SymbolKind } from '../../shared/plan/types'
+import type { PlanDim, PlanObject, PlanSymbol, PlanText, SymbolKind } from '../../shared/plan/types'
 import { metros } from '../../shared/units'
 
 export const SYMBOLS: Record<SymbolKind, { label: string; icon: LucideIcon; color: string }> = {
@@ -41,18 +41,20 @@ interface Props {
   texts: PlanText[]
   symbols: PlanSymbol[]
   dims: PlanDim[]
+  /** Objetos propios puestos en el depósito. */
+  objects?: PlanObject[]
   px: (n: number) => number
   selectedId?: string
   showTexts: boolean
   showSymbols: boolean
   showDims: boolean
   /** Si está, se pueden tocar y arrastrar. */
-  onDown?: (e: React.PointerEvent, kind: 'text' | 'symbol' | 'dim', id: string) => void
+  onDown?: (e: React.PointerEvent, kind: 'text' | 'symbol' | 'dim' | 'object', id: string) => void
 }
 
-export function PlanAnnotations({ texts, symbols, dims, px, selectedId, showTexts, showSymbols, showDims, onDown }: Props) {
+export function PlanAnnotations({ texts, symbols, dims, objects = [], px, selectedId, showTexts, showSymbols, showDims, onDown }: Props) {
   const S = symbolSize(px)
-  const grab = (kind: 'text' | 'symbol' | 'dim', id: string) => (onDown ? (e: React.PointerEvent) => onDown(e, kind, id) : undefined)
+  const grab = (kind: 'text' | 'symbol' | 'dim' | 'object', id: string) => (onDown ? (e: React.PointerEvent) => onDown(e, kind, id) : undefined)
   const cursor = onDown ? 'move' : undefined
   return (
     <g>
@@ -78,12 +80,28 @@ export function PlanAnnotations({ texts, symbols, dims, px, selectedId, showText
           </g>
         )
       })}
+      {/* objetos propios: su forma vista de arriba, con el nombre */}
+      {objects.map((o) => {
+        const sel = o.id === selectedId
+        const stroke = sel ? RED : '#3d434a', sw = px(sel ? 2.5 : 1.3)
+        return (
+          <g key={o.id} style={{ cursor }} onPointerDown={grab('object', o.id)}>
+            <g transform={`rotate(${o.rot} ${o.x} ${o.y})`}>
+              {o.shape === 'cilindro'
+                ? <circle cx={o.x} cy={o.y} r={o.w / 2} fill={o.color} fillOpacity={0.6} stroke={stroke} strokeWidth={sw} />
+                : <rect x={o.x - o.w / 2} y={o.y - o.d / 2} width={o.w} height={o.d} fill={o.color} fillOpacity={0.6} stroke={stroke} strokeWidth={sw} />}
+            </g>
+            <text x={o.x} y={o.y} fontSize={px(11)} textAnchor="middle" dominantBaseline="middle" fill="#1f2328" stroke="#fff" strokeWidth={px(3.5)}
+              style={{ paintOrder: 'stroke', fontFamily: 'var(--f-body)', fontWeight: 700, pointerEvents: 'none' }}>{o.name}</text>
+          </g>
+        )
+      })}
       {showTexts && texts.map((t) => {
         const sel = t.id === selectedId
         return (
           <text key={t.id} x={t.x} y={t.y} fontSize={Math.max(t.size, px(11))} textAnchor="middle" dominantBaseline="middle"
-            fill={sel ? RED : '#1f2328'} stroke="#fff" strokeWidth={Math.max(t.size, px(11)) * 0.28} onPointerDown={grab('text', t.id)}
-            style={{ paintOrder: 'stroke', fontFamily: 'var(--f-body)', fontWeight: 700, cursor, textDecoration: sel ? 'underline' : undefined }}>{t.text}</text>
+            fill={sel ? RED : '#1f2328'} stroke="#fff" strokeWidth={Math.max(t.size, px(11)) * 0.16} strokeLinejoin="round" onPointerDown={grab('text', t.id)}
+            style={{ paintOrder: 'stroke', fontFamily: 'var(--f-body)', fontWeight: 600, letterSpacing: '0.03em', wordSpacing: '0.08em', cursor, textDecoration: sel ? 'underline' : undefined }}>{t.text}</text>
         )
       })}
       {showSymbols && symbols.map((s) => {
