@@ -45,6 +45,7 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
   const empty = plan.outline.points.length < 3
   const view3d = want3d && !empty
   const [fit, setFit] = useState(0)
+  const fitTick = usePlan((s) => s.fitTick)
   const pallets = (racks ?? []).reduce((n, r) => n + r.structure.pallets.length, 0)
   const [loads, setLoads] = useState<boolean | null>(null)
   // con muchos racks el 3D va en lote y las cajas no pesan: se ven siempre; con pocos racks muy largos, sólo si no son demasiadas
@@ -81,7 +82,7 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
       <div className="plan-stage__body">
         {view3d
           ? <Suspense fallback={<Spinner />}><Plan3D plan={plan} racks={racks} showLoads={showLoads} issues={rackLayer?.issues} size={rackLayer?.size} /></Suspense>
-          : <PlanEditor fitRequest={fit} rackLayer={rackLayer} />}
+          : <PlanEditor fitRequest={fit + fitTick} rackLayer={rackLayer} />}
         {view3d && isoOn && (
           <div className="iso-pill" role="status">
             <span>Viendo solo {isolate!.length === 1 ? 'este rack' : `estos ${isolate!.length} racks`}</span>

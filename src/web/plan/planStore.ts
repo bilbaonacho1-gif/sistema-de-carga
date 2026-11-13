@@ -140,6 +140,9 @@ interface PlanState {
   setWorkspace(w: 'rack' | 'deposito'): void
   setFlowStep(s: FlowStep): void
   setLayout(patch: Partial<LayoutOptions>): void
+  /** Pedido de volver a encuadrar el plano (por ejemplo, al crear el depósito desde el ayudante). */
+  fitTick: number
+  requestFit(): void
   /** Vuelve a empezar: depósito inicial, primer paso y opciones de fábrica. */
   resetAll(): void
 }
@@ -212,6 +215,8 @@ export const usePlan = create<PlanState>()(
       setWorkspace: (workspace) => set({ workspace }),
       setFlowStep: (flowStep) => set({ flowStep }),
       setLayout: (patch) => set((s) => ({ layout: { ...s.layout, ...patch } })),
+      fitTick: 0,
+      requestFit: () => set((s) => ({ fitTick: s.fitTick + 1 })),
       resetAll: () => set({ plan: DEFAULT_PLAN, past: [], future: [], selection: null, draft: [], tool: 'select', flowStep: 'deposito', layout: DEFAULT_LAYOUT, view3d: false }),
     }),
     {

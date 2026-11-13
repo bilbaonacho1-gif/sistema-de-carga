@@ -167,3 +167,34 @@
 .own-piece { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--bg); }
 .own-piece strong { font-size: 13px; }
 .own-fields { display: grid; gap: 8px; }
+
+/* ---------- Ayudante (chat con reglas, sin IA) ---------- */
+.ayu { position: fixed; right: 16px; top: calc(var(--topbar) + 28px); bottom: 16px; z-index: 150; display: flex; flex-direction: column; width: min(380px, calc(100vw - 24px)); border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: 0 18px 50px rgba(20, 24, 30, .22); overflow: hidden; }
+.ayu__top { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--ink); color: #fff; }
+.ayu__top strong { flex: 1; font: 700 14px/1 var(--f-display); text-transform: uppercase; letter-spacing: .04em; }
+.ayu__x { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 8px; background: transparent; color: #fff; cursor: pointer; }
+.ayu__x:hover { background: rgba(255, 255, 255, .16); }
+.ayu__list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--bg); }
+.ayu__msg { max-width: 92%; padding: 8px 11px; border-radius: 12px; font-size: 13.5px; line-height: 1.45; }
+.ayu__msg p { margin: 0; white-space: pre-line; }
+.ayu__msg ol { margin: 6px 0 0; padding-left: 20px; }
+.ayu__msg li + li { margin-top: 3px; }
+.ayu__msg--ayu { align-self: flex-start; background: #fff; border: 1px solid var(--line-2); border-top-left-radius: 4px; }
+.ayu__msg--yo { align-self: flex-end; background: var(--red); color: #fff; border-top-right-radius: 4px; }
+.ayu__item { display: grid; gap: 6px; margin-top: 8px; padding: 8px 9px; border-left: 3px solid var(--line); border-radius: 6px; background: var(--bg); }
+.ayu__item--error { border-left-color: var(--red); background: var(--red-tint); }
+.ayu__item--aviso { border-left-color: #d9a400; background: #fff8e1; }
+.ayu__item--consejo { border-left-color: #2f6fb8; background: #eef4fb; }
+.ayu__acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.ayu__act { justify-self: start; padding: 5px 10px; border: 1px solid var(--ink); border-radius: 8px; background: #fff; font: 600 12.5px/1.2 var(--f-body); color: var(--ink); text-align: left; cursor: pointer; }
+.ayu__act:hover:not(:disabled) { background: var(--ink); color: #fff; }
+.ayu__act:disabled { opacity: .45; cursor: default; }
+.ayu__quick { display: flex; gap: 6px; padding: 8px 12px; overflow-x: auto; border-top: 1px solid var(--line-2); background: #fff; }
+.ayu__quick button { flex: none; padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px; background: #fff; font: 600 12px/1.2 var(--f-body); color: var(--ink-2); white-space: nowrap; cursor: pointer; }
+.ayu__quick button:hover { border-color: var(--red); color: var(--red); }
+.ayu__form { display: flex; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--line-2); background: #fff; }
+.ayu__form input { flex: 1; min-width: 0; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; font: inherit; font-size: 14px; }
+.ayu__form input:focus { outline: 2px solid var(--red); outline-offset: 1px; border-color: transparent; }
+.ayu__form button { display: grid; place-items: center; width: 40px; border: 0; border-radius: 10px; background: var(--red); color: #fff; cursor: pointer; }
+.ayu__form button:disabled { opacity: .4; cursor: default; }
+@media (max-width: 640px) { .ayu { right: 8px; left: 8px; width: auto; top: calc(var(--topbar) + 12px); bottom: 8px; } }
