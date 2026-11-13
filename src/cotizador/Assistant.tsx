@@ -268,7 +268,7 @@ export function Assistant({ open, onClose }: { open: boolean; onClose(): void })
       </div>
       <form className="ayu__form" onSubmit={(e) => { e.preventDefault(); send(text) }}>
         <textarea ref={input} value={text} rows={Math.min(7, Math.max(1, text.split('\n').length))} maxLength={4000} aria-label="Escribile al ayudante"
-          placeholder='Escribí o pegá acá. Ej.: "racks de 7 m con 4 niveles"' onChange={(e) => setText(e.target.value)}
+          placeholder="Escribí o pegá tu pedido" onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(text) } }} />
         <button type="submit" disabled={!text.trim()} aria-label="Enviar"><Send size={16} aria-hidden /></button>
       </form>

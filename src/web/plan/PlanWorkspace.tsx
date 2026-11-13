@@ -81,7 +81,7 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
       </div>
       <div className="plan-stage__body">
         {view3d
-          ? <Suspense fallback={<Spinner />}><Plan3D plan={plan} racks={racks} showLoads={showLoads} issues={rackLayer?.issues} size={rackLayer?.size} /></Suspense>
+          ? <Suspense fallback={<Spinner />}><Plan3D key={fitTick} plan={plan} racks={racks} showLoads={showLoads} issues={rackLayer?.issues} size={rackLayer?.size} /></Suspense>
           : <PlanEditor fitRequest={fit + fitTick} rackLayer={rackLayer} />}
         {view3d && isoOn && (
           <div className="iso-pill" role="status">
