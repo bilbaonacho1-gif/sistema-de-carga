@@ -94,4 +94,32 @@ describe('doblar la chapa', () => {
     const big = roundedLine({ ...preset('l', 20, 20, 2), radius: 40 })
     expect(big.every((p) => p.x >= -0.01 && p.x <= 20.01 && p.y >= -0.01 && p.y <= 20.01)).toBe(true)
   })
+
+  it('una pieza puede tener varias formas: todas cuentan en la medida y viajan juntas', async () => {
+    const { fromParts, partsOf, normalizeShape, sectionOutlines, shiftPart, scaleShape } = await import('./section')
+    const a = presetShape('caja', 50, 100, 2), b = shiftPart(presetShape('macizo', 20, 10), 70, 0)
+    const s = fromParts([a, b])
+    expect(partsOf(s)).toHaveLength(2)
+    expect(sectionOutlines(s)).toHaveLength(2)
+    // 50 de la caja + 20 de hueco + 20 de la planchuela (más la chapa de la caja de un lado)
+    expect(sectionSize(s)).toEqual({ w: 91, h: 102 })
+    // correr una forma a la izquierda de la otra: la pieza vuelve a arrancar en 0 y nada cambia de tamaño
+    const moved = normalizeShape(fromParts([a, shiftPart(b, -100, 0)]))
+    expect(Math.min(...partsOf(moved).flatMap((p) => p.points.map((q) => q.x)))).toBe(0)
+    expect(partsOf(moved)[0].points[0].x).toBe(30)
+    // se guarda y se limpia entera, sin perder las formas de más
+    const clean = sanitizeShape(JSON.parse(JSON.stringify(s)))!
+    expect(clean.more).toHaveLength(1)
+    expect(sectionSize(clean)).toEqual({ w: 91, h: 102 })
+    expect(sectionSize(scaleShape(s, 2)).w).toBeGreaterThan(175)
+    // una sola forma: no queda `more`
+    expect(sanitizeShape(a)!.more).toBeUndefined()
+  })
+  it('un DXF con dos trazos separados trae las dos formas', async () => {
+    const { partsOf } = await import('./section')
+    const poly = (x: number, w: number, h: number) => `0\nLWPOLYLINE\n90\n4\n70\n1\n10\n${x}\n20\n0\n10\n${x + w}\n20\n0\n10\n${x + w}\n20\n${h}\n10\n${x}\n20\n${h}\n`
+    const s = shapeFromDxf(`0\nSECTION\n2\nENTITIES\n${poly(0, 50, 120) + poly(80, 30, 40)}0\nENDSEC\n0\nEOF\n`)!
+    expect(partsOf(s)).toHaveLength(2)
+    expect(sectionSize(s)).toEqual({ w: 110, h: 120 })
+  })
 })
