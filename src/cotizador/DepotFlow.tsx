@@ -36,7 +36,7 @@ const kg = (n: number) => `${fmt(n)} kg`
 
 const META: Record<FlowStep, { title: string; short: string; help: string }> = {
   deposito: { title: 'Tu depósito', short: 'Depósito', help: 'Dibujá el lugar: contorno, columnas, portones y las zonas donde no van racks. Si ya sabés dónde van los racks y los pasillos, marcalos con "Zona de racks" y "Pasillo". Todo lo demás se calcula a partir de este plano.' },
-  rack: { title: 'Cómo es el rack', short: 'Rack', help: 'Elegí el módulo que se va a repetir en el depósito: largo de viga, profundidad, altura y niveles.' },
+  rack: { title: 'Cómo es el módulo', short: 'Rack', help: 'Así es el módulo inicial: largo de viga, profundidad, altura y niveles. Después lo ponés en el depósito, le sumás módulos y lo copiás.' },
   carga: { title: 'Pallet y carga', short: 'Carga', help: 'El pallet define cuántos entran por módulo. Si el cliente usa uno especial, elegí "A medida".' },
   distribucion: { title: 'Cuántos racks entran', short: 'Distribución', help: 'Armá los racks desde un módulo inicial: lo ponés en el plano, le sumás módulos y lo copiás y pegás donde quieras. Si preferís, el sistema también llena el depósito solo.' },
   accesorios: { title: 'Accesorios', short: 'Accesorios', help: 'Protección, seguridad y piso de los niveles, para todos los racks del depósito.' },
@@ -49,11 +49,11 @@ export function useDepot(): { depot: Depot; preview: RackStructure } {
   const layout = usePlan((s) => s.layout)
   const config = useDesigner((s) => s.config)
   const depot = useMemo(() => buildDepot(plan, config, layout), [plan, config, layout])
-  // vista previa del rack: una fila de 3 módulos con las medidas elegidas
+  // vista previa del rack: el módulo inicial (un solo módulo, con sus dos bastidores) con las medidas elegidas
   const preview = useMemo(() => {
     const { sample } = moduleSize(config)
     return calculateRackStructure({
-      ...sample.config, sections: [], positions: sample.palletsPerModule * sample.storageLevels * 3,
+      ...sample.config, sections: [], positions: sample.palletsPerModule * sample.storageLevels,
       layout: { ...sample.config.layout, rows: 1, backToBack: false },
     })
   }, [config])
