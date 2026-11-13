@@ -5,14 +5,15 @@
  * largo de su pared, esquinas del contorno y racks). Arrastrar el fondo gira la cámara.
  */
 import { Grid, OrbitControls } from '@react-three/drei'
-import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
+import { Canvas, invalidate, useThree, type ThreeEvent } from '@react-three/fiber'
 import { memo, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import * as THREE from 'three'
 import { edges, nearestOnEdge, outlinePolygon, planBounds, pointOnEdge, tangentOnEdge } from '../../shared/plan/geometry'
 import type { PlacedRack } from '../../shared/plan/depot'
 import { addObject, moveVertex, updateRect, newId } from '../../shared/plan/edit'
 import { placementRect, type RackModuleSize } from '../../shared/plan/layout'
-import { freezeRacks, moveRack, moveRackWithin, rackSelection, selectedRackIds, pasteRacks } from '../../shared/plan/racks'
+import { fitPlacement, freezeRacks, moveRack, moveRackWithin, rackSelection, selectedRackIds, pasteRacks } from '../../shared/plan/racks'
+import { snapRack } from '../../shared/plan/guides'
 import type { Plan, PlanPoint, PlanSelection, RackPlacement } from '../../shared/plan/types'
 import { fmt } from '../lib/format'
 import { RackModel, RackPickContext, type PickedPart } from '../three/RackModel'
@@ -34,14 +35,16 @@ const MAT = {
   selected: new THREE.MeshStandardMaterial({ color: RED, roughness: 0.6, emissive: RED, emissiveIntensity: 0.25 }),
   zoneSelected: new THREE.MeshStandardMaterial({ color: RED, transparent: true, opacity: 0.4 }),
   handle: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.5 }),
-  area: new THREE.MeshBasicMaterial({ color: '#2f6fb8', transparent: true, opacity: 0.08, depthWrite: false }),
-  areaSelected: new THREE.MeshBasicMaterial({ color: '#2f6fb8', transparent: true, opacity: 0.2, depthWrite: false }),
+  area: new THREE.MeshBasicMaterial({ color: '#2f6fb8', transparent: true, opacity: 0.16, depthWrite: false }),
+  areaSelected: new THREE.MeshBasicMaterial({ color: '#2f6fb8', transparent: true, opacity: 0.3, depthWrite: false }),
   aisle: new THREE.MeshBasicMaterial({ color: '#f2c230', transparent: true, opacity: 0.6, depthWrite: false }),
   aisleSelected: new THREE.MeshBasicMaterial({ color: '#e0a100', transparent: true, opacity: 0.85, depthWrite: false }),
   /** Caja invisible para tocar un rack (más liviana que tocar cada pieza). */
   rackHit: new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
   rackSelected: new THREE.MeshBasicMaterial({ color: RED, transparent: true, opacity: 0.14, depthWrite: false }),
   rackIssue: new THREE.MeshBasicMaterial({ color: RED, transparent: true, opacity: 0.3, depthWrite: false }),
+  /** La copia que se está por pegar (sigue al puntero). */
+  ghost: new THREE.MeshBasicMaterial({ color: '#e07b1a', transparent: true, opacity: 0.35, depthWrite: false }),
 }
 
 /**
@@ -81,6 +84,124 @@ function wallRingGeometry(poly: PlanPoint[], height: number, thickness: number):
 /** Mueve algo con el puntero: recibe cuánto se corrió (mm del plano) desde que se lo tocó. */
 type Apply = (dx: number, dy: number, free: boolean) => void
 
+/* ------------------------------ Carteles ------------------------------ */
+
+const labelCache = new Map<string, { tex: THREE.CanvasTexture; aspect: number }>()
+/** Un texto como imagen (se arma una sola vez por texto): para los carteles del piso y los avisos. */
+function labelTexture(text: string, color: string, bg?: string): { tex: THREE.CanvasTexture; aspect: number } {
+  const key = `${text}|${color}|${bg ?? ''}`
+  let hit = labelCache.get(key)
+  if (!hit) {
+    const c = document.createElement('canvas'), ctx = c.getContext('2d')!
+    const font = '700 64px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
+    ctx.font = font
+    const pad = bg ? 30 : 8, w = Math.ceil(ctx.measureText(text).width) + pad * 2, h = 104
+    c.width = w; c.height = h
+    if (bg) {
+      ctx.fillStyle = bg
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(0, 0, w, h, 26); ctx.fill() } else ctx.fillRect(0, 0, w, h)
+    }
+    ctx.font = font; ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText(text, w / 2, h / 2 + 4)
+    const tex = new THREE.CanvasTexture(c)
+    tex.colorSpace = THREE.SRGBColorSpace
+    tex.anisotropy = 4
+    hit = { tex, aspect: w / h }
+    labelCache.set(key, hit)
+  }
+  return hit
+}
+
+/** Cartel pintado en el piso, en el medio de una zona (a lo largo si la zona es angosta y larga). */
+function FloorLabel({ rect, text, color, y }: { rect: { x: number; y: number; w: number; d: number }; text: string; color: string; y: number }) {
+  const { tex, aspect } = labelTexture(text, color)
+  const along = rect.d > rect.w * 1.4
+  const long = m(along ? rect.d : rect.w), short = m(along ? rect.w : rect.d)
+  const h = Math.min(short * 0.5, (long * 0.85) / aspect, 1.4)
+  if (h < 0.12) return null
+  return (
+    <mesh position={[m(rect.x + rect.w / 2), y, m(rect.y + rect.d / 2)]} rotation={[-Math.PI / 2, 0, along ? Math.PI / 2 : 0]} renderOrder={4} raycast={() => null}>
+      <planeGeometry args={[h * aspect, h]} />
+      <meshBasicMaterial map={tex} transparent depthWrite={false} />
+    </mesh>
+  )
+}
+
+/** Aviso flotando arriba de un rack con problema: dice por qué está en rojo. Siempre mira a la cámara. */
+function IssueTag({ at, text, size }: { at: [number, number, number]; text: string; size: number }) {
+  const { tex, aspect } = labelTexture(text, '#ffffff', RED)
+  return (
+    <sprite position={at} scale={[size * aspect, size, 1]} renderOrder={10} raycast={() => null}>
+      <spriteMaterial map={tex} transparent depthTest={false} depthWrite={false} />
+    </sprite>
+  )
+}
+
+/* ------------------------------ Pegar ------------------------------ */
+
+/** Dónde queda el centro de lo copiado al pegarlo en `at`: se alinea con los racks vecinos (y sus pasillos). */
+function pasteCenter(clip: RackPlacement[], at: PlanPoint, size: RackModuleSize, others: RackPlacement[]): PlanPoint {
+  const bs = clip.map((r) => placementRect(fitPlacement(r, size)))
+  const cx = (Math.min(...bs.map((b) => b.x)) + Math.max(...bs.map((b) => b.x + b.w))) / 2
+  const cy = (Math.min(...bs.map((b) => b.y)) + Math.max(...bs.map((b) => b.y + b.h))) / 2
+  const first = { ...bs[0], x: bs[0].x + Math.round(at.x - cx), y: bs[0].y + Math.round(at.y - cy) }
+  const g = snapRack(first, others.map(placementRect), usePlan.getState().layout.aisle, 400)
+  return { x: at.x + g.x - first.x, y: at.y + g.y - first.y }
+}
+
+/** La copia que se está por pegar: unas cajas transparentes que siguen al puntero por el piso. */
+function PasteGhost({ size, others, defaultHeight }: { size: RackModuleSize; others: RackPlacement[]; defaultHeight: number }) {
+  const clip = usePlan((s) => (s.tool === 'rackpaste' ? s.clipRacks : null))
+  const { camera, gl } = useThree()
+  const group = useRef<THREE.Group>(null)
+  const latest = useRef(others)
+  latest.current = others
+  const boxes = useMemo(() => {
+    if (!clip?.length) return []
+    const bs = clip.map((r) => ({ b: placementRect(fitPlacement(r, size)), h: r.height ?? defaultHeight }))
+    const cx = (Math.min(...bs.map(({ b }) => b.x)) + Math.max(...bs.map(({ b }) => b.x + b.w))) / 2
+    const cy = (Math.min(...bs.map(({ b }) => b.y)) + Math.max(...bs.map(({ b }) => b.y + b.h))) / 2
+    return bs.map(({ b, h }) => ({ x: m(b.x + b.w / 2 - cx), z: m(b.y + b.h / 2 - cy), w: m(b.w), d: m(b.h), h: m(h) }))
+  }, [clip, size, defaultHeight])
+  useEffect(() => {
+    if (!clip?.length) return
+    const el = gl.domElement, ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), hit = new THREE.Vector3(), floor = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+    const move = (ev: PointerEvent) => {
+      const g = group.current
+      if (!g) return
+      const r = el.getBoundingClientRect()
+      ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1)
+      ray.setFromCamera(ndc, camera)
+      if (ray.ray.intersectPlane(floor, hit)) {
+        const c = pasteCenter(clip, { x: hit.x * 1000, y: hit.z * 1000 }, size, latest.current)
+        g.position.set(m(c.x), 0, m(c.y))
+        g.visible = true
+      } else g.visible = false
+      invalidate()
+    }
+    const leave = () => { if (group.current) group.current.visible = false; invalidate() }
+    el.addEventListener('pointermove', move)
+    el.addEventListener('pointerleave', leave)
+    return () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerleave', leave) }
+  }, [clip, size, camera, gl])
+  if (!boxes.length) return null
+  return (
+    <group ref={group} visible={false}>
+      {boxes.map((b, i) => (
+        <mesh key={i} position={[b.x, b.h / 2, b.z]} material={MAT.ghost} raycast={() => null}>
+          <boxGeometry args={[b.w, b.h, b.d]} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+/** ¿Se está poniendo algo con un clic en el piso (pegar racks, un objeto o una figura)? Entonces no se agarra nada. */
+const placingNow = () => {
+  const s = usePlan.getState()
+  return s.tool === 'rackpaste' || (s.tool === 'object' && !!s.placeObject) || (s.tool === 'symbol' && (s.symbolKind === 'persona' || s.symbolKind === 'autoelevador'))
+}
+
 /**
  * Al tocar un objeto: se lo selecciona, se frena la cámara y, mientras se arrastra, se proyecta
  * el puntero sobre un plano horizontal a la altura donde se lo agarró (así acompaña a la mano).
@@ -93,6 +214,8 @@ function useDrag() {
       const s = usePlan.getState()
       // caminando a pie no se agarra ni se mueve nada: sólo se mira
       if (s.walk) return
+      // poniendo algo con un clic (pegar, un objeto, una figura): el clic es para el piso, no para agarrar lo que hay
+      if (placingNow()) return
       e.stopPropagation()
       // Shift / Ctrl + clic en un rack: lo suma o lo saca de la selección (sin moverlo)
       if (select?.kind === 'rack' && (e.shiftKey || e.ctrlKey || e.metaKey || s.multi)) {
@@ -128,7 +251,7 @@ function useDrag() {
       window.addEventListener('pointerup', up)
       window.addEventListener('pointercancel', up)
     },
-    onPointerOver: (e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); gl.domElement.style.cursor = apply && !usePlan.getState().lock3d ? 'grab' : 'pointer' },
+    onPointerOver: (e: ThreeEvent<PointerEvent>) => { if (placingNow()) return; e.stopPropagation(); gl.domElement.style.cursor = apply && !usePlan.getState().lock3d ? 'grab' : 'pointer' },
     onPointerOut: () => { gl.domElement.style.cursor = '' },
   })
 }
@@ -137,6 +260,23 @@ function useDrag() {
 const snapTo = (v: number, free: boolean) => {
   const { snap, snapStep } = usePlan.getState()
   return snap && !free ? Math.round(v / snapStep) * snapStep : Math.round(v)
+}
+
+/** Qué quiere decir cada color del piso (sólo lo que hay en este depósito). */
+function Legend({ plan, issues }: { plan: Plan; issues?: Record<string, string> }) {
+  const bad = Object.keys(issues ?? {}).length
+  const items: [string, string, string][] = [
+    ...(plan.rackAreas?.length ? [['area', 'Zona de racks', 'Ahí van los racks'] as [string, string, string]] : []),
+    ...(plan.zones.length ? [['zone', 'Zona libre', 'Ahí no van racks'] as [string, string, string]] : []),
+    ...(plan.aisles?.length ? [['aisle', 'Pasillo', 'Queda libre para pasar'] as [string, string, string]] : []),
+    ...(bad ? [['issue', bad === 1 ? '1 rack en rojo' : `${bad} racks en rojo`, 'Están mal ubicados: el cartel dice por qué'] as [string, string, string]] : []),
+  ]
+  if (!items.length) return null
+  return (
+    <ul className="plan3d__legend" aria-label="Qué es cada color">
+      {items.map(([k, name, what]) => <li key={k} title={what}><i className={`plan3d__sw plan3d__sw--${k}`} aria-hidden /> {name}</li>)}
+    </ul>
+  )
 }
 
 /* ------------------------------ Racks ------------------------------ */
@@ -197,6 +337,7 @@ export function Plan3D(props: Props) {
       <button type="button" onClick={() => zoomRef.current?.(1 / 1.4)} aria-label="Acercar" title="Acercar">+</button>
       <button type="button" onClick={() => zoomRef.current?.(1.4)} aria-label="Alejar" title="Alejar">−</button>
     </div>}
+    {!walking && <Legend plan={plan} issues={props.issues} />}
     {stats && (
       <div className="plan3d__stats" aria-live="polite">
         {fmt(stats.racks)} racks · {fmt(stats.pieces)} piezas{stats.detail !== 'completo' && <> · vista {stats.detail === 'medio' ? 'simplificada' : 'sólo estructura'} para que no se trabe</>}
@@ -232,6 +373,7 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, size, span, on
   const isRackSel = (id: string) => selRacks.has(id)
   const es = edges(plan.outline)
   const handle = Math.max(0.18, span * 0.006)
+  const tag = Math.min(1.6, Math.max(0.55, span * 0.022))
 
   return (
     <>
@@ -246,7 +388,8 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, size, span, on
             // pegar lo copiado donde se tocó el piso (queda la herramienta para pegar más)
             e.stopPropagation()
             let ids: string[] = []
-            s.commit((pl) => { const r = pasteRacks(freezeRacks(pl, placements), s.clipRacks!, at, size); ids = r.ids; return r.plan })
+            const c = pasteCenter(s.clipRacks, at, size, placements)
+            s.commit((pl) => { const r = pasteRacks(freezeRacks(pl, placements), s.clipRacks!, c, size); ids = r.ids; return r.plan })
             s.select(rackSelection(ids))
           }
           else if (s.tool === 'object' && s.placeObject) {
@@ -348,6 +491,16 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, size, span, on
           <planeGeometry args={[m(z.w), m(z.d)]} />
         </mesh>
       ))}
+      {/* cada zona dice qué es, además del color */}
+      {plan.zones.map((z) => <FloorLabel key={`t-${z.id}`} rect={z} text="ZONA LIBRE · SIN RACKS" color="#8f1423" y={0.013} />)}
+      {(plan.rackAreas ?? []).map((a) => <FloorLabel key={`t-${a.id}`} rect={a} text="ZONA DE RACKS" color="#1f4f86" y={0.006} />)}
+      {(plan.aisles ?? []).map((a) => <FloorLabel key={`t-${a.id}`} rect={a} text="PASILLO" color="#5c4300" y={0.009} />)}
+      {/* por qué un rack está en rojo: el motivo, arriba del rack */}
+      {shown.filter(({ placement: p }) => issues[p.id]).slice(0, 80).map(({ placement: p, structure }) => {
+        const b = placementRect(p)
+        return <IssueTag key={`why-${p.id}`} text={issues[p.id]} size={tag} at={[m(b.x + b.w / 2), m(structure.config.height) + tag * 0.9, m(b.y + b.h / 2)]} />
+      })}
+      {size && <PasteGhost size={size} others={placements} defaultHeight={racks[0]?.structure.config.height ?? 6000} />}
 
       {/* zonas de racks (tinte azul) y pasillos marcados (amarillo) sobre el piso */}
       {(plan.rackAreas ?? []).map((a) => (
