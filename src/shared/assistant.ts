@@ -7,9 +7,10 @@
 import { buildDepot, type Depot } from './plan/depot'
 import { ROOF_CLEARANCE } from './plan/checks'
 import type { LayoutOptions } from './plan/layout'
+import { newId } from './plan/edit'
 import type { Plan } from './plan/types'
 import { DESIGN_RULES } from './rack/technicalSpecs'
-import type { AccessoryConfig, RackConfiguration } from './rack/types'
+import type { AccessoryConfig, FrameParts, RackConfiguration } from './rack/types'
 import { metros } from './units'
 
 const L = DESIGN_RULES.limits
@@ -19,6 +20,18 @@ export const plain = (t: string) => t.toLowerCase().normalize('NFD').replace(/[�
 
 /* ------------------------------ Pedidos ------------------------------ */
 
+/** Dónde va algo: a tantos mm de la esquina de arriba a la izquierda del depósito, o en un rincón. */
+export interface Place { x?: number; y?: number; corner?: 'tl' | 'tr' | 'bl' | 'br' | 'c' }
+export type Wall = 'top' | 'right' | 'bottom' | 'left'
+/** Algo que se dibuja en el plano. */
+export type Shape =
+  | { kind: 'zone'; w: number; d: number; at: Place; name: string }
+  | { kind: 'area'; w: number; d: number; at: Place; orientation?: 'x' | 'y' }
+  | { kind: 'aisle'; w: number; d: number; at: Place }
+  | { kind: 'column'; at: Place; size: number }
+  | { kind: 'grid'; dx: number; dy: number; size: number }
+  | { kind: 'door'; width: number; wall: Wall; at?: number }
+
 export interface Order {
   depot?: { l: number; w: number }
   wallHeight?: number
@@ -27,16 +40,32 @@ export interface Order {
   width?: number
   depth?: number
   palletWeight?: number
+  floorStorage?: boolean
   aisle?: number
+  /** Pasillo de cabecera (contra las paredes). */
+  endGap?: number
   /** Llenar el depósito solo. */
   fill?: boolean
   /** Filas dobles (espalda con espalda) o simples. */
   pair?: boolean
-  protectors?: 'all' | 'none'
+  /** Hacia dónde corren las filas: 'x' horizontales, 'y' verticales. */
+  orientation?: 'x' | 'y'
+  accessories?: Partial<AccessoryConfig>
+  /** Lo que se dibuja en el plano: zonas, pasillos, columnas y portones. */
+  shapes?: Shape[]
+  /** Cantidad de módulos del rack elegido. */
+  modules?: number
+  /** Altura de una viga: la número `n` (de abajo hacia arriba, desde 1) a `h` mm del piso. */
+  beamAt?: { n: number; h: number }[]
+  /** Los pórticos: riendas y alto de cada columna. */
+  frame?: FrameParts
 }
 
 const NUM = '(\\d+(?:[.,]\\d+)?)'
-const UNIT = '(?:\\s*(?:m|mts?|metros?))?'
+const UNIT = '(?:\\s*(?:m|mts?|metros?)\\b)?'
+const SIZE = `${NUM}${UNIT}\\s*(?:x|por)\\s*${NUM}${UNIT}`
+/** "en 5, 8" (metros desde la esquina de arriba a la izquierda) o un rincón dicho en palabras. */
+const WHERE = `(?:\\s*(?:en\\s*${NUM}${UNIT}\\s*(?:,|\\by\\b)\\s*${NUM}${UNIT}|(arriba a la izquierda|arriba a la derecha|abajo a la izquierda|abajo a la derecha|en el centro|en el medio|al centro|al medio)))?`
 const num = (v: string) => parseFloat(v.replace(',', '.'))
 /** Un largo escrito en metros (6 · 2,7) o en milímetros (2700): devuelve milímetros. */
 const mm = (v: string) => { const n = num(v); return Math.round(n < 100 ? n * 1000 : n) }
@@ -45,15 +74,71 @@ const first = (t: string, patterns: string[]): string | undefined => {
   for (const p of patterns) { const hit = new RegExp(p).exec(t); if (hit) return hit[1] }
   return undefined
 }
+const CORNERS: Record<string, Place['corner']> = {
+  'arriba a la izquierda': 'tl', 'arriba a la derecha': 'tr', 'abajo a la izquierda': 'bl', 'abajo a la derecha': 'br',
+  'en el centro': 'c', 'en el medio': 'c', 'al centro': 'c', 'al medio': 'c',
+}
+const place = (x?: string, y?: string, corner?: string): Place => (x !== undefined && y !== undefined ? { x: mm(x), y: mm(y) } : corner ? { corner: CORNERS[corner] } : { corner: 'c' })
+const COLORS: [RegExp, AccessoryConfig['beamColor']][] = [[/roj/, 'rojo'], [/naranj/, 'naranja'], [/amarill/, 'amarillo'], [/azul/, 'azul'], [/gris/, 'gris']]
+const color = (w: string | undefined) => COLORS.find(([re]) => w && re.test(w))?.[1]
+const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1)
 
 /**
- * Lee un pedido escrito con frases simples. Entiende: medidas del depósito ("30 por 20"), alto del
- * techo, alto de los racks, niveles, largo de viga, profundidad, peso del pallet, pasillo, filas
- * simples o dobles, protectores y "llenalo". Lo que no reconoce, lo deja pasar.
+ * Saca de un renglón lo que se dibuja en el plano (zonas, pasillos marcados, columnas, portones) y
+ * devuelve lo que sobra del renglón, para leerle las medidas generales.
+ */
+function takeShapes(line: string, shapes: Shape[]): string {
+  let t = line
+  const each = (re: string, use: (m: RegExpExecArray) => Shape | null) => {
+    const rx = new RegExp(re, 'g')
+    t = t.replace(rx, (...args) => { const sh = use(args.slice(0, -2) as unknown as RegExpExecArray); if (sh) shapes.push(sh); return sh ? ' ' : args[0] })
+  }
+  const name = /\(([^)]{1,40})\)/.exec(line)?.[1]
+  each(`(?:zona libre|zona sin racks|area libre|(oficinas?))\\s*(?:de\\s*)?${SIZE}${WHERE}(?:\\s*\\([^)]*\\))?`, (m) => ({ kind: 'zone', w: mm(m[2]), d: mm(m[3]), at: place(m[4], m[5], m[6]), name: cap(name ?? (m[1] ? 'oficina' : 'zona libre')) }))
+  each(`zonas? de racks?\\s*(?:de\\s*)?${SIZE}${WHERE}(?:\\s*(?:con\\s*)?(?:filas\\s*)?(verticales|horizontales))?`, (m) => ({ kind: 'area', w: mm(m[1]), d: mm(m[2]), at: place(m[3], m[4], m[5]), ...(m[6] ? { orientation: m[6] === 'verticales' ? 'y' as const : 'x' as const } : {}) }))
+  each(`pasillos?\\s*(?:marcado\\s*)?(?:de\\s*)?${SIZE}${WHERE}`, (m) => ({ kind: 'aisle', w: mm(m[1]), d: mm(m[2]), at: place(m[3], m[4], m[5]) }))
+  each(`columnas?\\s*cada\\s*${NUM}${UNIT}(?:\\s*(?:x|por)\\s*${NUM}${UNIT})?(?:\\s*de\\s*${NUM}${UNIT})?`, (m) => ({ kind: 'grid', dx: mm(m[1]), dy: mm(m[2] ?? m[1]), size: m[3] ? mm(m[3]) : 400 }))
+  each(`columnas?\\s*(?:de\\s*${NUM}${UNIT}\\s*)?en\\s*${NUM}${UNIT}\\s*(?:,|\\by\\b)\\s*${NUM}${UNIT}`, (m) => ({ kind: 'column', size: m[1] ? mm(m[1]) : 400, at: { x: mm(m[2]), y: mm(m[3]) } }))
+  each(`porton(?:es)?\\s*(?:de\\s*${NUM}${UNIT}\\s*)?(?:en|sobre)?\\s*(?:la\\s*)?(?:pared\\s*)?(?:de\\s*)?(?:la\\s*)?(arriba|abajo|izquierda|derecha)(?:\\s*a\\s*${NUM}${UNIT})?`, (m) => ({
+    kind: 'door', width: m[1] ? mm(m[1]) : 4000, wall: ({ arriba: 'top', abajo: 'bottom', izquierda: 'left', derecha: 'right' } as Record<string, Wall>)[m[2]], ...(m[3] ? { at: mm(m[3]) } : {}),
+  }))
+  return t
+}
+
+/**
+ * Lee un pedido escrito, de una frase o de varios renglones (un "prompt" pegado). Entiende:
+ *  - el depósito ("30 por 20"), el techo, columnas ("columnas cada 10 por 8"), portones ("portón de 4 en
+ *    la pared de abajo a 12"), zonas libres, zonas de racks y pasillos marcados ("… de 8 por 5 en 0, 0");
+ *  - el rack: alto, niveles, largo de viga, profundidad, cantidad de módulos, la altura de una viga
+ *    ("viga 2 a 3 m"), riendas y alto de cada columna del pórtico, peso del pallet, pallets en el piso;
+ *    en metros, centímetros o milímetros;
+ *  - la distribución: pasillo, pasillo de cabecera, filas simples o dobles, verticales u horizontales, "llenalo";
+ *  - los accesorios y los colores.
+ * Las posiciones son en metros desde la esquina de arriba a la izquierda. Lo que no reconoce, lo deja pasar.
  */
 export function parseOrder(text: string): Order {
-  const t = plain(text)
   const o: Order = {}
+  const shapes: Shape[] = []
+  const beamAt: NonNullable<Order['beamAt']> = []
+  const frame: FrameParts = {}
+  const count = (v: string, max: number) => Math.min(max, Math.max(0, parseInt(v, 10)))
+  /** Lo que tiene número propio y se confundiría con otra medida: se lee y se saca del renglón. */
+  const takeParts = (line: string) => line
+    .replace(new RegExp(`(?:vigas?|nivel|plano)\\s*(?:numero\\s*|n\\s*)?(\\d)\\s*(?:a|en)\\s*${NUM}${UNIT}`, 'g'), (_m, n, h) => { beamAt.push({ n: parseInt(n, 10), h: mm(h) }); return ' ' })
+    .replace(/(\d+)\s*riendas? diagonales|(?:riendas? )?diagonales\s*(?:de\s*)?(\d+)/g, (_m, a, b) => { frame.diagonals = count(a ?? b, 60); return ' ' })
+    .replace(/(\d+)\s*riendas? horizontales|riendas? horizontales\s*(?:de\s*)?(\d+)/g, (_m, a, b) => { frame.horizontals = count(a ?? b, 20); return ' ' })
+    .replace(new RegExp(`columnas? de (adelante|atras)\\s*(?:de|a)?\\s*${NUM}${UNIT}`, 'g'), (_m, side, h) => { frame[side === 'adelante' ? 'frontHeight' : 'backHeight'] = clamp(mm(h), L.height); return ' ' })
+  // centímetros y milímetros pasan a metros, que es como se lee todo lo demás
+  const metric = (line: string) => line
+    .replace(/(\d+(?:[.,]\d+)?)\s*(?:cm|centimetros?)\b/g, (_m, v) => `${num(v) / 100} m`)
+    .replace(/(\d+(?:[.,]\d+)?)\s*(?:mm|milimetros?)\b/g, (_m, v) => `${num(v) / 1000} m`)
+  // renglón por renglón: primero lo que se dibuja; con lo que sobra, las medidas generales
+  const t = text.split(/\n|;|\.(?=\s|$)/).map(plain).filter(Boolean).map((line) => takeShapes(takeParts(metric(line)), shapes)).join(' , ')
+  if (shapes.length) o.shapes = shapes.slice(0, 80)
+  if (beamAt.length) o.beamAt = beamAt
+  if (Object.keys(frame).length) o.frame = frame
+  const modules = first(t, ['(\\d+)\\s*modulos?\\b'])
+  if (modules) o.modules = Math.min(120, Math.max(1, parseInt(modules, 10)))
 
   const dep = new RegExp(`${NUM}${UNIT}\\s*(?:x|por)\\s*${NUM}`).exec(t)
   if (dep) {
@@ -85,14 +170,42 @@ export function parseOrder(text: string): Order {
   if (tons) o.palletWeight = clamp(Math.round(num(tons) * 1000), L.palletWeight)
   else if (kilos) o.palletWeight = clamp(Math.round(num(kilos.replace(/\.(\d{3})\b/, '$1'))), L.palletWeight)
 
+  if (/sin pallets? en el piso|piso libre|sin usar el piso/.test(t)) o.floorStorage = false
+  else if (/pallets? en el piso|usar el piso|piso como (primer )?nivel/.test(t)) o.floorStorage = true
+
+  const endGap = first(t, [`cabeceras?\\s*(?:de\\s*)?${NUM}`])
+  if (endGap) o.endGap = Math.min(8000, Math.max(0, mm(endGap)))
   const aisle = first(t, [`pasillos?\\s*(?:de\\s*)?${NUM}`])
   if (aisle) o.aisle = Math.min(6000, Math.max(1200, mm(aisle)))
 
   if (/espalda con espalda|\bdobles?\b/.test(t)) o.pair = true
   else if (/\bsimples?\b/.test(t)) o.pair = false
+  if (/\bverticales?\b/.test(t)) o.orientation = 'y'
+  else if (/\bhorizontales?\b/.test(t)) o.orientation = 'x'
 
-  if (/sin protector/.test(t)) o.protectors = 'none'
-  else if (/protector/.test(t)) o.protectors = 'all'
+  // accesorios y colores
+  const acc: Partial<AccessoryConfig> = {}
+  if (/sin protector/.test(t)) acc.protectors = 'none'
+  else if (/protector/.test(t)) acc.protectors = /extremo|cabecera|punta/.test(/protector[^,]*/.exec(t)?.[0] ?? '') ? 'ends' : 'all'
+  if (/sin malla de fondo/.test(t)) acc.backMesh = false
+  else if (/malla de fondo|malla anticaida/.test(t)) acc.backMesh = true
+  if (/sin defensa/.test(t)) acc.guardrails = false
+  else if (/defensa|baranda/.test(t)) acc.guardrails = true
+  if (/carteles? de fila/.test(t)) acc.rowSigns = true
+  if (/carteles? de capacidad|carteles? de carga|\bcarteles\b(?! de fila)/.test(t)) acc.capacitySigns = true
+  if (/guia (en el |de )?piso|guias? para el auto/.test(t)) acc.floorGuide = true
+  if (/travesan/.test(t)) acc.palletSupports = true
+  if (/conectores? superior/.test(t)) acc.topTies = true
+  if (/cruces|arriostramiento/.test(t)) acc.crossBracing = true
+  const deck = /pisos? de (madera|malla|chapa)/.exec(t)?.[1]
+  if (deck) acc.decking = deck === 'madera' ? 'wood' : deck === 'malla' ? 'mesh' : 'steel'
+  const beamColor = color(/vigas? (?:de color |color |en )?(roj\w*|naranj\w*|amarill\w*|azul\w*|gris\w*)/.exec(t)?.[1])
+  if (beamColor) acc.beamColor = beamColor
+  const up = /(?:parantes?|columnas?) (?:de color |color |en )?(roj\w*|naranj\w*|amarill\w*|azul\w*|gris\w*|galvaniz\w*)/.exec(t)?.[1]
+  if (up) acc.uprightColor = /galvaniz/.test(up) ? 'galvanizado' : color(up)
+  const protColor = color(/protector\w* (?:de color |color |en )?(roj\w*|naranj\w*|amarill\w*|azul\w*|gris\w*)/.exec(t)?.[1])
+  if (protColor) acc.protectorColor = protColor
+  if (Object.keys(acc).length) o.accessories = acc
 
   if (/\bllen|\bcomplet|solo\b.*\brack|arma(lo|me|r)?\b|acomod|pone(r|me)? (los )?racks/.test(t)) o.fill = true
   return o
@@ -100,21 +213,123 @@ export function parseOrder(text: string): Order {
 
 export const isEmptyOrder = (o: Order) => Object.keys(o).length === 0
 
+/** Las alturas de las vigas con las que pide el pedido: sin pasar el tope y sin pisar a las vecinas. */
+export function withBeams(elevs: number[], beamAt: NonNullable<Order['beamAt']>, height: number): number[] {
+  const arr = [...elevs], GAP = 200, top = height - DESIGN_RULES.topMargin
+  for (const { n: k, h } of beamAt) {
+    const i = k - 1
+    if (i < 0 || i >= arr.length) continue
+    arr[i] = Math.max(50 + i * GAP, Math.min(h, top - (arr.length - 1 - i) * GAP))
+    for (let j = i + 1; j < arr.length; j++) arr[j] = Math.max(arr[j], arr[j - 1] + GAP)
+    for (let j = i - 1; j >= 0; j--) arr[j] = Math.min(arr[j], arr[j + 1] - GAP)
+  }
+  return arr
+}
+
+const WALL_NAME: Record<Wall, string> = { top: 'de arriba', bottom: 'de abajo', left: 'de la izquierda', right: 'de la derecha' }
+const CORNER_NAME: Record<NonNullable<Place['corner']>, string> = { tl: 'arriba a la izquierda', tr: 'arriba a la derecha', bl: 'abajo a la izquierda', br: 'abajo a la derecha', c: 'en el centro' }
+const where = (at: Place) => (at.corner ? CORNER_NAME[at.corner] : `a ${metros(at.x ?? 0)} y ${metros(at.y ?? 0)} de la esquina`)
+
 /** El pedido dicho en palabras, renglón por renglón (para confirmar lo que se entendió). */
 export function describeOrder(o: Order): string[] {
   const out: string[] = []
   if (o.depot) out.push(`Depósito de ${metros(o.depot.l)} × ${metros(o.depot.w)}`)
   if (o.wallHeight) out.push(`Techo a ${metros(o.wallHeight)}`)
+  for (const sh of o.shapes ?? []) {
+    if (sh.kind === 'zone') out.push(`${sh.name} de ${metros(sh.w)} × ${metros(sh.d)}, ${where(sh.at)} (ahí no van racks)`)
+    else if (sh.kind === 'area') out.push(`Zona de racks de ${metros(sh.w)} × ${metros(sh.d)}, ${where(sh.at)}${sh.orientation ? `, con filas ${sh.orientation === 'y' ? 'verticales' : 'horizontales'}` : ''}`)
+    else if (sh.kind === 'aisle') out.push(`Pasillo marcado de ${metros(sh.w)} × ${metros(sh.d)}, ${where(sh.at)}`)
+    else if (sh.kind === 'grid') out.push(`Columnas cada ${metros(sh.dx)} × ${metros(sh.dy)}`)
+    else if (sh.kind === 'column') out.push(`Columna ${where(sh.at)}`)
+    else out.push(`Portón de ${metros(sh.width)} en la pared ${WALL_NAME[sh.wall]}${sh.at !== undefined ? `, a ${metros(sh.at)}` : ', en el medio'}`)
+  }
+  if (o.modules) out.push(`${o.modules} ${o.modules === 1 ? 'módulo' : 'módulos'}`)
   if (o.height) out.push(`Racks de ${metros(o.height)} de alto`)
   if (o.levels) out.push(`${o.levels} niveles`)
+  for (const b of o.beamAt ?? []) out.push(`Viga ${b.n} a ${metros(b.h)} del piso`)
+  if (o.frame?.diagonals !== undefined) out.push(`${o.frame.diagonals} riendas diagonales por pórtico`)
+  if (o.frame?.horizontals !== undefined) out.push(`${o.frame.horizontals} riendas horizontales por pórtico`)
+  if (o.frame?.frontHeight) out.push(`Columna de adelante de ${metros(o.frame.frontHeight)}`)
+  if (o.frame?.backHeight) out.push(`Columna de atrás de ${metros(o.frame.backHeight)}`)
   if (o.width) out.push(`Vigas de ${metros(o.width)}`)
   if (o.depth) out.push(`Profundidad de ${metros(o.depth)}`)
   if (o.palletWeight) out.push(`Pallets de ${o.palletWeight.toLocaleString('es-AR')} kg`)
+  if (o.floorStorage !== undefined) out.push(o.floorStorage ? 'Con pallets en el piso' : 'Sin pallets en el piso')
   if (o.aisle) out.push(`Pasillos de ${metros(o.aisle)}`)
+  if (o.endGap !== undefined) out.push(`Pasillo de cabecera de ${metros(o.endGap)}`)
   if (o.pair !== undefined) out.push(o.pair ? 'Filas dobles (espalda con espalda)' : 'Filas simples')
-  if (o.protectors) out.push(o.protectors === 'all' ? 'Con protectores en todas las columnas' : 'Sin protectores')
+  if (o.orientation) out.push(o.orientation === 'y' ? 'Filas verticales' : 'Filas horizontales')
+  const a = o.accessories
+  if (a) {
+    if (a.protectors) out.push(a.protectors === 'all' ? 'Protectores en todas las columnas' : a.protectors === 'ends' ? 'Protectores en los extremos' : 'Sin protectores')
+    if (a.backMesh !== undefined) out.push(a.backMesh ? 'Malla de fondo' : 'Sin malla de fondo')
+    if (a.guardrails !== undefined) out.push(a.guardrails ? 'Defensas de cabecera' : 'Sin defensas de cabecera')
+    if (a.capacitySigns) out.push('Carteles de capacidad')
+    if (a.rowSigns) out.push('Carteles de fila')
+    if (a.floorGuide) out.push('Guía en el piso')
+    if (a.palletSupports) out.push('Travesaños de apoyo de pallet')
+    if (a.topTies) out.push('Conectores superiores')
+    if (a.crossBracing) out.push('Cruces de arriostramiento')
+    if (a.decking) out.push(`Piso de ${a.decking === 'wood' ? 'madera' : a.decking === 'mesh' ? 'malla' : 'chapa'} en los niveles`)
+    if (a.beamColor) out.push(`Vigas color ${a.beamColor}`)
+    if (a.uprightColor) out.push(`Parantes color ${a.uprightColor}`)
+    if (a.protectorColor) out.push(`Protecciones color ${a.protectorColor}`)
+  }
   if (o.fill) out.push('Racks acomodados solos')
   return out
+}
+
+/**
+ * Dibuja en el plano lo que pide el pedido. Las posiciones se miden desde la esquina de arriba a la
+ * izquierda del depósito; lo que se sale, se corre para adentro. Devuelve también lo que no se pudo poner.
+ */
+export function applyShapes(plan: Plan, shapes: Shape[]): { plan: Plan; notes: string[] } {
+  const notes: string[] = []
+  if (plan.outline.points.length < 3) return { plan, notes: ['Para dibujar zonas, columnas o portones primero hace falta el depósito.'] }
+  const xs = plan.outline.points.map((q) => q.x), ys = plan.outline.points.map((q) => q.y)
+  const x0 = Math.min(...xs), y0 = Math.min(...ys), x1 = Math.max(...xs), y1 = Math.max(...ys)
+  const rect = (w: number, d: number, at: Place) => {
+    const W = Math.min(w, x1 - x0), D = Math.min(d, y1 - y0)
+    const c = at.corner
+    const x = c ? (c === 'tl' || c === 'bl' ? x0 : c === 'c' ? (x0 + x1 - W) / 2 : x1 - W) : x0 + (at.x ?? 0)
+    const y = c ? (c === 'tl' || c === 'tr' ? y0 : c === 'c' ? (y0 + y1 - D) / 2 : y1 - D) : y0 + (at.y ?? 0)
+    return { x: Math.round(Math.min(Math.max(x, x0), x1 - W)), y: Math.round(Math.min(Math.max(y, y0), y1 - D)), w: W, d: D }
+  }
+  let next: Plan = plan
+  const pts = plan.outline.points
+  for (const sh of shapes) {
+    if (sh.kind === 'zone') next = { ...next, zones: [...next.zones, { id: newId('z'), ...rect(sh.w, sh.d, sh.at), name: sh.name }] }
+    else if (sh.kind === 'area') {
+      const list = next.rackAreas ?? []
+      next = { ...next, rackAreas: [...list, { id: newId('a'), ...rect(sh.w, sh.d, sh.at), name: `Zona ${String.fromCharCode(65 + Math.min(25, list.length))}`, ...(sh.orientation ? { orientation: sh.orientation } : {}) }] }
+    } else if (sh.kind === 'aisle') next = { ...next, aisles: [...(next.aisles ?? []), { id: newId('p'), ...rect(sh.w, sh.d, sh.at) }] }
+    else if (sh.kind === 'column') {
+      const r = rect(sh.size, sh.size, sh.at.corner ? sh.at : { x: (sh.at.x ?? 0) - sh.size / 2, y: (sh.at.y ?? 0) - sh.size / 2 })
+      next = { ...next, columns: [...next.columns, { id: newId('c'), x: r.x + sh.size / 2, y: r.y + sh.size / 2, shape: 'rect', w: sh.size, d: sh.size }] }
+    } else if (sh.kind === 'grid') {
+      const cols: Plan['columns'] = []
+      for (let x = x0 + sh.dx; x < x1 - 1 && cols.length < 400; x += Math.max(1000, sh.dx))
+        for (let y = y0 + sh.dy; y < y1 - 1 && cols.length < 400; y += Math.max(1000, sh.dy)) cols.push({ id: newId('c'), x, y, shape: 'rect', w: sh.size, d: sh.size })
+      if (cols.length) next = { ...next, columns: [...next.columns, ...cols] }
+      else notes.push(`No entran columnas cada ${metros(sh.dx)} × ${metros(sh.dy)} en este depósito.`)
+    } else {
+      // la pared de ese lado: un tramo recto del contorno que corre por el borde
+      const edge = pts.findIndex((a, i) => {
+        const b = pts[(i + 1) % pts.length]
+        if (sh.wall === 'top' || sh.wall === 'bottom') return a.y === b.y && a.y === (sh.wall === 'top' ? y0 : y1) && a.x !== b.x
+        return a.x === b.x && a.x === (sh.wall === 'left' ? x0 : x1) && a.y !== b.y
+      })
+      if (edge < 0) { notes.push(`No encontré una pared recta ${WALL_NAME[sh.wall]} para el portón: ponelo a mano con la herramienta "Portón".`); continue }
+      const a = pts[edge], b = pts[(edge + 1) % pts.length]
+      const horizontal = sh.wall === 'top' || sh.wall === 'bottom'
+      const from = horizontal ? Math.min(a.x, b.x) : Math.min(a.y, b.y), len = Math.abs(horizontal ? b.x - a.x : b.y - a.y)
+      const width = Math.min(sh.width, len)
+      const centre = Math.min(Math.max(sh.at ?? len / 2, width / 2), len - width / 2)
+      const target = from + centre, start = horizontal ? a.x : a.y, endp = horizontal ? b.x : b.y
+      next = { ...next, doors: [...next.doors, { id: newId('d'), edge, t: (target - start) / (endp - start), width, height: 4500 }] }
+    }
+  }
+  return { plan: next, notes }
 }
 
 /* ------------------------------ Preguntas de uso ------------------------------ */
@@ -186,11 +401,14 @@ export type Intent = 'revisar' | 'sugerir' | 'pregunta' | 'pedido' | 'nada'
 export function intentOf(text: string): Intent {
   const t = plain(text)
   if (!t) return 'nada'
+  // un pedido con el depósito o con cosas para dibujar (un "prompt" pegado) es un pedido, diga lo que diga
+  const o = parseOrder(text)
+  if ((o.depot || o.shapes?.length) && !/^(como|donde|por que|porque|puedo|se puede)\b/.test(t)) return 'pedido'
   if (/\brevis|que esta mal|esta bien|chequea|control(a|ar)\b/.test(t)) return 'revisar'
   if (/suger|mejor(a|ar|as)\b|consej|optimi|aprovech|entran mas/.test(t)) return 'sugerir'
   const asks = /^(como|donde|por que|porque|que |cual|puedo|se puede|para que)\b/.test(t) || text.includes('?')
-  if (asks) return findFaq(t) ? 'pregunta' : isEmptyOrder(parseOrder(t)) ? 'nada' : 'pedido'
-  if (!isEmptyOrder(parseOrder(t))) return 'pedido'
+  if (asks) return findFaq(t) ? 'pregunta' : isEmptyOrder(o) ? 'nada' : 'pedido'
+  if (!isEmptyOrder(o)) return 'pedido'
   return findFaq(t) ? 'pregunta' : 'nada'
 }
 

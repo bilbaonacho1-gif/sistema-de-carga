@@ -5,12 +5,13 @@
  */
 import { LifeBuoy, Send, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { describeOrder, FAQS, findFaq, intentOf, parseOrder, suggestions, type Order, type SuggestionAction } from '../shared/assistant'
+import { applyShapes, describeOrder, FAQS, findFaq, intentOf, parseOrder, plain, suggestions, withBeams, type Order, type SuggestionAction } from '../shared/assistant'
 import { planChecks } from '../shared/plan/checks'
-import { buildDepot } from '../shared/plan/depot'
+import { buildDepot, moduleSize } from '../shared/plan/depot'
 import { emptyPlan } from '../shared/plan/edit'
 import { rectanglePlan } from '../shared/plan/geometry'
-import { freezeRacks } from '../shared/plan/racks'
+import { fitPlacement, freezeRacks, mapRacks, rackSelection, selectedRackIds } from '../shared/plan/racks'
+import type { RackConfiguration, RackStructure } from '../shared/rack/types'
 import type { PlanSelection } from '../shared/plan/types'
 import { fmt, plural } from '../web/lib/format'
 import { useDesigner } from '../web/pages/designer/designerStore'
@@ -98,25 +99,67 @@ function suggest(): Msg {
   })
 }
 
+/** Las medidas que son de un rack (y no del depósito): se pueden cambiar en uno solo. */
+const hasRackChange = (o: Order) => !!(o.height || o.levels || o.width || o.depth || o.modules || o.beamAt || o.pair !== undefined)
+const beamsOf = (st: RackStructure) => (st.rows[0]?.modules[0]?.levels ?? []).filter((l) => l.hasBeam).map((l) => l.elevation)
+
 /** Hace lo que dice el pedido y cuenta cómo quedó. */
-function applyOrder(o: Order): string {
+function applyOrder(o: Order, text = ''): string {
   const s = usePlan.getState(), d = useDesigner.getState()
   const hadDepot = s.plan.outline.points.length >= 3
+  const notes: string[] = []
   if (o.depot) {
     s.commit(() => rectanglePlan(o.depot!.l, o.depot!.w, { ...emptyPlan(), ...(o.wallHeight ? { wallHeight: o.wallHeight } : {}) }))
     s.select(null)
   } else if (o.wallHeight) s.commit((pl) => ({ ...pl, wallHeight: o.wallHeight! }))
-  const rack = { ...(o.height ? { height: o.height, beamElevations: undefined } : {}), ...(o.levels ? { levels: o.levels } : {}), ...(o.width ? { width: o.width } : {}), ...(o.depth ? { depth: o.depth } : {}), ...(o.palletWeight ? { palletWeight: o.palletWeight } : {}) }
-  if (Object.keys(rack).length) d.update(rack)
-  if (o.aisle || o.pair !== undefined) s.setLayout({ ...(o.aisle ? { aisle: o.aisle } : {}), ...(o.pair !== undefined ? { backToBack: o.pair } : {}) })
-  if (o.protectors) d.updateAccessories({ protectors: o.protectors })
+  if (o.shapes?.length) usePlan.getState().commit((pl) => { const r = applyShapes(pl, o.shapes!); notes.push(...r.notes); return r.plan })
+
+  // con un rack elegido en el plano, las medidas son para ese rack (salvo que diga "todos")
+  const sel = o.depot ? [] : selectedRackIds(usePlan.getState().selection)
+  const one = sel.length > 0 && hasRackChange(o) && !/\btodos\b|todo el deposito|modulo inicial|en general/.test(plain(text))
+  if (one) {
+    const { depot, config } = now()
+    const size = moduleSize(config).size
+    usePlan.getState().commit((pl) => mapRacks(freezeRacks(pl, depot.layout.placements), sel, (r) => {
+      const st = depot.racks.find((x) => x.placement.id === r.id)?.structure
+      const next = {
+        ...r, ...(o.height ? { height: o.height } : {}), ...(o.levels ? { levels: o.levels } : {}), ...(o.width ? { beamLength: o.width } : {}),
+        ...(o.depth ? { frameDepth: o.depth } : {}), ...(o.modules ? { modules: o.modules } : {}), ...(o.pair !== undefined ? { pair: o.pair } : {}),
+      }
+      if (o.beamAt && st && !o.levels) next.beamElevations = withBeams(beamsOf(st), o.beamAt, next.height ?? config.height)
+      return fitPlacement(next, size)
+    }))
+  } else {
+    if (o.modules) notes.push('Para cambiar la cantidad de módulos, primero tocá el rack en el plano y volvé a pedírmelo.')
+    const rack: Partial<RackConfiguration> = {
+      ...(o.height ? { height: o.height, beamElevations: undefined } : {}), ...(o.levels ? { levels: o.levels, beamElevations: undefined } : {}),
+      ...(o.width ? { width: o.width } : {}), ...(o.depth ? { depth: o.depth } : {}),
+    }
+    if (Object.keys(rack).length) d.update(rack)
+    if (o.beamAt) {
+      const c = useDesigner.getState().config
+      d.update({ beamElevations: withBeams(beamsOf(moduleSize(c).sample), o.beamAt, c.height) })
+    }
+    if (o.pair !== undefined) s.setLayout({ backToBack: o.pair })
+  }
+  const general: Partial<RackConfiguration> = {
+    ...(o.palletWeight ? { palletWeight: o.palletWeight } : {}), ...(o.floorStorage !== undefined ? { floorStorage: o.floorStorage } : {}),
+    ...(o.frame ? { frameDefault: { ...useDesigner.getState().config.frameDefault, ...o.frame } } : {}),
+  }
+  if (Object.keys(general).length) d.update(general)
+  if (o.aisle || o.endGap !== undefined || o.orientation) s.setLayout({ ...(o.aisle ? { aisle: o.aisle } : {}), ...(o.endGap !== undefined ? { endGap: o.endGap } : {}), ...(o.orientation ? { orientation: o.orientation } : {}) })
+  if (o.accessories) d.updateAccessories(o.accessories)
   const canFill = o.fill && (o.depot || hadDepot)
   if (canFill) usePlan.getState().commit((pl) => ({ ...pl, racks: undefined }))
   // se va a la pantalla donde se ve el cambio
-  goTo(canFill || o.aisle || o.pair !== undefined ? 'distribucion' : Object.keys(rack).length || o.protectors ? 'rack' : 'deposito')
+  const inPlan = canFill || one || o.aisle || o.endGap !== undefined || o.orientation || o.pair !== undefined
+  const inRack = hasRackChange(o) || o.frame || o.accessories || o.floorStorage !== undefined || o.palletWeight
+  goTo(inPlan ? 'distribucion' : o.depot || o.shapes?.length || !inRack ? 'deposito' : 'rack')
+  if (one) usePlan.getState().select(rackSelection(sel))
   usePlan.getState().requestFit()
-  const missing = o.fill && !canFill ? ' Para acomodar los racks falta el depósito: decime las medidas, por ejemplo "30 por 20".' : ''
-  return `Listo. ${o.depot || hadDepot ? total() : 'Cuando tengas el depósito, los racks salen con estas medidas.'}${missing}`
+  if (o.fill && !canFill) notes.push('Para acomodar los racks falta el depósito: decime las medidas, por ejemplo "30 por 20".')
+  const scope = !hasRackChange(o) ? '' : one ? ` Lo cambié en ${sel.length === 1 ? 'el rack elegido' : `los ${sel.length} racks elegidos`} (decime "todos" para cambiarlos todos).` : ' Vale para todos los racks.'
+  return `Listo.${scope} ${o.depot || hadDepot ? total() : 'Cuando tengas el depósito, los racks salen con estas medidas.'}${notes.length ? ` ${notes.join(' ')}` : ''}`
 }
 
 function order(text: string): Msg {
@@ -129,13 +172,13 @@ function order(text: string): Msg {
     return say({
       text: `Ya hay un depósito armado. ¿Lo cambio por uno de ${lines[0].replace('Depósito de ', '')}? Se borra lo que hay ahora (con Ctrl+Z vuelve).`,
       acts: [
-        { label: 'Sí, cambiarlo', run: () => applyOrder(o) },
-        ...(lines.length > 1 ? [{ label: 'No, cambiar solo lo demás', run: () => applyOrder(rest) }] : []),
+        { label: 'Sí, cambiarlo', run: () => applyOrder(o, text) },
+        ...(lines.length > 1 ? [{ label: 'No, dejar el depósito y hacer lo demás', run: () => applyOrder(rest, text) }] : []),
       ],
     })
   }
-  const done = applyOrder(o)
-  return say({ text: 'Entendí esto y ya lo hice:', steps: lines, acts: undefined, items: [{ text: done }] })
+  const done = applyOrder(o, text)
+  return say({ text: 'Entendí esto y ya lo hice:', steps: lines, items: [{ text: done }] })
 }
 
 const HELP: Msg = say({
@@ -144,7 +187,8 @@ const HELP: Msg = say({
     'Revisar el depósito y mostrarte qué está mal.',
     'Sugerirte mejoras para que entren más pallets.',
     'Explicarte cómo se hace algo: "¿cómo copio un rack?"',
-    'Armar cosas si me las escribís simple: "depósito de 30 por 20 con racks de 6 metros, 4 niveles, y llenalo".',
+    'Armar o cambiar cosas si me las escribís simple: "depósito de 30 por 20 con racks de 6 metros, 4 niveles, y llenalo". También un texto largo pegado, con un renglón por cosa.',
+    'Cambiar las medidas de un rack: tocalo en el plano y escribime "altura 7,5", "vigas de 2,3", "6 módulos" o "viga 2 a 3 m". Si no hay ninguno elegido, cambia todos.',
   ],
 })
 
@@ -155,7 +199,7 @@ function answer(text: string): Msg {
     case 'pedido': return order(text)
     case 'pregunta': { const f = findFaq(text)!; return say({ text: f.q, steps: f.steps }) }
     default: return say({
-      text: 'Eso no lo entendí. Entiendo pedidos simples (medidas del depósito, alto de los racks, niveles, vigas, pasillos, "llenalo") y las preguntas de esta lista:',
+      text: 'Eso no lo entendí. Entiendo pedidos simples (medidas del depósito y de los racks, columnas, portones, zonas, pasillos, accesorios, "llenalo") y las preguntas de esta lista:',
       acts: FAQS.slice(0, 6).map((f) => ({ label: f.q, run: () => f.steps.map((x, i) => `${i + 1}. ${x}`).join('\n') })),
     })
   }
@@ -175,7 +219,7 @@ export function Assistant({ open, onClose }: { open: boolean; onClose(): void })
   const [used, setUsed] = useState<Set<string>>(new Set())
   const flowStep = usePlan((s) => s.flowStep)
   const end = useRef<HTMLDivElement>(null)
-  const input = useRef<HTMLInputElement>(null)
+  const input = useRef<HTMLTextAreaElement>(null)
   useEffect(() => { if (open) end.current?.scrollIntoView({ block: 'end' }) }, [msgs, open])
   useEffect(() => { if (open) input.current?.focus() }, [open])
   if (!open) return null
@@ -223,7 +267,9 @@ export function Assistant({ open, onClose }: { open: boolean; onClose(): void })
         {quick.map((f) => <button key={f.id} type="button" onClick={() => send(f.q)}>{f.q}</button>)}
       </div>
       <form className="ayu__form" onSubmit={(e) => { e.preventDefault(); send(text) }}>
-        <input ref={input} value={text} onChange={(e) => setText(e.target.value)} maxLength={200} placeholder='Escribí acá. Ej.: "racks de 7 m con 4 niveles"' aria-label="Escribile al ayudante" />
+        <textarea ref={input} value={text} rows={Math.min(7, Math.max(1, text.split('\n').length))} maxLength={4000} aria-label="Escribile al ayudante"
+          placeholder='Escribí o pegá acá. Ej.: "racks de 7 m con 4 niveles"' onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(text) } }} />
         <button type="submit" disabled={!text.trim()} aria-label="Enviar"><Send size={16} aria-hidden /></button>
       </form>
     </aside>
