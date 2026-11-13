@@ -15,7 +15,7 @@ export function useIntro(): [boolean, () => void] {
   return [show, close]
 }
 
-/** Rack selectivo de frente: bastidores, vigas y pallets que se dibujan en orden. */
+/** Rack selectivo de frente: pórticos, vigas y pallets que se dibujan en orden. */
 function RackDrawing() {
   const xs = [20, 120, 220, 320]
   const levels = [150, 95, 40]

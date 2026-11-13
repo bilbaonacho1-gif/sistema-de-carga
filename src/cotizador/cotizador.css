@@ -198,3 +198,6 @@
 .ayu__form button { display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 10px; background: var(--red); color: #fff; cursor: pointer; }
 .ayu__form button:disabled { opacity: .4; cursor: default; }
 @media (max-width: 640px) { .ayu { right: 8px; left: 8px; width: auto; top: calc(var(--topbar) + 12px); bottom: 8px; } }
+
+/* qué lleva cada módulo (paso Rack) */
+.kit__t { margin: 6px 0 0; font: 700 12.5px/1.2 var(--f-display); text-transform: uppercase; letter-spacing: .04em; color: var(--ink-2); }

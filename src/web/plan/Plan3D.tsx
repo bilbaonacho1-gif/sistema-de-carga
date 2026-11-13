@@ -302,8 +302,13 @@ const PlacedRackModel = memo(function PlacedRackModel({ rack, showLoads }: { rac
 
 interface Props { plan: Plan; racks?: PlacedRack[]; showLoads?: boolean; issues?: Record<string, string>; size?: RackModuleSize }
 
-/** A partir de esta cantidad de racks se dibujan en lote (InstancedMesh) en vez de pieza por pieza. */
-const MANY_RACKS = 30
+/**
+ * A partir de esta cantidad de módulos (contando las dos filas de un rack doble) los racks se dibujan
+ * simplificados (cajas, en lote) en vez de con todo el detalle. Lo que pesa son los módulos, no la
+ * cantidad de racks: 40 racks cortos van con detalle; 20 filas larguísimas, no.
+ */
+const MANY_MODULES = 320
+const modulesIn = (racks: PlacedRack[] | undefined) => (racks ?? []).reduce((n, r) => n + r.structure.rows.length * r.structure.modulesPerRow, 0)
 
 export function Plan3D(props: Props) {
   const { plan } = props
@@ -316,7 +321,7 @@ export function Plan3D(props: Props) {
   const { center, span } = view
   const [stats, setStats] = useState<InstanceStats | null>(null)
   const zoomRef = useRef<((k: number) => void) | null>(null)
-  const many = (props.racks?.length ?? 0) > MANY_RACKS
+  const many = modulesIn(props.racks) > MANY_MODULES
   const walking = usePlan((s) => !!s.walk)
   useEffect(() => { if (!many) setStats(null) }, [many])
   return (
@@ -370,6 +375,8 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, size, span, on
     return only.length ? only : racks
   }, [racks, isolate])
   const shownPlacements = useMemo(() => shown.map((r) => r.placement), [shown])
+  // con muchísimos módulos a la vista, van simplificados
+  const simple = modulesIn(shown) > MANY_MODULES
   const isSel = (kind: string, id: string | number) => !!selection && selection.kind === kind && ('id' in selection ? selection.id : 'index' in selection ? selection.index : undefined) === id
   const selRacks = useMemo(() => new Set(selectedRackIds(selection)), [selection])
   const isRackSel = (id: string) => selRacks.has(id)
@@ -519,7 +526,7 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, size, span, on
       ))}
 
       {/* muchos racks: en lote, con una sola malla invisible para tocarlos y arrastrarlos */}
-      {shown.length > MANY_RACKS && <>
+      {simple && <>
         <RackInstances racks={shown} showLoads={showLoads} onStats={onStats} />
         <RackHitInstances racks={shown} placements={shownPlacements}
           onDown={(e, p) => drag({ kind: 'rack', id: p.id }, (dx, dy, free) => live((pl) => (size ? moveRackWithin(freezeRacks(pl, placements), p.id, snapTo(p.x + dx, free), snapTo(p.y + dy, free), size) : moveRack(freezeRacks(pl, placements), p.id, snapTo(p.x + dx, free), snapTo(p.y + dy, free))))).onPointerDown(e)} />
@@ -536,11 +543,11 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, size, span, on
 
       {/* pocos racks: el modelo con todo el detalle y, encima, una caja invisible para tocarlo y arrastrarlo */}
       {/* todos juntos: horneados (se ven igual, en pocas pasadas); uno visto solo: vivo, para tocar sus piezas */}
-      {shown.length <= MANY_RACKS && (shown !== racks
+      {!simple && (shown !== racks
         ? shown.map((r) => <PickableRack key={r.placement.id} rack={r} showLoads={showLoads} />)
         : <BakedRacks racks={shown} showLoads={showLoads} />)}
       {/* viendo un rack solo no hay caja para agarrarlo: se tocan sus piezas (vigas y parantes) */}
-      {shown.length <= MANY_RACKS && shown === racks && shown.map(({ placement: p, structure }) => {
+      {!simple && shown === racks && shown.map(({ placement: p, structure }) => {
         const b = placementRect(p)
         const H = m(structure.config.height) + 0.02
         const mat = isRackSel(p.id) ? MAT.rackSelected : issues[p.id] ? MAT.rackIssue : MAT.rackHit

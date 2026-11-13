@@ -991,7 +991,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
             return (
               <g key={side} className="no-export" style={{ cursor: next ? 'pointer' : 'not-allowed' }} opacity={next ? 1 : 0.4}
                 onPointerDown={(e) => { e.stopPropagation(); if (next) commit(() => next) }}>
-                <title>{next ? 'Sumar un módulo de este lado' : 'De este lado no entra otro módulo'}</title>
+                <title>{next ? 'Sumar un módulo adicional de este lado' : 'De este lado no entra otro módulo'}</title>
                 <circle cx={cx} cy={cy} r={px(11)} fill="#fff" stroke={RED} strokeWidth={px(2)} />
                 <path d={`M ${cx - px(5)} ${cy} h ${px(10)} M ${cx} ${cy - px(5)} v ${px(10)}`} stroke={RED} strokeWidth={px(2.5)} strokeLinecap="round" />
               </g>

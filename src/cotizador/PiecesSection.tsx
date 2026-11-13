@@ -277,7 +277,7 @@ export function PiecesSection() {
                     </div>
                     <NumberStepper label="Espesor de la chapa" unit="mm" value={upright.thickness} min={P.uprightThickness.min} max={P.uprightThickness.max} step={0.5} onChange={(thickness) => setUpright(upright.id, { thickness })} />
                   </>}
-              <NumberStepper label="Cuánto aguanta cada bastidor" unit="kg" value={upright.maxFrameLoad} min={P.uprightLoad.min} max={P.uprightLoad.max} step={500} typedStep={100}
+              <NumberStepper label="Cuánto aguanta cada pórtico" unit="kg" value={upright.maxFrameLoad} min={P.uprightLoad.min} max={P.uprightLoad.max} step={500} typedStep={100}
                 onChange={(maxFrameLoad) => setUpright(upright.id, { maxFrameLoad })} />
             </>}
           </fieldset>

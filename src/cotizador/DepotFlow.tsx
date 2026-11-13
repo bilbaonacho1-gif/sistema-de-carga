@@ -14,6 +14,7 @@ import { addRack, freezeRacks, rackSelection } from '../shared/plan/racks'
 import { calculateRackStructure } from '../shared/rack/calculateRackStructure'
 import { beamCapacityForSpan } from '../shared/rack/rules'
 import { CONTACT, DESIGN_RULES, OFFICIAL_REFERENCE } from '../shared/rack/technicalSpecs'
+import { moduleKits, moduleSplit } from '../shared/rack/kits'
 import { beamName, isOwnProfile, PIECE_LIMITS as P, profilesOf, uprightName } from '../shared/rack/profiles'
 import type { BeamProfile, FrameParts, RackStructure, UprightProfile } from '../shared/rack/types'
 import { NumberStepper, Switch } from '../web/components/fields'
@@ -48,7 +49,7 @@ export function useDepot(): { depot: Depot; preview: RackStructure } {
   const layout = usePlan((s) => s.layout)
   const config = useDesigner((s) => s.config)
   const depot = useMemo(() => buildDepot(plan, config, layout), [plan, config, layout])
-  // vista previa del rack: el módulo inicial (un solo módulo, con sus dos bastidores) con las medidas elegidas
+  // vista previa del rack: el módulo inicial (un solo módulo, con sus dos pórticos) con las medidas elegidas
   const preview = useMemo(() => {
     const { sample } = moduleSize(config)
     return calculateRackStructure({
@@ -302,7 +303,7 @@ function RackStep({ s }: { s: RackStructure }) {
     <div className="cot-fields">
       <NumberStepper label="Largo de viga (ancho del módulo)" meters value={config.width} min={L.width.min} max={L.width.max} step={50} typedStep={10} slider onChange={(width) => update({ width })}
         hint={`${plural(s.palletsPerModule, 'pallet', 'pallets')} por nivel en cada módulo`} />
-      <NumberStepper label="Profundidad del bastidor" meters value={config.depth} min={L.depth.min} max={L.depth.max} step={50} typedStep={10} slider onChange={(depth) => update({ depth })} />
+      <NumberStepper label="Profundidad del pórtico" meters value={config.depth} min={L.depth.min} max={L.depth.max} step={50} typedStep={10} slider onChange={(depth) => update({ depth })} />
       <NumberStepper label="Altura" meters value={config.height} min={L.height.min} max={L.height.max} step={100} typedStep={10} slider onChange={(height) => update({ height })}
         hint={config.height > OFFICIAL_REFERENCE.maxHeight ? <span className="late">Supera los {mm(OFFICIAL_REFERENCE.maxHeight)} publicados.</span> : undefined} />
       <Field label="Niveles de almacenamiento">{() => (
@@ -315,6 +316,7 @@ function RackStep({ s }: { s: RackStructure }) {
         hint={config.floorStorage ? `El piso es el primer nivel · ${plural(s.beamLevels, 'plano', 'planos')} de vigas arriba` : `Abajo queda libre · ${plural(s.beamLevels, 'plano', 'planos')} de vigas`} />
       <BeamHeights s={s} />
       <FrameDefaults s={s} />
+      <Kits />
       <AccGroup title="Parante y viga" summary={`${autoUpright ? 'parante automático' : s.upright.name} · ${autoBeam ? 'viga automática' : s.beam.name}`}>
         <Field label="Parante" hint={autoUpright ? `Automático: ${s.upright.name}.` : undefined}>{(id) => (
           <Select id={id} value={config.uprightId ?? 'auto'} onChange={(e) => (e.target.value === 'nuevo' ? newUpright() : update({ uprightId: e.target.value }))}>
@@ -363,6 +365,22 @@ function RackStep({ s }: { s: RackStructure }) {
         {!myBeam && !myUpright && <p className="muted small">Elegí una de la lista o poné vos las medidas con la última opción. Las tuyas quedan guardadas en "Mis piezas".</p>}
       </AccGroup>
     </div>
+  )
+}
+
+/** Qué piezas lleva el módulo inicial y qué suma cada módulo adicional. */
+function Kits() {
+  const config = useDesigner((st) => st.config)
+  const kits = useMemo(() => moduleKits(config), [config])
+  const count = (lines: { qty: number }[]) => lines.reduce((n, l) => n + l.qty, 0)
+  return (
+    <AccGroup title="Qué lleva cada módulo" summary={`inicial ${fmt(count(kits.initial))} piezas · adicional ${fmt(count(kits.extra))}`}>
+      <p className="muted small">Cada fila arranca con un <b>módulo inicial</b> (dos pórticos y sus vigas: se sostiene solo) y sigue con <b>módulos adicionales</b> (un pórtico y sus vigas: se enganchan al anterior).</p>
+      <h4 className="kit__t">Módulo inicial</h4>
+      <MaterialsList lines={kits.initial} bare />
+      <h4 className="kit__t">Cada módulo adicional suma</h4>
+      <MaterialsList lines={kits.extra} bare />
+    </AccGroup>
   )
 }
 
@@ -464,7 +482,7 @@ function LayoutStep({ depot }: { depot: Depot }) {
       {mode}
       <ol className="mod-steps">
         <li><b>Poné el módulo inicial</b> tocando el plano donde va.</li>
-        <li><b>Sumale módulos</b> con el <i>+</i> de cada punta.</li>
+        <li><b>Sumale módulos adicionales</b> con el <i>+</i> de cada punta.</li>
         <li><b>Copialo y pegalo</b> (Ctrl+C y Ctrl+V): si lo pegás a continuación de otro, se unen.</li>
       </ol>
       <div className="rack-tools">
@@ -527,7 +545,8 @@ function SummaryStep({ depot, onQuote }: { depot: Depot; onQuote(): void }) {
     <div className="cot-fields">
       <KeyValue items={[
         ['Filas de rack', fmt(depot.layout.rows)],
-        ['Módulos', fmt(depot.layout.modules)],
+        ['Módulos iniciales', fmt(moduleSplit(depot.layout.rows, depot.layout.modules).initial)],
+        ['Módulos adicionales', fmt(moduleSplit(depot.layout.rows, depot.layout.modules).extra)],
         ['Posiciones', fmt(depot.positions)],
         ['Capacidad estimada', kg(depot.capacity)],
       ]} />

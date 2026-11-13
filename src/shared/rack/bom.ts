@@ -51,8 +51,8 @@ export function buildMaterials(s: RackStructure): MaterialLine[] {
     detail: `${acc.protectors === 'ends' ? 'En los extremos de cada fila' : 'En cada parante del lado del pasillo'} · ${colorName(acc.protectorColor).toLowerCase()}`,
   })
   add(acc.guardrailType === 'arco'
-    ? { code: 'DEF-ARCO', group: 'Accesorios', qty: counts.guardrails, name: 'Defensa de cabecera en arco', detail: `Para bastidor de ${metros(config.depth)}` }
-    : { code: 'GUARD-CAB', group: 'Accesorios', qty: counts.guardrails, name: 'Guardarraíl de cabecera', detail: `Para bastidor de ${metros(config.depth)}` })
+    ? { code: 'DEF-ARCO', group: 'Accesorios', qty: counts.guardrails, name: 'Defensa de cabecera en arco', detail: `Para pórtico de ${metros(config.depth)}` }
+    : { code: 'GUARD-CAB', group: 'Accesorios', qty: counts.guardrails, name: 'Guardarraíl de cabecera', detail: `Para pórtico de ${metros(config.depth)}` })
   add({ code: 'CART-FILA', group: 'Accesorios', qty: counts.rowSigns, name: 'Cartel de fila', detail: 'Uno en cada cabecera' })
   add({ code: 'GUIA-PISO', group: 'Accesorios', qty: counts.floorGuides, name: 'Guía de piso para autoelevador', detail: `Una por fila, de ${metros(s.totalWidth)}` })
   add({ code: 'MALLA-FONDO', group: 'Accesorios', qty: counts.backMesh, name: 'Malla de fondo anticaída', detail: 'Una por módulo, en la cara de atrás' })

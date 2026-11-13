@@ -203,7 +203,7 @@ export function RackEditor({ rackLayer, defaults }: { rackLayer: PlanRackLayer; 
       <div key={`${r.id}-${rejected?.n ?? 0}`} className="rack-editor__fields">
         <NumberStepper label="Módulos" value={r.modules} min={1} max={120} step={1}
           onChange={(v) => { const next = tryEdit((p) => setRackModules(p, r.id, v)); if (next) { commit(() => next); setRejected(null) } else setRejected({ n: (rejected?.n ?? 0) + 1, why: noRoom }) }}
-          />
+          hint={`1 inicial${r.modules > 1 ? ` + ${r.modules - 1} ${r.modules === 2 ? 'adicional' : 'adicionales'}` : ''}${r.pair ? ' en cada fila' : ''}`} />
         <div className="plan-xy">
           <NumberStepper label="X" meters value={r.x} min={-500_000} max={500_000} step={1000} typedStep={10}
             onChange={(x) => { const next = tryEdit((p) => moveRack(p, r.id, x, r.y)); if (next) { commit(() => next); setRejected(null) } else setRejected({ n: (rejected?.n ?? 0) + 1, why: 'Ahí no entra: pisaría una zona libre o un pasillo, o saldría de la zona de racks.' }) }} />

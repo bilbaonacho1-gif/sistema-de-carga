@@ -84,7 +84,7 @@ export const DESIGN_RULES = {
   /** Altura máxima de carga dibujada sobre un pallet. */
   maxLoadHeight: 1_600,
   minLoadHeight: 250,
-  /** Paso aproximado de las diagonales del bastidor. */
+  /** Paso aproximado de las diagonales del pórtico. */
   diagonalPitch: 650,
   /** Separación entre filas espalda con espalda. */
   backToBackGap: 200,

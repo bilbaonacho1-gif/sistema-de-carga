@@ -231,7 +231,7 @@ export function RackParts({ r, rackLayer, config }: { r: RackPlacement; rackLaye
           <NumberStepper label="Alto de los parantes" meters value={height} min={L.height.min} max={L.height.max} step={500} typedStep={10}
             onChange={(v) => set({ height: v === config.height ? undefined : v })}
             hint={r.height === undefined ? `Como el resto (${metros(config.height)})` : `Propio · el resto tiene ${metros(config.height)}`} />
-          <NumberStepper label="Fondo del bastidor" meters value={depth} min={L.depth.min} max={L.depth.max} step={50} typedStep={10}
+          <NumberStepper label="Fondo del pórtico" meters value={depth} min={L.depth.min} max={L.depth.max} step={50} typedStep={10}
             onChange={(v) => set({ frameDepth: v === config.depth ? undefined : v })}
             hint={r.frameDepth === undefined ? `Como el resto (${metros(config.depth)})` : `Propio · el resto tiene ${metros(config.depth)}`} />
           <Field label="Perfil del parante" hint={profileHint(r.uprightId, s.upright.name)}>{(id) => (

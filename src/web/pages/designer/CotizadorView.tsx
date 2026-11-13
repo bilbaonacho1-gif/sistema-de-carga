@@ -71,7 +71,7 @@ function useStructureDelta(s: RackStructure) {
     if (!p) return
     const diffs: [number, string, string][] = [
       [s.modules.length - p.modules.length, 'módulo', 'módulos'],
-      [s.counts.frames - p.counts.frames, 'bastidor', 'bastidores'],
+      [s.counts.frames - p.counts.frames, 'pórtico', 'pórticos'],
       [s.storageLevels - p.storageLevels, 'nivel', 'niveles'],
       [s.counts.beams - p.counts.beams, 'viga', 'vigas'],
       [s.positionsAvailable - p.positionsAvailable, 'posición', 'posiciones'],
@@ -107,7 +107,7 @@ export function LoadPlate({ s, compact }: { s: RackStructure; compact?: boolean 
         <div className="plate__row plate__row--strong"><dt>Capacidad total estimada</dt><dd>{kg(s.totalCapacity)}</dd></div>
       </dl>
       <dl className="plate__rows plate__rows--parts">
-        <div className="plate__row"><dt>Bastidores</dt><dd>{fmt(s.counts.frames)}</dd></div>
+        <div className="plate__row"><dt>Pórticos</dt><dd>{fmt(s.counts.frames)}</dd></div>
         <div className="plate__row"><dt>Vigas</dt><dd>{fmt(s.counts.beams)}</dd></div>
         <div className="plate__row"><dt>Posiciones disponibles</dt><dd>{fmt(s.positionsAvailable)}</dd></div>
       </dl>

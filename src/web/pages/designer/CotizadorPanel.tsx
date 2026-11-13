@@ -133,7 +133,7 @@ function DimensionsStep({ s }: { s: RackStructure }) {
   }
   return (
     <div className="cot-fields">
-      <NumberStepper label="Profundidad del bastidor" meters value={config.depth} min={L.depth.min} max={L.depth.max} step={50} typedStep={10} slider onChange={(depth) => update({ depth })} />
+      <NumberStepper label="Profundidad del pórtico" meters value={config.depth} min={L.depth.min} max={L.depth.max} step={50} typedStep={10} slider onChange={(depth) => update({ depth })} />
       <Switch label="Tramos con medidas distintas" checked={multi} onChange={toggleSections}
         hint="Partes del rack con otra altura, otro largo de viga u otra cantidad de niveles." />
       {multi ? <Sections s={s} /> : <>
@@ -372,7 +372,7 @@ function StructureStep({ s }: { s: RackStructure }) {
   const autoBeam = config.beamId === 'auto' || !config.beamId
   return (
     <div className="cot-fields">
-      <Field label="Parante" hint={autoUpright ? `Automático: ${s.upright.name}. El bastidor más cargado lleva ${kg(s.maxFrameLoad)}.` : `El bastidor más cargado lleva ${kg(s.maxFrameLoad)}.`}>{(id) => (
+      <Field label="Parante" hint={autoUpright ? `Automático: ${s.upright.name}. El pórtico más cargado lleva ${kg(s.maxFrameLoad)}.` : `El pórtico más cargado lleva ${kg(s.maxFrameLoad)}.`}>{(id) => (
         <Select id={id} value={config.uprightId ?? 'auto'} onChange={(e) => update({ uprightId: e.target.value })}>
           <option value="auto">Automático (el más liviano que alcanza)</option>
           {profilesOf(config).uprights.map((u) => <option key={u.id} value={u.id}>{u.name} · hasta {kg(u.maxFrameLoad)}</option>)}
@@ -392,7 +392,7 @@ function StructureStep({ s }: { s: RackStructure }) {
       </>}
       <KeyValue items={[
         ['Módulos por fila', fmt(s.modulesPerRow)],
-        ['Bastidores', fmt(s.counts.frames)],
+        ['Pórticos', fmt(s.counts.frames)],
         ['Vigas', fmt(s.counts.beams)],
         ['Posiciones totales', fmt(s.positionsAvailable)],
         ['Medidas', `${metros(s.totalWidth)} × ${metros(s.totalDepth)} × ${metros(s.config.height)}`],
@@ -526,7 +526,9 @@ function SummaryStep({ s, actions }: { s: RackStructure; actions: PanelActions }
 
 const money = (n: number) => n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
 
-export function MaterialsList({ lines }: { lines: MaterialLine[] }) {
+export function MaterialsList({ lines, bare }: { lines: MaterialLine[]
+  /** Sólo la lista, sin el total ni la nota de precios (para listas parciales). */
+  bare?: boolean }) {
   const total = materialsTotal(lines)
   const groups = ['Estructura', 'Fijación', 'Accesorios'] as const
   return (
@@ -548,7 +550,7 @@ export function MaterialsList({ lines }: { lines: MaterialLine[] }) {
           </div>
         )
       })}
-      {total !== null
+      {bare ? null : total !== null
         ? <p className="bom__total"><span>Total estimado</span><strong>{money(total)}</strong></p>
         : <p className="bom__note">Sin precios cargados: el presupuesto se arma con esta lista de materiales.</p>}
     </div>

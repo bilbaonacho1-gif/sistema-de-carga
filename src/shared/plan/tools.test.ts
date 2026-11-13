@@ -284,6 +284,23 @@ describe('el pórtico por sus piezas: columnas, bases y riendas', () => {
     expect(s.rows[0].frames.every((x) => x.columns[0] === h && x.columns[1] === h + 1000)).toBe(true)
     expect(s.counts.diagonals).toBe(plain.counts.diagonals + 2 * 3)
   })
+  it('módulo inicial y adicional: el inicial lleva 2 pórticos y el adicional suma 1, y juntos dan la fila entera', async () => {
+    const { moduleKits, moduleSplit } = await import('../rack/kits')
+    const { placementStructure } = await import('./depot')
+    const { DEFAULT_CONFIGURATION } = await import('../rack/technicalSpecs')
+    const { initial, extra } = moduleKits(DEFAULT_CONFIGURATION)
+    const qty = (lines: { code: string; qty: number }[], prefix: string) => lines.filter((l) => l.code.startsWith(prefix)).reduce((n, l) => n + l.qty, 0)
+    expect(qty(initial, 'COL-')).toBe(4)
+    expect(qty(extra, 'COL-')).toBe(2)
+    expect(qty(initial, 'BASE-')).toBe(4)
+    expect(qty(extra, 'BASE-')).toBe(2)
+    expect(qty(extra, 'VIGA-')).toBe(qty(initial, 'VIGA-'))
+    // una fila de 5 módulos = 1 inicial + 4 adicionales, pieza por pieza (en la estructura)
+    const five = placementStructure(DEFAULT_CONFIGURATION, rack({ modules: 5 }))
+    for (const prefix of ['COL-', 'BASE-', 'VIGA-', 'RIENDA-D-', 'RIENDA-H-']) expect(qty(five.materials, prefix)).toBe(qty(initial, prefix) + 4 * qty(extra, prefix))
+    expect(moduleSplit(5, 30)).toEqual({ initial: 5, extra: 25 })
+    expect(moduleSplit(0, 0)).toEqual({ initial: 0, extra: 0 })
+  })
   it('al partir un rack, las riendas propias siguen con su pórtico', async () => {
     const { splitRack } = await import('./racks')
     const size = { width: 2700, depth: 1100, upright: 100, backToBackGap: 200 }

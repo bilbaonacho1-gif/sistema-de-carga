@@ -72,7 +72,7 @@ export function placementStructure(config: RackConfiguration, p: RackPlacement):
   // un rack puede tener su propia altura y cantidad de niveles
   const c = sanitizeConfiguration({
     ...config, height: p.height ?? config.height, levels: p.levels ?? config.levels,
-    // piezas propias: largo de viga, fondo del bastidor, altura de cada viga y perfiles
+    // piezas propias: largo de viga, fondo del pórtico, altura de cada viga y perfiles
     width: p.beamLength ?? config.width, depth: p.frameDepth ?? config.depth,
     beamElevations: p.beamElevations ?? config.beamElevations,
     uprightId: p.uprightId ?? config.uprightId, beamId: p.beamId ?? config.beamId,
@@ -143,7 +143,7 @@ export function depotSummaryText(plan: Plan, depot: Depot, options: LayoutOption
     `Superficie: ${n(Math.round(planArea(plan.outline)))} m² · ${n(plan.columns.length)} columnas · altura de paredes ${metros(plan.wallHeight)}`,
     '',
     'DISTRIBUCIÓN',
-    `${n(depot.layout.rows)} filas de rack selectivo${options.backToBack ? ' (dobles espalda con espalda)' : ''} · ${n(depot.layout.modules)} módulos`,
+    `${n(depot.layout.rows)} filas de rack selectivo${options.backToBack ? ' (dobles espalda con espalda)' : ''} · ${n(depot.layout.modules)} módulos (${n(Math.min(depot.layout.rows, depot.layout.modules))} iniciales + ${n(Math.max(0, depot.layout.modules - depot.layout.rows))} adicionales)`,
     depot.manual ? 'Racks ubicados a mano sobre el plano' : `Pasillos de ${metros(options.aisle)} · filas ${options.orientation === 'x' ? 'a lo largo' : 'a lo ancho'} del depósito`,
     ...(Object.keys(depot.issues).length ? [`ATENCIÓN: ${n(Object.keys(depot.issues).length)} racks con interferencias (se pisan, chocan con columnas o quedan fuera)`] : []),
     `${n(depot.positions)} posiciones de pallet · capacidad estimada ${n(depot.capacity)} kg`,

@@ -1,12 +1,12 @@
 /**
  * MOTOR DE CONFIGURACIÓN
  *
- * calculateRackStructure(configuración) → estructura completa (tramos, bastidores, módulos,
+ * calculateRackStructure(configuración) → estructura completa (tramos, pórticos, módulos,
  * niveles, vigas, posiciones, pallets, accesorios, lista de materiales y advertencias).
  * El modelo 3D, el resumen y el presupuesto se construyen SOLO a partir de este resultado.
  *
  * Una fila se arma tramo por tramo: cada tramo tiene su altura, largo de viga y niveles.
- * Los módulos vecinos comparten el bastidor del medio, que toma la altura mayor.
+ * Los módulos vecinos comparten el pórtico del medio, que toma la altura mayor.
  */
 import { buildMaterials } from './bom'
 import {
@@ -257,7 +257,7 @@ export function calculateRackStructure(
     return { index, sec, ppm, levelLoad, beam, beamCapacity, beamOk, levels, beamLevels: floor ? sec.levels - 1 : sec.levels }
   })
 
-  /* ---- 3. Parante: uno para todo el rack, según el bastidor más cargado ---- */
+  /* ---- 3. Parante: uno para todo el rack, según el pórtico más cargado ---- */
   const totalModules = calcs.reduce((n, c) => n + c.sec.modules, 0)
   const moduleLoad = Math.max(...calcs.map((c) => c.levelLoad * c.beamLevels))
   const maxFrameLoad = totalModules > 1 ? moduleLoad : moduleLoad / 2
@@ -275,7 +275,7 @@ export function calculateRackStructure(
   const uw = upright.faceWidth
   const framesPerRow = rules.framesPerRow(totalModules)
   const autoFrameHeight = (i: number) => Math.max(perModule[i - 1]?.sec.height ?? 0, perModule[i]?.sec.height ?? 0)
-  /** Lo mínimo que puede medir un bastidor: por encima de la viga más alta de los módulos que sostiene. */
+  /** Lo mínimo que puede medir un pórtico: por encima de la viga más alta de los módulos que sostiene. */
   const minFrameHeight = (i: number) => Math.max(0, ...[perModule[i - 1], perModule[i]].filter(Boolean).map((c) => {
     const top = c!.levels.filter((l) => l.hasBeam).pop()
     return top ? top.elevation + c!.beam.height + R.holePitch : 0
@@ -300,9 +300,9 @@ export function calculateRackStructure(
       zFront = -r * (D + layout.aisleWidth)
     }
     // la cantidad la decide la regla (por defecto módulos + 1, compartidos); si una regla
-    // pide más, los bastidores extra se ubican a continuación
+    // pide más, los pórticos extra se ubican a continuación
     // la fila de atrás de un par está girada: sus módulos van en orden inverso para quedar
-    // enfrentados con los de adelante (key = número del módulo / bastidor contado desde adelante)
+    // enfrentados con los de adelante (key = número del módulo / pórtico contado desde adelante)
     const rev = facing === -1
     const order = rev ? [...perModule].reverse() : perModule
     const fx: number[] = [uw / 2]
@@ -422,8 +422,8 @@ export function calculateRackStructure(
     warn({
       code: 'upright', level: 'validation',
       message: forcedUpright
-        ? `El ${upright.name} soporta ${fmt(upright.maxFrameLoad)} kg por bastidor y el más cargado lleva ${fmt(maxFrameLoad)} kg. Elegí un parante mayor o dejá la selección automática.`
-        : `La carga por bastidor (${fmt(maxFrameLoad)} kg) supera los perfiles del catálogo. ${VALIDATION}`,
+        ? `El ${upright.name} soporta ${fmt(upright.maxFrameLoad)} kg por pórtico y el más cargado lleva ${fmt(maxFrameLoad)} kg. Elegí un parante mayor o dejá la selección automática.`
+        : `La carga por pórtico (${fmt(maxFrameLoad)} kg) supera los perfiles del catálogo. ${VALIDATION}`,
     })
 
   const overhang = (pallet.deep - config.depth) / 2
@@ -431,7 +431,7 @@ export function calculateRackStructure(
   if (pallet.deep < config.depth - 2 * beamDepth)
     warn({ code: 'depth', level: 'validation', message: `El pallet (${metros(pallet.deep)}) no llega a apoyar sobre las dos vigas con una profundidad de ${metros(config.depth)}.` })
   else if (overhang > R.palletOverhang.max)
-    warn({ code: 'overhang', level: 'warning', message: `Voladizo del pallet de ${metros(overhang)} por lado. Se recomienda un bastidor más profundo.` })
+    warn({ code: 'overhang', level: 'warning', message: `Voladizo del pallet de ${metros(overhang)} por lado. Se recomienda un pórtico más profundo.` })
 
   if (!multi && positionsAvailable > config.positions)
     warn({ code: 'free-positions', level: 'info', message: `Los módulos se completan enteros: la estructura ofrece ${positionsAvailable} posiciones (${positionsAvailable - config.positions} libres para crecer).` })
