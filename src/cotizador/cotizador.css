@@ -142,3 +142,18 @@
 .sect__opts { display: flex; flex-direction: column; gap: 10px; }
 .sect__presets { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .sect__presets span { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.sect__point-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+.sect__point .sect__point-actions .vp-btn { grid-column: auto; justify-self: auto; }
+.sect__row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-items: end; margin-top: 8px; }
+.sect__dev { margin: 10px 0 0; padding: 8px 10px; border-radius: 8px; background: var(--steel); font-size: 13px; }
+
+/* elegir racks en un plano chico */
+.rackpick__help { margin: 0 0 8px; }
+.rackpick__bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.rackpick__bar span { margin-left: auto; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.rackpick__plan { display: block; width: 100%; max-height: 56vh; border: 1px solid var(--line); border-radius: 10px; background: #f6f7f8; }
+.rackpick__plan g:focus-visible rect:first-of-type { stroke: #2f6fb8; stroke-width: 3; }
+/* el dibujo y el 3D quedan a la vista mientras se bajan las opciones (en pantallas altas) */
+@media (min-height: 760px) and (min-width: 1001px) {
+  .pieces__view .sect__top { position: sticky; top: -14px; z-index: 3; margin-top: -8px; padding: 8px 0; background: #fff; box-shadow: 0 6px 8px -8px rgba(20, 24, 30, .25); }
+}

@@ -5,10 +5,9 @@
  * Desde acá la pieza se mete en todos los racks o sólo en los racks elegidos en el plano.
  * Las piezas se guardan con el rack y no se borran al empezar de nuevo.
  */
-import { ArrowLeft, Copy, Lock, PenTool, Plus, Trash2, Upload } from 'lucide-react'
+import { ArrowLeft, Copy, Lock, MousePointerClick, PenTool, Plus, Trash2, Upload } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
-import { buildDepot } from '../shared/plan/depot'
-import { freezeRacks, mapRacks, selectedRackIds } from '../shared/plan/racks'
+import { selectedRackIds } from '../shared/plan/racks'
 import { calculateRackStructure } from '../shared/rack/calculateRackStructure'
 import { beamName, PIECE_LIMITS as P, uprightName } from '../shared/rack/profiles'
 import { presetShape, sectionSize, shapeFromDxf, type SectionShape } from '../shared/rack/section'
@@ -18,12 +17,13 @@ import { metros } from '../shared/units'
 import { NumberStepper } from '../web/components/fields'
 import { useToast } from '../web/components/overlays'
 import { Button, Field, Input, Segmented } from '../web/components/ui'
-import { fmt, plural } from '../web/lib/format'
+import { fmt } from '../web/lib/format'
 import { Warnings } from '../web/pages/designer/CotizadorView'
 import { useDesigner } from '../web/pages/designer/designerStore'
 import { usePlan } from '../web/plan/planStore'
 import { RackScene } from '../web/three/RackScene'
 import { Piece3D } from './Piece3D'
+import { RackPicker } from './RackPicker'
 import { SectionEditor } from './SectionEditor'
 
 type Kind = 'beam' | 'upright'
@@ -34,7 +34,7 @@ const topCapacity = (b: BeamProfile) => Math.max(...b.capacityBySpan.map((c) => 
 export function PiecesSection() {
   const { config, update } = useDesigner()
   const toast = useToast()
-  const { setSection, selection, setFlowStep } = usePlan()
+  const { setSection, selection } = usePlan()
   const own = useMemo(() => ({ uprights: config.customProfiles?.uprights ?? [], beams: config.customProfiles?.beams ?? [] }), [config.customProfiles])
   const [sel, setSel] = useState<{ kind: Kind; id: string } | null>(() => (own.beams[0] ? { kind: 'beam', id: own.beams[0].id } : own.uprights[0] ? { kind: 'upright', id: own.uprights[0].id } : null))
   const save = (next: typeof own, extra: Partial<typeof config> = {}) => update({ customProfiles: next, ...extra })
@@ -112,14 +112,9 @@ export function PiecesSection() {
   const usedByAll = !!sel && config[key] === sel.id
   const rackIds = selectedRackIds(selection)
   const useInAll = () => { if (sel) { update({ [key]: sel.id }); toast.ok('Listo: todos los racks usan esta pieza.') } }
-  const useInSelected = () => {
-    if (!sel || !rackIds.length) return
-    const st = usePlan.getState()
-    // la primera vez, los racks automáticos pasan al plano (como al editar uno a mano)
-    const placements = buildDepot(st.plan, config, st.layout).layout.placements
-    st.commit((p) => mapRacks(freezeRacks(p, placements), rackIds, (r) => ({ ...r, [key]: sel.id })))
-    toast.ok(`Listo: ${rackIds.length === 1 ? 'el rack elegido usa' : `los ${rackIds.length} racks elegidos usan`} esta pieza.`)
-  }
+  // elegir los racks en un plano chico (vienen marcados los que ya la usan y los elegidos en el plano)
+  const [picking, setPicking] = useState(false)
+  const usedBy = usePlan((s) => (sel ? (s.plan.racks ?? []).filter((r) => r[key] === sel.id).length : 0))
 
   // un rack de muestra (2 módulos) armado con la pieza elegida
   const sample = useMemo(() => {
@@ -243,19 +238,21 @@ export function PiecesSection() {
           <h3 className="pieces__sub">Meterla en los racks</h3>
           <div className="pieces__use">
             <Button variant="primary" onClick={useInAll} disabled={usedByAll}>{usedByAll ? 'Ya está en todos los racks' : 'Usar en todos los racks'}</Button>
-            <Button onClick={useInSelected} disabled={!rackIds.length}>
-              {rackIds.length ? `Usar en ${rackIds.length === 1 ? 'el rack elegido' : `los ${plural(rackIds.length, 'rack elegido', 'racks elegidos')}`}` : 'Usar en un rack solo'}
-            </Button>
+            <Button icon={MousePointerClick} onClick={() => setPicking(true)}>Elegir los racks…</Button>
           </div>
-          {!rackIds.length && (
-            <p className="muted small">Para un rack solo: <button type="button" className="link-btn pieces__inline" onClick={() => { setFlowStep('distribucion'); setSection('deposito') }}>andá al plano</button>, tocá el rack (o varios con Shift) y volvé acá.</p>
-          )}
+          <p className="muted small">
+            {usedByAll ? 'Ahora la usan todos los racks del depósito.' : usedBy ? `Ahora la ${usedBy === 1 ? 'usa un rack' : `usan ${usedBy} racks`} del depósito.` : 'Todavía no la usa ningún rack.'}
+            {' '}También se puede elegir desde el plano: tocás un rack, "Editar" y la buscás en "Piezas de este rack".
+          </p>
+          {usedByAll && <button type="button" className="link-btn" onClick={() => { update({ [key]: 'auto' }); toast.ok('Listo: los racks vuelven a elegir la pieza solos.') }}>Sacarla de todos los racks</button>}
           <div className="pieces__use pieces__use--minor">
             <Button size="sm" icon={Copy} onClick={() => (beam ? addBeam(beam) : upright && addUpright(upright))}>{locked ? 'Copiar para editar' : 'Duplicar'}</Button>
             {!locked && <Button size="sm" icon={Trash2} onClick={remove}>Borrar</Button>}
           </div>
         </>}
       </section>
+
+      {picking && sel && <RackPicker id={sel.id} field={key} name={(beam ?? upright)?.name || 'la pieza'} preselect={rackIds} onClose={() => setPicking(false)} />}
 
       {/* ---------- cómo queda ---------- */}
       <section className="pieces__view" aria-label="Cómo queda la pieza">

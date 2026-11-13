@@ -4,10 +4,11 @@
  * puede ser de chapa (abierta como una C o cerrada como una caja, con su espesor) o maciza.
  * También arranca de una forma hecha (caja, C, U, L, omega, doble T) o de un dibujo de AutoCAD (DXF).
  */
-import { Trash2, Upload } from 'lucide-react'
+import { FlipHorizontal2, Trash2, Upload } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  normalizeShape, presetShape, PRESETS, resizeShape, sectionOutline, sectionSize, shapeBounds, shapeFromDxf, SHAPE_LIMITS, type Pt, type SectionShape,
+  bendAt, developedLength, isBend, normalizeShape, presetShape, PRESETS, resizeShape, sectionOutline, sectionSize, segmentLengths, setBend, setSegmentLength,
+  shapeBounds, shapeFromDxf, SHAPE_LIMITS, type Pt, type SectionShape,
 } from '../shared/rack/section'
 import { NumberStepper, Switch } from '../web/components/fields'
 import { Segmented } from '../web/components/ui'
@@ -65,7 +66,7 @@ export function SectionEditor({ kind, shape, onChange, onRemove, onError, aside 
     const g = e.shiftKey ? 5 : 1
     const next = { x: Math.round(p.x / g) * g, y: Math.round(p.y / g) * g }
     const cur = latest.current.points[d.i]
-    if (cur && (cur.x !== next.x || cur.y !== next.y)) setPoints(latest.current.points.map((q, k) => (k === d.i ? next : q)), false)
+    if (cur && (cur.x !== next.x || cur.y !== next.y)) setPoints(latest.current.points.map((q, k) => (k === d.i ? { ...q, ...next } : q)), false)
   }
   const up = () => {
     if (!drag.current) return
@@ -87,7 +88,7 @@ export function SectionEditor({ kind, shape, onChange, onRemove, onError, aside 
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); removePoint(sel) }
     const step = e.shiftKey ? 5 : 1
     const d = e.key === 'ArrowLeft' ? [-step, 0] : e.key === 'ArrowRight' ? [step, 0] : e.key === 'ArrowUp' ? [0, -step] : e.key === 'ArrowDown' ? [0, step] : null
-    if (d) { e.preventDefault(); setPoints(pts.map((q, k) => (k === sel ? { x: q.x + d[0], y: q.y + d[1] } : q))) }
+    if (d) { e.preventDefault(); setPoints(pts.map((q, k) => (k === sel ? { ...q, x: q.x + d[0], y: q.y + d[1] } : q))) }
   }
 
   const outline = sectionOutline(shape)
@@ -107,6 +108,9 @@ export function SectionEditor({ kind, shape, onChange, onRemove, onError, aside 
     setSel(null)
   }
   const p = sel !== null ? pts[sel] : null
+  const bend = sel !== null ? bendAt(shape, sel) : null
+  const lens = segmentLengths(shape)
+  const baseRadius = shape.radius ?? 0
 
   return (
     <div className="sect" onKeyDown={onKey}>
@@ -154,7 +158,18 @@ export function SectionEditor({ kind, shape, onChange, onRemove, onError, aside 
             onChange={(x) => setPoints(pts.map((q, k) => (k === sel ? { ...q, x } : q)))} />
           <NumberStepper label="Hacia abajo" unit="mm" value={p.y} min={-SHAPE_LIMITS.size} max={SHAPE_LIMITS.size} step={1} typedStep={0.5}
             onChange={(y) => setPoints(pts.map((q, k) => (k === sel ? { ...q, y } : q)))} />
-          <button type="button" className="vp-btn" disabled={pts.length <= minPoints} onClick={() => removePoint(sel)}><Trash2 size={14} aria-hidden /> Borrar punto</button>
+          {/* el doblez de este punto: ángulo (como en una plegadora) y radio */}
+          {bend && <>
+            <NumberStepper label="Ángulo del doblez" unit="°" value={bend.angle} min={5} max={180} step={5} typedStep={0.5}
+              onChange={(a) => onChange(normalizeShape(setBend(shape, sel, a)))} hint={bend.side === 0 ? 'Ahora está derecha (180°): bajá el ángulo para doblarla' : '90° = a escuadra · 180° = derecha'} />
+            <NumberStepper label="Radio de este doblez" unit="mm" value={p.r ?? baseRadius} min={SHAPE_LIMITS.radius.min} max={SHAPE_LIMITS.radius.max} step={1} typedStep={0.5}
+              onChange={(r) => setPoints(pts.map((q, k) => (k === sel ? { ...q, r: r === baseRadius ? undefined : r } : q)))}
+              hint={p.r === undefined ? 'Como el resto' : 'Propio de este doblez'} />
+          </>}
+          <div className="sect__point-actions">
+            {bend && bend.side !== 0 && <button type="button" className="vp-btn" onClick={() => onChange(normalizeShape(setBend(shape, sel, bend.angle, bend.side === 1 ? -1 : 1)))}><FlipHorizontal2 size={14} aria-hidden /> Doblar para el otro lado</button>}
+            <button type="button" className="vp-btn" disabled={pts.length <= minPoints} onClick={() => removePoint(sel)}><Trash2 size={14} aria-hidden /> Borrar punto</button>
+          </div>
         </div>
       )}
 
@@ -164,6 +179,8 @@ export function SectionEditor({ kind, shape, onChange, onRemove, onError, aside 
         {!shape.solid && <div className="cot-inline">
           <NumberStepper label="Espesor de la chapa" unit="mm" value={shape.thickness} min={SHAPE_LIMITS.thickness.min} max={SHAPE_LIMITS.thickness.max} step={0.5}
             onChange={(thickness) => onChange({ ...shape, thickness })} />
+          <NumberStepper label="Radio de los dobleces" unit="mm" value={baseRadius} min={SHAPE_LIMITS.radius.min} max={SHAPE_LIMITS.radius.max} step={1} typedStep={0.5}
+            onChange={(radius) => onChange({ ...shape, radius })} hint="Por dentro de la chapa · 0 = esquina viva" />
           <Switch label="Cerrada" checked={shape.closed} onChange={(closed) => pts.length >= 3 && onChange({ ...shape, closed })} hint="Une el último punto con el primero" />
         </div>}
         <div className="cot-inline">
@@ -171,6 +188,27 @@ export function SectionEditor({ kind, shape, onChange, onRemove, onError, aside 
           <NumberStepper label="Medida total · alto" unit="mm" value={Math.round(b.h)} min={5} max={SHAPE_LIMITS.size} step={5} typedStep={1} onChange={(h) => onChange(resizeShape(shape, b.w, h))} />
         </div>
         <p className="muted small">El material mide {size.w} × {size.h} mm{shape.solid ? '' : ` (con la chapa de ${fmtMm(shape.thickness)} mm)`}.</p>
+        {/* la chapa como la ve la plegadora: el largo de cada tramo y el ángulo de cada doblez */}
+        <details className="plan-more sect__table">
+          <summary>Tabla de dobleces (largos y ángulos)</summary>
+          <p className="muted small">De una punta a la otra. Al cambiar un largo o un ángulo, el resto de la chapa se acomoda sola.</p>
+          {lens.map((len, i) => {
+            const next = (i + 1) % pts.length, nb = isBend(shape, next) && (shape.closed || i < lens.length - 1) ? bendAt(shape, next) : null
+            return (
+              <div key={i} className="sect__row">
+                <div onFocusCapture={() => setSel(i)}>
+                  <NumberStepper label={`Tramo ${i + 1}`} unit="mm" value={Math.round(len * 10) / 10} min={1} max={SHAPE_LIMITS.size} step={5} typedStep={0.5}
+                    onChange={(l) => onChange(normalizeShape(setSegmentLength(shape, i, l)))} />
+                </div>
+                {nb && <div onFocusCapture={() => setSel(next)}>
+                  <NumberStepper label={`Doblez ${i + 1}`} unit="°" value={nb.angle} min={5} max={180} step={5} typedStep={0.5}
+                    onChange={(a) => onChange(normalizeShape(setBend(shape, next, a)))} />
+                </div>}
+              </div>
+            )
+          })}
+          {!shape.solid && <p className="sect__dev">Desarrollo de la chapa (ancho antes de doblarla): <b>{developedLength(shape)} mm</b></p>}
+        </details>
         <div className="sect__presets">
           <span>Empezar de:</span>
           {PRESETS.map((x) => <button key={x.id} type="button" className="vp-btn" onClick={() => { onChange(presetShape(x.id, Math.max(20, Math.round(b.w)), Math.max(20, Math.round(b.h)), shape.thickness)); setSel(null) }}>{x.name}</button>)}

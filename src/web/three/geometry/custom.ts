@@ -9,7 +9,7 @@ import { m } from '../materials'
 import { cached } from './utils'
 
 const store = new Map<string, THREE.BufferGeometry>()
-const keyOf = (s: SectionShape) => `${s.closed ? 'c' : 'o'}${s.solid ? 's' : 't' + s.thickness}:${s.points.map((p) => `${p.x},${p.y}`).join(';')}`
+const keyOf = (s: SectionShape) => `${s.closed ? 'c' : 'o'}${s.solid ? 's' : 't' + s.thickness}r${s.radius ?? 0}:${s.points.map((p) => `${p.x},${p.y}${p.r !== undefined ? 'r' + p.r : ''}`).join(';')}`
 
 /** El corte como figura de three (en metros), con `map` para acomodar cada punto. */
 function toShape(s: SectionShape, map: (p: Pt) => [number, number]): THREE.Shape {

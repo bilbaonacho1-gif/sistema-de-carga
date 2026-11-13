@@ -10,9 +10,15 @@
  * espesor; puede ser abierta como una C o cerrada como una caja) o "maciza" (los puntos son el
  * contorno, relleno: así entra un perfil dibujado en AutoCAD).
  */
-export interface Pt { x: number; y: number }
+export interface Pt {
+  x: number; y: number
+  /** Radio de este doblez (mm, por dentro de la chapa). Si no está, el de toda la pieza. */
+  r?: number
+}
 export interface SectionShape {
   points: Pt[]
+  /** Radio de los dobleces (mm, por dentro de la chapa). 0 = esquinas vivas. */
+  radius?: number
   /** El último punto se une con el primero. */
   closed: boolean
   /** Contorno relleno (si no, chapa doblada con espesor). Sólo con forma cerrada. */
@@ -21,7 +27,7 @@ export interface SectionShape {
   thickness: number
 }
 
-export const SHAPE_LIMITS = { points: 80, size: 320, thickness: { min: 1, max: 12 } }
+export const SHAPE_LIMITS = { points: 80, size: 320, thickness: { min: 1, max: 12 }, radius: { min: 0, max: 40 } }
 const r1 = (n: number) => Math.round(n * 10) / 10
 
 export function shapeBounds(pts: Pt[]): { x: number; y: number; w: number; h: number } {
@@ -33,13 +39,15 @@ export function shapeBounds(pts: Pt[]): { x: number; y: number; w: number; h: nu
 /** Corre la forma para que arranque en (0, 0). */
 export function normalizeShape(s: SectionShape): SectionShape {
   const b = shapeBounds(s.points)
-  return { ...s, points: s.points.map((p) => ({ x: r1(p.x - b.x), y: r1(p.y - b.y) })) }
+  return { ...s, points: s.points.map((p) => ({ ...p, x: r1(p.x - b.x), y: r1(p.y - b.y) })) }
 }
 
 /** Deja una forma válida (o undefined si no hay con qué): sin puntos repetidos, dentro del tamaño máximo. */
 export function sanitizeShape(s: Partial<SectionShape> | undefined): SectionShape | undefined {
   if (!s || !Array.isArray(s.points)) return undefined
-  let pts = s.points.map((p) => ({ x: Number(p?.x), y: Number(p?.y) })).filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
+  const rad = (v: unknown) => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? Math.min(SHAPE_LIMITS.radius.max, n) : undefined }
+  let pts: Pt[] = s.points.map((p) => { const r = rad(p?.r); return { x: Number(p?.x), y: Number(p?.y), ...(r !== undefined && p?.r !== undefined ? { r } : {}) } })
+    .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
   pts = pts.filter((p, i) => i === 0 || Math.hypot(p.x - pts[i - 1].x, p.y - pts[i - 1].y) > 0.05).slice(0, SHAPE_LIMITS.points)
   const closed = !!s.closed && pts.length >= 3
   if (pts.length < 2) return undefined
@@ -49,7 +57,8 @@ export function sanitizeShape(s: Partial<SectionShape> | undefined): SectionShap
   const k = Math.min(1, SHAPE_LIMITS.size / Math.max(b.w, b.h))
   const t = Number(s.thickness)
   return {
-    points: pts.map((p) => ({ x: r1((p.x - b.x) * k), y: r1((p.y - b.y) * k) })), closed, solid: closed && !!s.solid,
+    points: pts.map((p) => ({ ...p, x: r1((p.x - b.x) * k), y: r1((p.y - b.y) * k) })), closed, solid: closed && !!s.solid,
+    ...(rad(s.radius) ? { radius: rad(s.radius) } : {}),
     thickness: Math.min(SHAPE_LIMITS.thickness.max, Math.max(SHAPE_LIMITS.thickness.min, Number.isFinite(t) && t > 0 ? t : 2.5)),
   }
 }
@@ -58,7 +67,7 @@ export function sanitizeShape(s: Partial<SectionShape> | undefined): SectionShap
 export function resizeShape(s: SectionShape, w: number, h: number): SectionShape {
   const b = shapeBounds(s.points)
   const kx = b.w > 0.01 ? w / b.w : 1, ky = b.h > 0.01 ? h / b.h : 1
-  return { ...s, points: s.points.map((p) => ({ x: r1((p.x - b.x) * kx), y: r1((p.y - b.y) * ky) })) }
+  return { ...s, points: s.points.map((p) => ({ ...p, x: r1((p.x - b.x) * kx), y: r1((p.y - b.y) * ky) })) }
 }
 
 /* ------------------------------ Formas para empezar ------------------------------ */
@@ -107,12 +116,102 @@ export function offsetLine(pts: Pt[], closed: boolean, d: number): Pt[] {
   })
 }
 
+/* ------------------------------ Dobleces ------------------------------ */
+
+const deg = (rad: number) => (rad * 180) / Math.PI
+const dist = (a: Pt, b: Pt) => Math.hypot(b.x - a.x, b.y - a.y)
+
+/** ¿El punto i es un doblez (tiene un tramo de cada lado)? */
+export const isBend = (s: SectionShape, i: number) => s.closed || (i > 0 && i < s.points.length - 1)
+
+/**
+ * Ángulo del doblez en el punto i, en grados: 180 = la chapa sigue derecha, 90 = doblez a escuadra.
+ * `side` dice para qué lado dobla (1 o -1; 0 si está derecha).
+ */
+export function bendAt(s: SectionShape, i: number): { angle: number; side: 1 | -1 | 0 } | null {
+  if (!isBend(s, i)) return null
+  const n = s.points.length, a = s.points[(i - 1 + n) % n], p = s.points[i], b = s.points[(i + 1) % n]
+  const ux = p.x - a.x, uy = p.y - a.y, vx = b.x - p.x, vy = b.y - p.y
+  const turn = deg(Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy))   // cuánto gira: 0 = derecho
+  return { angle: Math.round((180 - Math.abs(turn)) * 10) / 10, side: Math.abs(turn) < 0.05 ? 0 : turn > 0 ? 1 : -1 }
+}
+
+/**
+ * Dobla la chapa en el punto i hasta dejar ese ángulo (180 = derecha), como en una plegadora: el
+ * resto de la chapa (los puntos que siguen) gira alrededor del doblez y ningún tramo cambia de largo.
+ */
+export function setBend(s: SectionShape, i: number, angle: number, side?: 1 | -1): SectionShape {
+  const cur = bendAt(s, i)
+  if (!cur) return s
+  const dir = side ?? (cur.side || 1)
+  const oldTurn = cur.side * (180 - cur.angle), newTurn = dir * (180 - Math.min(180, Math.max(5, angle)))
+  const t = ((newTurn - oldTurn) * Math.PI) / 180, c = Math.cos(t), sn = Math.sin(t), p = s.points[i]
+  return {
+    ...s, points: s.points.map((q, k) => (k <= i ? q : { ...q, x: r1(p.x + (q.x - p.x) * c - (q.y - p.y) * sn), y: r1(p.y + (q.x - p.x) * sn + (q.y - p.y) * c) })),
+  }
+}
+
+/** Largo de cada tramo (del punto i al siguiente). */
+export function segmentLengths(s: SectionShape): number[] {
+  const n = s.points.length
+  return Array.from({ length: s.closed ? n : n - 1 }, (_, i) => r1(dist(s.points[i], s.points[(i + 1) % n])))
+}
+
+/** Cambia el largo del tramo que sale del punto i: lo que sigue de la chapa se corre con él. */
+export function setSegmentLength(s: SectionShape, i: number, length: number): SectionShape {
+  const n = s.points.length, a = s.points[i], b = s.points[(i + 1) % n], l = dist(a, b)
+  if (l < 0.01 || length <= 0) return s
+  const dx = ((b.x - a.x) / l) * (length - l), dy = ((b.y - a.y) / l) * (length - l)
+  return { ...s, points: s.points.map((q, k) => (k > i ? { ...q, x: r1(q.x + dx), y: r1(q.y + dy) } : q)) }
+}
+
+/** Desarrollo de la chapa: la suma de los tramos (el ancho de la chapa antes de doblarla). */
+export const developedLength = (s: SectionShape) => Math.round(segmentLengths(s).reduce((a, b) => a + b, 0))
+
+/**
+ * La línea de la chapa con los dobleces redondeados: cada esquina con radio se cambia por un arco
+ * (el radio se mide por dentro de la chapa; si no entra en los tramos vecinos, se achica).
+ */
+export function roundedLine(s: SectionShape): Pt[] {
+  const n = s.points.length
+  const lens = s.points.map((p, i) => dist(p, s.points[(i + 1) % n]))
+  const out: Pt[] = []
+  s.points.forEach((p, i) => {
+    const inner = p.r ?? s.radius ?? 0
+    const bend = inner > 0 ? bendAt(s, i) : null
+    if (!bend || bend.side === 0) { out.push({ x: p.x, y: p.y }); return }
+    const a = s.points[(i - 1 + n) % n], b = s.points[(i + 1) % n]
+    const la = lens[(i - 1 + n) % n], lb = lens[i]
+    const turn = ((180 - bend.angle) * Math.PI) / 180
+    // radio en el eje de la chapa; la distancia del vértice al arranque del arco no pasa de medio tramo
+    let R = inner + (s.solid ? 0 : s.thickness / 2)
+    let d = R * Math.tan(turn / 2)
+    const max = Math.min(la, lb) * 0.48
+    if (d > max) { d = max; R = d / Math.tan(turn / 2) }
+    if (d < 0.2) { out.push({ x: p.x, y: p.y }); return }
+    const ua = { x: (a.x - p.x) / la, y: (a.y - p.y) / la }, ub = { x: (b.x - p.x) / lb, y: (b.y - p.y) / lb }
+    const start = { x: p.x + ua.x * d, y: p.y + ua.y * d }
+    // centro del arco: sobre la bisectriz, hacia adentro del doblez
+    const bx = ua.x + ub.x, by = ua.y + ub.y, bl = Math.hypot(bx, by) || 1
+    const h = R / Math.cos(turn / 2)
+    const c = { x: p.x + (bx / bl) * h, y: p.y + (by / bl) * h }
+    const a0 = Math.atan2(start.y - c.y, start.x - c.x)
+    const steps = Math.max(2, Math.ceil(deg(turn) / 15))
+    for (let k = 0; k <= steps; k++) {
+      const t = a0 + bend.side * turn * (k / steps)
+      out.push({ x: c.x + R * Math.cos(t), y: c.y + R * Math.sin(t) })
+    }
+  })
+  return out
+}
+
 const area = (pts: Pt[]) => pts.reduce((s, p, i) => { const q = pts[(i + 1) % pts.length]; return s + (p.x * q.y - q.x * p.y) }, 0) / 2
 
 /** El contorno de material de la forma: un polígono exterior y, si es una caja de chapa, su hueco. */
 export function sectionOutline(s: SectionShape): { outer: Pt[]; holes: Pt[][] } {
-  if (s.closed && s.solid) return { outer: s.points, holes: [] }
-  const a = offsetLine(s.points, s.closed, s.thickness / 2), b = offsetLine(s.points, s.closed, -s.thickness / 2)
+  const line = roundedLine(s)
+  if (s.closed && s.solid) return { outer: line, holes: [] }
+  const a = offsetLine(line, s.closed, s.thickness / 2), b = offsetLine(line, s.closed, -s.thickness / 2)
   if (!s.closed) return { outer: [...a, ...b.reverse()], holes: [] }
   return Math.abs(area(a)) >= Math.abs(area(b)) ? { outer: a, holes: [b] } : { outer: b, holes: [a] }
 }

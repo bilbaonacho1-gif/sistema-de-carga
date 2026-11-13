@@ -53,3 +53,45 @@ describe('cargar un dibujo de AutoCAD (DXF)', () => {
     expect(shapeFromDxf('hola')).toBeNull()
   })
 })
+
+describe('doblar la chapa', () => {
+  it('lee el ángulo de cada doblez', async () => {
+    const { bendAt, presetShape: preset } = await import('./section')
+    const u = preset('u', 100, 80)
+    expect(bendAt(u, 0)).toBeNull()                 // una punta no es un doblez
+    expect(bendAt(u, 1)?.angle).toBe(90)
+    expect(bendAt(u, 1)!.side).toBe(-bendAt(preset('l', 100, 80), 1)!.side)
+  })
+  it('doblar gira el resto de la chapa y no cambia el largo de los tramos', async () => {
+    const { bendAt, setBend, segmentLengths, presetShape: preset } = await import('./section')
+    const u = preset('u', 100, 80)
+    const bent = setBend(u, 1, 120)
+    expect(bendAt(bent, 1)!.angle).toBeCloseTo(120, 0)
+    expect(bendAt(bent, 2)!.angle).toBeCloseTo(90, 0)       // el doblez siguiente queda como estaba
+    segmentLengths(bent).forEach((l, i) => expect(l).toBeCloseTo(segmentLengths(u)[i], 0))
+    // enderezar del todo y volver a doblar para el otro lado
+    expect(bendAt(setBend(u, 1, 180), 1)!.angle).toBeCloseTo(180, 0)
+    expect(bendAt(setBend(u, 1, 90, 1), 1)!.side).toBe(1)
+  })
+  it('cambiar el largo de un tramo corre lo que sigue', async () => {
+    const { setSegmentLength, segmentLengths, developedLength, presetShape: preset } = await import('./section')
+    const u = preset('u', 100, 80)
+    const longer = setSegmentLength(u, 1, 150)
+    expect(segmentLengths(longer)).toEqual([80, 150, 80])
+    expect(developedLength(longer)).toBe(310)
+  })
+  it('con radio, cada doblez es un arco que arranca y termina sobre los tramos', async () => {
+    const { roundedLine, presetShape: preset } = await import('./section')
+    const l = { ...preset('l', 100, 80, 2), radius: 6 }
+    const line = roundedLine(l)
+    expect(line.length).toBeGreaterThan(5)
+    // el arco no se sale de la esquina: todos los puntos quedan dentro del rectángulo de la L
+    expect(line.every((p) => p.x >= -0.01 && p.x <= 100.01 && p.y >= -0.01 && p.y <= 80.01)).toBe(true)
+    // radio en el eje = 6 + medio espesor: el arco arranca a 7 mm de la esquina
+    expect(line[1].x).toBeCloseTo(0, 1)
+    expect(line[1].y).toBeCloseTo(73, 1)
+    // un radio enorme se achica para entrar en los tramos
+    const big = roundedLine({ ...preset('l', 20, 20, 2), radius: 40 })
+    expect(big.every((p) => p.x >= -0.01 && p.x <= 20.01 && p.y >= -0.01 && p.y <= 20.01)).toBe(true)
+  })
+})
