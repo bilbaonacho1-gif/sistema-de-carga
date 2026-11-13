@@ -52,3 +52,31 @@ describe('mis piezas (catálogo propio)', () => {
     expect(all.beams.map((b) => b.height * b.depth)).toEqual([...all.beams.map((b) => b.height * b.depth)].sort((a, b) => a - b))
   })
 })
+
+describe('accesorios y colores de la galería de la empresa', () => {
+  it('tipos de protector, defensa en arco, malla de fondo y piso de chapa entran en la lista de materiales', async () => {
+    const { calculateRackStructure } = await import('./calculateRackStructure')
+    const { DEFAULT_CONFIGURATION } = await import('./technicalSpecs')
+    const s = calculateRackStructure({
+      ...DEFAULT_CONFIGURATION,
+      accessories: { protectors: 'all', protectorType: 'poste', protectorColor: 'amarillo', guardrails: true, guardrailType: 'arco', backMesh: true, decking: 'steel', beamColor: 'naranja', uprightColor: 'azul' },
+    })
+    const codes = s.materials.map((m) => m.code)
+    expect(codes).toContain('PROT-POSTE')
+    expect(codes).toContain('DEF-ARCO')
+    expect(codes).toContain('MALLA-FONDO')
+    expect(codes).toContain('PISO-CHAPA')
+    expect(s.counts.backMesh).toBe(s.modules.length)
+    expect(s.materials.find((m) => m.code.startsWith('VIGA-'))!.detail).toContain('naranja')
+    expect(s.materials.find((m) => m.code.startsWith('BAST-'))!.detail).toContain('azul')
+    expect(s.materials.find((m) => m.code === 'PROT-POSTE')!.detail).toContain('amarillo')
+  })
+  it('un rack guardado antes de estos cambios sigue igual: protector en ángulo rojo, vigas rojas, parantes galvanizados', async () => {
+    const { calculateRackStructure } = await import('./calculateRackStructure')
+    const { DEFAULT_CONFIGURATION } = await import('./technicalSpecs')
+    const s = calculateRackStructure({ ...DEFAULT_CONFIGURATION, accessories: { protectors: 'all', decking: 'none' } })
+    expect(s.accessories).toMatchObject({ protectorType: 'angulo', protectorColor: 'rojo', beamColor: 'rojo', uprightColor: 'galvanizado', guardrailType: 'baranda', backMesh: false })
+    expect(s.materials.map((m) => m.code)).toContain('PROT-ANG')
+    expect(calculateRackStructure({ ...DEFAULT_CONFIGURATION, accessories: { beamColor: 'violeta' as never } }).accessories.beamColor).toBe('rojo')
+  })
+})

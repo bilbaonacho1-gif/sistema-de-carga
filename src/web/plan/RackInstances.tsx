@@ -15,7 +15,7 @@ import * as THREE from 'three'
 import type { PlacedRack } from '../../shared/plan/depot'
 import type { RackPlacement } from '../../shared/plan/types'
 import type { RackStructure } from '../../shared/rack/types'
-import { MATERIALS, m } from '../three/materials'
+import { braceMaterial, MATERIALS, m, paintMaterial } from '../three/materials'
 import { loadOf, stackBoxes } from '../../shared/rack/load'
 
 type Kind = 'upright' | 'brace' | 'beam' | 'pallet' | 'load' | 'unit'
@@ -124,8 +124,11 @@ export function RackInstances({ racks, showLoads = true, onStats }: { racks: Pla
     const use = LEVEL[detail].filter(visible)
     const shadows = sum(detail) < 40_000
     const place = new THREE.Matrix4(), world = new THREE.Matrix4()
+    // los colores de pintura son los mismos en todo el depósito (los del rack elegido)
+    const acc = racks[0]?.structure.accessories
+    const mat = (k: Kind) => (!acc ? MAT[k] : k === 'beam' ? paintMaterial(acc.beamColor) : k === 'upright' ? paintMaterial(acc.uprightColor) : k === 'brace' ? braceMaterial(acc.uprightColor) : MAT[k])
     const meshes = use.filter((k) => counts[k] > 0).map((k) => {
-      const mesh = new THREE.InstancedMesh(unitBox, MAT[k], counts[k])
+      const mesh = new THREE.InstancedMesh(unitBox, mat(k), counts[k])
       mesh.castShadow = shadows && k !== 'brace'
       let i = 0
       racks.forEach((r, ri) => {

@@ -9,7 +9,7 @@ import { Calculator, ChevronLeft, ChevronRight, Copy, Download, Lightbulb, Plus,
 import { PRODUCT_TYPES, type ProductGroup } from '../../../shared/catalog'
 import { materialsTotal } from '../../../shared/rack/bom'
 import { beamCapacityForSpan } from '../../../shared/rack/rules'
-import { DESIGN_RULES, OFFICIAL_REFERENCE, PALLET_TYPES } from '../../../shared/rack/technicalSpecs'
+import { DESIGN_RULES, GALVANIZED, OFFICIAL_REFERENCE, PAINT_COLORS, PALLET_TYPES } from '../../../shared/rack/technicalSpecs'
 import type { AccessoryConfig, ComponentCounts, MaterialLine, RackStructure } from '../../../shared/rack/types'
 
 import { NumberStepper, Switch } from '../../components/fields'
@@ -397,8 +397,23 @@ export function AccessoriesStep({ s, counts, multiRow }: { s: RackStructure; cou
         <Segmented label="Protectores" value={a.protectors} onChange={(protectors) => set({ protectors })}
           options={[{ value: 'none', label: 'Sin' }, { value: 'ends', label: 'Extremos' }, { value: 'all', label: 'Todos' }]} />
       )}</Field>
-      <Switch label="Guardarraíles de cabecera" checked={a.guardrails} onChange={(guardrails) => set({ guardrails })}
+      {a.protectors !== 'none' && (
+        <Field label="Tipo de protector" hint={{ angulo: 'Chapa plegada con la punta en V, abulonada al piso.', u: 'Chapa en U que envuelve el parante, abulonada al piso.', poste: 'Poste de tubo cuadrado delante del parante, con su placa al piso.' }[a.protectorType]}>{() => (
+          <Segmented label="Tipo de protector" value={a.protectorType} onChange={(protectorType) => set({ protectorType })}
+            options={[{ value: 'angulo', label: 'En ángulo' }, { value: 'u', label: 'En U' }, { value: 'poste', label: 'Poste' }]} />
+        )}</Field>
+      )}
+      <Switch label="Defensas de cabecera" checked={a.guardrails} onChange={(guardrails) => set({ guardrails })}
         hint={`Barrera en los extremos de cada fila${qty(c.guardrails)}.`} />
+      {a.guardrails && (
+        <Field label="Tipo de defensa" hint={a.guardrailType === 'arco' ? 'Marco de tubo en arco delante de la cabecera.' : 'Dos postes con una baranda de tres largueros.'}>{() => (
+          <Segmented label="Tipo de defensa" value={a.guardrailType} onChange={(guardrailType) => set({ guardrailType })}
+            options={[{ value: 'baranda', label: 'Baranda' }, { value: 'arco', label: 'Arco' }]} />
+        )}</Field>
+      )}
+      {(a.protectors !== 'none' || a.guardrails) && (
+        <ColorSwatches label="Color de las protecciones" value={a.protectorColor} options={PAINT_COLORS} onChange={(protectorColor) => set({ protectorColor })} />
+      )}
       <Switch label="Conectores superiores" checked={a.topTies} onChange={(topTies) => set({ topTies })}
         hint={(multiRow ?? config.layout.rows > 1) ? `Unen las filas por arriba y les dan rigidez${qty(c.topTies)}.` : 'Unen filas entre sí: sirven con dos filas o más.'} />
       <Switch label="Cruces de arriostramiento" checked={a.crossBracing} onChange={(crossBracing) => set({ crossBracing })}
@@ -407,11 +422,32 @@ export function AccessoriesStep({ s, counts, multiRow }: { s: RackStructure; cou
         hint={`Uno por módulo con la carga máxima por nivel${qty(c.capacitySigns)}.`} />
       <Field label="Piso en los niveles" hint={`Para mercadería suelta o pallets que no apoyan bien${qty(c.deckPanels)}.`}>{() => (
         <Segmented label="Piso" value={a.decking} onChange={(decking) => set({ decking })}
-          options={[{ value: 'none', label: 'Sin piso' }, { value: 'wood', label: 'Madera' }, { value: 'mesh', label: 'Malla' }]} />
+          options={[{ value: 'none', label: 'Sin piso' }, { value: 'wood', label: 'Madera' }, { value: 'mesh', label: 'Malla' }, { value: 'steel', label: 'Chapa' }]} />
       )}</Field>
+      <Switch label="Malla de fondo" checked={a.backMesh} onChange={(backMesh) => set({ backMesh })}
+        hint={`Cierra la cara de atrás para que no se caiga mercadería${qty(c.backMesh)}.`} />
       <Switch label="Travesaños de apoyo de pallet" checked={a.palletSupports} onChange={(palletSupports) => set({ palletSupports })}
         hint={`Refuerzo de viga a viga debajo de cada pallet${qty(c.palletSupports)}.`} />
+      <h3 className="cot-sub">Colores</h3>
+      <ColorSwatches label="Vigas" value={a.beamColor} options={PAINT_COLORS} onChange={(beamColor) => set({ beamColor })} />
+      <ColorSwatches label="Parantes" value={a.uprightColor} options={[GALVANIZED, ...PAINT_COLORS]} onChange={(uprightColor) => set({ uprightColor })} />
       {c.spacers > 0 && <p className="note note--blue">Las filas espalda con espalda llevan {plural(c.spacers, 'distanciador', 'distanciadores')} (se suman solos).</p>}
+    </div>
+  )
+}
+
+/** Elegir un color: una fila de muestras redondas con su nombre. */
+function ColorSwatches<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: { id: T; name: string; hex: string }[]; onChange(v: T): void }) {
+  return (
+    <div className="field">
+      <span className="field__label">{label}</span>
+      <div className="swatches" role="radiogroup" aria-label={label}>
+        {options.map((o) => (
+          <button key={o.id} type="button" role="radio" aria-checked={value === o.id} className={`swatch${value === o.id ? ' is-on' : ''}`} title={o.name} onClick={() => onChange(o.id)}>
+            <i style={{ background: o.hex }} aria-hidden /><span>{o.name}</span>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

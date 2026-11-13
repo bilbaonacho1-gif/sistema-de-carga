@@ -60,14 +60,23 @@ export function basePlateGeometry(profile: UprightProfile) {
   })
 }
 
-/* ---------- Protector: chapa plegada con punta en V + pestañas abulonadas ---------- */
-export function protectorGeometry(profile: UprightProfile) {
-  return cached(store, `prot-${profile.id}:${profile.faceWidth}x${profile.depth}x${profile.thickness}`, () => {
+/* ---------- Protector de columna: en ángulo (punta en V), en U envolvente o poste de tubo ---------- */
+export function protectorGeometry(profile: UprightProfile, type: 'angulo' | 'u' | 'poste' = 'angulo', color: string = COLORS.red) {
+  return cached(store, `prot-${type}-${color}-${profile.id}:${profile.faceWidth}x${profile.depth}x${profile.thickness}`, () => {
+    const parts: THREE.BufferGeometry[] = []
+    if (type === 'poste') {
+      // poste de tubo cuadrado delante del parante, con su placa abulonada al piso
+      const side = m(VISUAL.post.side), h = m(VISUAL.post.height), plate = m(VISUAL.post.plate), z = side / 2 + 0.03
+      parts.push(paint(box([0, h / 2, z], [side, h, side]), color))
+      parts.push(paint(box([0, 0.004, z], [plate, 0.008, plate]), color))
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) parts.push(paint(hexNut([sx * (plate / 2 - 0.02), 0.012, z + sz * (plate / 2 - 0.02)], 0.008, 0.008), COLORS.galvanized))
+      return merge(parts)
+    }
     const h = m(VISUAL.protector.height)
     const e = m(VISUAL.protector.thickness)
     const xs = m(profile.faceWidth) / 2 + 0.045
     const zBack = -(m(profile.depth) + 0.005)
-    const zFold = 0.03
+    const zFold = type === 'u' ? 0.04 : 0.03
     const zTip = 0.095
 
     const sheet = (x1: number, z1: number, x2: number, z2: number) => {
@@ -75,15 +84,15 @@ export function protectorGeometry(profile: UprightProfile) {
       const ang = Math.atan2(z2 - z1, x2 - x1)
       return box([(x1 + x2) / 2, h / 2, (z1 + z2) / 2], [len, h, e], new THREE.Euler(0, -ang, 0))
     }
-    const parts: THREE.BufferGeometry[] = []
     for (const s of [-1, 1]) {
-      parts.push(paint(sheet(s * xs, zBack, s * xs, zFold), COLORS.red))      // costado
-      parts.push(paint(sheet(s * xs, zFold, 0, zTip), COLORS.red))            // cara en V
+      parts.push(paint(sheet(s * xs, zBack, s * xs, zFold), color))      // costado
+      if (type === 'angulo') parts.push(paint(sheet(s * xs, zFold, 0, zTip), color))   // cara en V
       const xf = s * (xs + 0.032)
-      parts.push(paint(box([xf, 0.004, zBack + 0.03], [0.064, 0.008, 0.06]), COLORS.red))   // pestaña
+      parts.push(paint(box([xf, 0.004, zBack + 0.03], [0.064, 0.008, 0.06]), color))   // pestaña
       for (const z of [zBack + 0.015, zBack + 0.045])
         parts.push(paint(hexNut([xf + s * 0.006, 0.012, z], 0.008, 0.008), COLORS.galvanized))
     }
+    if (type === 'u') parts.push(paint(sheet(-xs, zFold, xs, zFold), color))   // frente plano de la U
     return merge(parts)
   })
 }
@@ -103,16 +112,16 @@ export function beamGeometry(beam: BeamProfile) {
  *  - ala frontal: apoya sobre la cara del parante y tapa la columna de ranuras (ganchos)
  *  - ala lateral: corre por el costado del parante; ahí se suelda la viga
  */
-export function connectorGeometry(side: 1 | -1, profile: UprightProfile, beam: BeamProfile) {
-  return cached(store, `conn-${side}-${profile.id}:${profile.faceWidth}x${profile.depth}x${profile.thickness}-${beam.id}:${beam.height}x${beam.depth}`, () => {
+export function connectorGeometry(side: 1 | -1, profile: UprightProfile, beam: BeamProfile, color: string = COLORS.red) {
+  return cached(store, `conn-${color}-${side}-${profile.id}:${profile.faceWidth}x${profile.depth}x${profile.thickness}-${beam.id}:${beam.height}x${beam.depth}`, () => {
     const e = 0.005
     const H = m(VISUAL.connectorHeight)
     const y0 = 0.02 - H
     const width = m(profile.faceWidth) / 2 - m(VISUAL.groove.halfWidth) - 0.002 + e
     const bd = m(beam.depth)
     const parts = [
-      paint(box([side * (width / 2 - e), y0 + H / 2, e / 2], [width, H, e]), COLORS.red),
-      paint(box([-side * e / 2, y0 + H / 2, -(bd - e) / 2 + e / 2], [e, H, bd]), COLORS.red),
+      paint(box([side * (width / 2 - e), y0 + H / 2, e / 2], [width, H, e]), color),
+      paint(box([-side * e / 2, y0 + H / 2, -(bd - e) / 2 + e / 2], [e, H, bd]), color),
     ]
     const xc = side * (m(profile.faceWidth) / 2 - m(profile.faceWidth * VISUAL.holes.columnOffsetRatio))
     for (const dy of [-0.03, -0.11, -0.19])

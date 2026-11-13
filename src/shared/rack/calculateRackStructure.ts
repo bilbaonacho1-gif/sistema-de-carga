@@ -10,13 +10,13 @@
  */
 import { buildMaterials } from './bom'
 import {
-  BEAM_PROFILES, DEFAULT_ACCESSORIES, DESIGN_RULES, OFFICIAL_REFERENCE, PALLET_TYPES, UPRIGHT_PROFILES,
+  BEAM_PROFILES, DEFAULT_ACCESSORIES, DESIGN_RULES, OFFICIAL_REFERENCE, PAINT_COLORS, PALLET_TYPES, UPRIGHT_PROFILES,
 } from './technicalSpecs'
 import { beamCapacityForSpan, defaultRules, type StructuralRules } from './rules'
 import { profilesOf, sanitizeProfiles } from './profiles'
 import { metros } from '../units'
 import type {
-  AccessoryConfig, BeamLayout, BeamProfile, FrameLayout, LevelLayout, ModuleLayout, PalletType, PositionSlot,
+  AccessoryConfig, BeamLayout, BeamProfile, FrameLayout, LevelLayout, ModuleLayout, PaintColor, PalletType, PositionSlot,
   RackConfiguration, RackSection, RackStructure, RackWarning, RowLayout, UprightProfile,
 } from './types'
 
@@ -38,6 +38,8 @@ const fmt = (n: number) => n.toLocaleString('es-AR')
 const num = (v: unknown) => (typeof v === 'number' ? v : Number(v))
 const range = (v: unknown, r: { min: number; max: number }, fallback = r.min) => clamp(Math.round(num(v)) || fallback, r.min, r.max)
 
+const paint = <T extends string>(v: unknown, fallback: T): PaintColor | T => (PAINT_COLORS.some((c) => c.id === v) ? (v as PaintColor) : fallback)
+
 function sanitizeAccessories(a: Partial<AccessoryConfig> | undefined): AccessoryConfig {
   const x = { ...DEFAULT_ACCESSORIES, ...(a && typeof a === 'object' ? a : {}) }
   return {
@@ -46,8 +48,14 @@ function sanitizeAccessories(a: Partial<AccessoryConfig> | undefined): Accessory
     topTies: !!x.topTies,
     crossBracing: !!x.crossBracing,
     capacitySigns: !!x.capacitySigns,
-    decking: ['none', 'wood', 'mesh'].includes(x.decking) ? x.decking : 'none',
+    decking: ['none', 'wood', 'mesh', 'steel'].includes(x.decking) ? x.decking : 'none',
     palletSupports: !!x.palletSupports,
+    protectorType: ['angulo', 'u', 'poste'].includes(x.protectorType) ? x.protectorType : DEFAULT_ACCESSORIES.protectorType,
+    guardrailType: ['baranda', 'arco'].includes(x.guardrailType) ? x.guardrailType : DEFAULT_ACCESSORIES.guardrailType,
+    backMesh: !!x.backMesh,
+    beamColor: paint(x.beamColor, DEFAULT_ACCESSORIES.beamColor),
+    uprightColor: x.uprightColor === 'galvanizado' ? 'galvanizado' : paint(x.uprightColor, 'galvanizado' as never),
+    protectorColor: paint(x.protectorColor, DEFAULT_ACCESSORIES.protectorColor),
   }
 }
 
@@ -377,6 +385,8 @@ export function calculateRackStructure(
     capacitySigns: acc.capacitySigns ? layout.rows * totalModules : 0,
     deckPanels: acc.decking !== 'none' ? beamPositions : 0,
     palletSupports: acc.palletSupports ? beamPositions * R.supportsPerPallet : 0,
+    // una malla por módulo y por fila, en la cara de atrás
+    backMesh: acc.backMesh ? layout.rows * totalModules : 0,
   }
 
   /* ---- 9. Advertencias técnicas ---- */

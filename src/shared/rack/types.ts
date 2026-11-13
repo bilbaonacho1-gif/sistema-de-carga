@@ -80,10 +80,26 @@ export interface AccessoryConfig {
   /** Carteles de capacidad (uno por módulo). */
   capacitySigns: boolean
   /** Piso apoyado sobre las vigas de cada nivel. */
-  decking: 'none' | 'wood' | 'mesh'
+  decking: 'none' | 'wood' | 'mesh' | 'steel'
   /** Travesaños de apoyo de pallet (refuerzo entre vigas). */
   palletSupports: boolean
+  /** Forma del protector: chapa en ángulo (en V), en U envolvente, o poste de tubo delante del parante. */
+  protectorType: ProtectorType
+  /** Defensa de cabecera: baranda de largueros o marco en arco. */
+  guardrailType: GuardrailType
+  /** Malla de fondo (anticaída) en la cara de atrás de cada módulo. */
+  backMesh: boolean
+  /** Colores de pintura. */
+  beamColor: PaintColor
+  uprightColor: UprightColor
+  protectorColor: PaintColor
 }
+
+export type ProtectorType = 'angulo' | 'u' | 'poste'
+export type GuardrailType = 'baranda' | 'arco'
+export type PaintColor = 'rojo' | 'naranja' | 'amarillo' | 'azul' | 'gris'
+/** Los parantes, además, pueden ir galvanizados (sin pintar). */
+export type UprightColor = PaintColor | 'galvanizado'
 
 /** Una línea de la lista de materiales. */
 export interface MaterialLine {
@@ -250,6 +266,7 @@ export interface ComponentCounts {
   capacitySigns: number
   deckPanels: number
   palletSupports: number
+  backMesh: number
 }
 
 export interface RackStructure {

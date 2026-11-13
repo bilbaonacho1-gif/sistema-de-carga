@@ -127,12 +127,29 @@ export const DEFAULT_ACCESSORIES: AccessoryConfig = {
   capacitySigns: false,
   decking: 'none',
   palletSupports: false,
+  protectorType: 'angulo',
+  guardrailType: 'baranda',
+  backMesh: false,
+  beamColor: 'rojo',
+  uprightColor: 'galvanizado',
+  protectorColor: 'rojo',
 }
+
+/** Colores de pintura que se ven en las obras de la empresa (nombre y tono para dibujar). */
+export const PAINT_COLORS: { id: 'rojo' | 'naranja' | 'amarillo' | 'azul' | 'gris'; name: string; hex: string }[] = [
+  { id: 'rojo', name: 'Rojo', hex: '#c3241f' },
+  { id: 'naranja', name: 'Naranja', hex: '#ea5b17' },
+  { id: 'amarillo', name: 'Amarillo', hex: '#f2c230' },
+  { id: 'azul', name: 'Azul', hex: '#1f4fa3' },
+  { id: 'gris', name: 'Gris', hex: '#6f7780' },
+]
+export const GALVANIZED = { id: 'galvanizado' as const, name: 'Galvanizado', hex: '#c3c8cd' }
+export const colorName = (id: string) => (id === 'galvanizado' ? GALVANIZED.name : PAINT_COLORS.find((c) => c.id === id)?.name ?? id)
 
 /**
  * LISTA DE PRECIOS (vacía hasta que Sistemas de Carga cargue la suya).
  * Clave = código de la pieza en la lista de materiales (ver bom.ts), valor = precio unitario.
- * Ej.: { 'PROT-COL': 18500, 'PAS-SEG': 350 }. Si una pieza no tiene precio, el
+ * Ej.: { 'PROT-ANG': 18500, 'PAS-SEG': 350 }. Si una pieza no tiene precio, el
  * cotizador muestra sólo la cantidad y no calcula el total.
  */
 export const PRICE_LIST: Record<string, number> = {}
@@ -162,6 +179,8 @@ export const VISUAL = {
   guardrail: { height: 400, railHeight: 120, offset: 250 },
   sign: { width: 300, height: 200, elevation: 1500 },
   deck: { thickness: 25 },
+  post: { side: 90, height: 600, plate: 160 },
+  arch: { height: 450, tube: 60 },
 } as const
 
 export const DEFAULT_CONFIGURATION: RackConfiguration = {
