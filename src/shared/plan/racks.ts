@@ -394,3 +394,77 @@ export function joinRacks(plan: Plan, ids: string[], size: RackModuleSize): { pl
   const merged = fitPlacement({ ...f, modules: off, mods: Object.keys(mods).length ? mods : undefined, frameHeights: Object.keys(frames).length ? frames : undefined }, size)
   return { plan: { ...plan, racks: (plan.racks ?? []).filter((r) => r.id === f.id || !set.has(r.id)).map((r) => (r.id === f.id ? merged : r)) }, id: f.id }
 }
+
+/* ------------------------------ Módulo inicial y módulos de continuación ------------------------------ */
+
+/** Un módulo más el ancho de un parante: lo que se alarga un rack al sumarle un módulo. */
+const modulePitch = (r: RackPlacement, size: RackModuleSize) => { const d = rackDims(r, size); return d.width + d.upright }
+
+/**
+ * Suma `n` módulos en una punta del rack (módulos de continuación: comparten el parante con el
+ * anterior). 'end' los agrega al final; 'start' al principio, corriendo el arranque para ese lado.
+ * Devuelve null si con los módulos nuevos no entra (pisaría algo o saldría del depósito).
+ */
+export function extendRack(plan: Plan, id: string, side: 'start' | 'end', size: RackModuleSize, n = 1): Plan | null {
+  const r = plan.racks?.find((x) => x.id === id)
+  if (!r || r.modules + n > 120 || n < 1) return null
+  let next: RackPlacement
+  if (side === 'end') next = { ...r, modules: r.modules + n }
+  else {
+    // las piezas propias de cada módulo y de cada parante se corren n lugares
+    const shift = <T,>(o: Record<number, T> | undefined) => (o ? Object.fromEntries(Object.entries(o).map(([k, v]) => [+k + n, v])) as Record<number, T> : undefined)
+    next = { ...r, ...along(r, -n * modulePitch(r, size)), modules: r.modules + n, mods: shift(r.mods), frameHeights: shift(r.frameHeights) }
+  }
+  const fitted = fitPlacement(next, size)
+  if (blockedReason(plan, fitted) && !blockedReason(plan, fitPlacement(r, size))) return null
+  return { ...plan, racks: (plan.racks ?? []).map((x) => (x.id === id ? fitted : x)) }
+}
+
+/**
+ * Si el rack quedó a continuación de otro de la misma fila (tocándolo o casi, y alineado), los une
+ * en uno solo que comparte el parante del medio: así un módulo pegado al lado de otro pasa a ser su
+ * módulo de continuación. El otro rack no se mueve. Devuelve null si no hay con quién unirlo (o son
+ * distintos: uno simple y otro doble, otra altura, otro parante…).
+ */
+export function attachRack(plan: Plan, id: string, size: RackModuleSize, reach = 600): { plan: Plan; id: string } | null {
+  const raw = plan.racks?.find((x) => x.id === id)
+  if (!raw) return null
+  const me = fitPlacement(raw, size)
+  const o = me.orientation
+  const pos = (r: RackPlacement) => (o === 'x' ? r.x : r.y), across = (r: RackPlacement) => (o === 'x' ? r.y : r.x)
+  const up = rackDims(me, size).upright
+  let best: { other: RackPlacement; before: boolean; gap: number } | null = null
+  for (const x of plan.racks ?? []) {
+    if (x.id === id || x.orientation !== o || x.pair !== me.pair) continue
+    const other = fitPlacement(x, size)
+    if (Math.abs(across(other) - across(me)) > 400) continue
+    // yo después del otro, o yo antes del otro (se permite que se pisen hasta medio módulo)
+    const after = pos(me) - (pos(other) + other.length), before = pos(other) - (pos(me) + me.length)
+    for (const [gap, isBefore] of [[after, false], [before, true]] as const)
+      if (gap <= reach && gap >= -modulePitch(me, size) / 2 && (!best || Math.abs(gap) < Math.abs(best.gap))) best = { other, before: isBefore, gap }
+  }
+  if (!best) return null
+  // me acomodo en línea con el otro, compartiendo su parante de punta
+  const b = best.other
+  const p = best.before ? pos(b) - me.length + up : pos(b) + b.length - up
+  const snapped = { ...raw, ...(o === 'x' ? { x: Math.round(p), y: b.y } : { x: b.x, y: Math.round(p) }) }
+  const lined = { ...plan, racks: (plan.racks ?? []).map((x) => (x.id === id ? snapped : x)) }
+  return joinRacks(lined, [b.id, id], size)
+}
+
+/**
+ * Pega racks copiados con el centro del grupo en `at`. Cada copia que queda a continuación de otro
+ * rack se une a él. Devuelve el plano y los racks que quedaron (para dejarlos elegidos).
+ */
+export function pasteRacks(plan: Plan, clip: RackPlacement[], at: PlanPoint, size: RackModuleSize): { plan: Plan; ids: string[] } {
+  if (!clip.length) return { plan, ids: [] }
+  const fitted = clip.map((r) => fitPlacement(r, size))
+  const bs = fitted.map(placementRect)
+  const cx = (Math.min(...bs.map((b) => b.x)) + Math.max(...bs.map((b) => b.x + b.w))) / 2
+  const cy = (Math.min(...bs.map((b) => b.y)) + Math.max(...bs.map((b) => b.y + b.h))) / 2
+  const dx = Math.round(at.x - cx), dy = Math.round(at.y - cy)
+  let ids = fitted.map(() => newId('r'))
+  let next: Plan = { ...plan, racks: [...(plan.racks ?? []), ...fitted.map((r, i) => ({ ...r, id: ids[i], x: r.x + dx, y: r.y + dy }))] }
+  ids = ids.map((id) => { const j = attachRack(next, id, size); if (j) { next = j.plan; return j.id } return id })
+  return { plan: next, ids: [...new Set(ids)] }
+}

@@ -12,7 +12,7 @@ import { edges, nearestOnEdge, outlinePolygon, planBounds, pointOnEdge, tangentO
 import type { PlacedRack } from '../../shared/plan/depot'
 import { moveVertex, updateRect, newId } from '../../shared/plan/edit'
 import { placementRect, type RackModuleSize } from '../../shared/plan/layout'
-import { freezeRacks, moveRack, moveRackWithin, rackSelection, selectedRackIds } from '../../shared/plan/racks'
+import { freezeRacks, moveRack, moveRackWithin, rackSelection, selectedRackIds, pasteRacks } from '../../shared/plan/racks'
 import type { Plan, PlanPoint, PlanSelection, RackPlacement } from '../../shared/plan/types'
 import { fmt } from '../lib/format'
 import { RackModel, RackPickContext, type PickedPart } from '../three/RackModel'
@@ -101,7 +101,8 @@ function useDrag() {
         return
       }
       s.select(select)
-      if (!apply) return
+      // con la edición bloqueada se elige, pero no se mueve nada (y el arrastre gira la vista)
+      if (!apply || s.lock3d) return
       const ctrl = controls as unknown as { enabled: boolean } | null
       if (ctrl) ctrl.enabled = false
       const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -e.point.y)
@@ -127,7 +128,7 @@ function useDrag() {
       window.addEventListener('pointerup', up)
       window.addEventListener('pointercancel', up)
     },
-    onPointerOver: (e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); gl.domElement.style.cursor = apply ? 'grab' : 'pointer' },
+    onPointerOver: (e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); gl.domElement.style.cursor = apply && !usePlan.getState().lock3d ? 'grab' : 'pointer' },
     onPointerOut: () => { gl.domElement.style.cursor = '' },
   })
 }
@@ -241,6 +242,13 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, size, span, on
           const s = usePlan.getState()
           const at = { x: Math.round(e.point.x * 1000), y: Math.round(e.point.z * 1000) }
           if (s.walk) { e.stopPropagation(); s.setWalk({ ...s.walk, ...at }) }
+          else if (s.tool === 'rackpaste' && s.clipRacks?.length && size) {
+            // pegar lo copiado donde se tocó el piso (queda la herramienta para pegar más)
+            e.stopPropagation()
+            let ids: string[] = []
+            s.commit((pl) => { const r = pasteRacks(freezeRacks(pl, placements), s.clipRacks!, at, size); ids = r.ids; return r.plan })
+            s.select(rackSelection(ids))
+          }
           else if (s.tool === 'symbol' && (s.symbolKind === 'persona' || s.symbolKind === 'autoelevador')) {
             e.stopPropagation()
             s.commit((pl) => ({ ...pl, symbols: [...(pl.symbols ?? []), { id: newId('s'), ...at, kind: s.symbolKind }] }))

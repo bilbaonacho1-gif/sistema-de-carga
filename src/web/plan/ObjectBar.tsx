@@ -4,7 +4,7 @@
  * zonas de racks, pasillos, columnas, tabiques, textos, símbolos, cotas, racks y el depósito entero
  * (tocando una de sus paredes).
  */
-import { AlignStartHorizontal, AlignStartVertical, Combine, Copy, Focus, Maximize, Minus, Plus, RotateCw, Scissors, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { AlignStartHorizontal, AlignStartVertical, ClipboardCopy, Combine, Copy, Focus, Maximize, Minus, Plus, RotateCw, Scissors, SlidersHorizontal, Trash2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { removeItem, removeVertex, setTotal } from '../../shared/plan/edit'
 import { placementRect, type RackModuleSize } from '../../shared/plan/layout'
@@ -56,7 +56,9 @@ const Step = ({ label, value, onMinus, onPlus, minusOff, plusOff }: { label: str
 )
 
 export function ObjectBar({ vb, size, layer, onFit }: Props) {
-  const { plan, selection, commit, select, layout, isolate, setIsolate } = usePlan()
+  const { plan, selection, commit, select, layout, isolate, setIsolate, setClipRacks, setTool } = usePlan()
+  /** Copiar: lo elegido queda pegado al mouse y se pega con un clic donde se quiera (como Ctrl+C y Ctrl+V). */
+  const copyBtn = (rs: RackPlacement[]) => <button type="button" className="obar__t" title="Copiar y pegar donde toques (Ctrl+C, Ctrl+V)" onClick={() => { setClipRacks(rs); setTool('rackpaste') }}><ClipboardCopy size={14} aria-hidden /> Copiar</button>
   if (!selection) return null
   /** "Ver solo este / estos" (o volver a ver todos si ya se están viendo solos). */
   const isoBtn = (ids: string[]) => {
@@ -168,6 +170,7 @@ export function ObjectBar({ vb, size, layer, onFit }: Props) {
         <Btn title="Borrar" onClick={() => del(() => removeRacks(base, [r.id]))}><Trash2 size={15} aria-hidden /></Btn>
         <span className="obar__v obar__v--info">{metros(fitPlacement(r, layer.size).length)}</span>
         <span className="obar__sep" aria-hidden />
+        {copyBtn([r])}
         {isoBtn([r.id])}
         {editBtn}
       </>
@@ -206,6 +209,7 @@ export function ObjectBar({ vb, size, layer, onFit }: Props) {
         <Btn title={joined ? 'Unir en un solo rack' : 'Para unirlos tienen que estar en la misma fila, uno al lado del otro, y ser iguales'} onClick={() => { if (joined) { commit(() => joined.plan); select({ kind: 'rack', id: joined.id }) } }} disabled={!joined}><Combine size={15} aria-hidden /></Btn>
         <Btn title={`Borrar los ${rs.length}`} onClick={() => del(() => removeRacks(base, [...ids]))}><Trash2 size={15} aria-hidden /></Btn>
         <span className="obar__sep" aria-hidden />
+        {copyBtn(rs)}
         {isoBtn([...ids])}
         {editBtn}
       </>
@@ -235,7 +239,7 @@ export function ObjectBar({ vb, size, layer, onFit }: Props) {
   const top = ((box.y - vb.y) / vb.h) * size.h, bottom = ((box.y + box.h - vb.y) / vb.h) * size.h
   const y = top > 70 ? top - 14 : Math.min(size.h - 60, bottom + 14)
   // media barra (las de racks son más largas), para que no se salga por los costados
-  const half = Math.min(size.w / 2, selection.kind === 'rack' || selection.kind === 'racks' ? 330 : 170)
+  const half = Math.min(size.w / 2, selection.kind === 'rack' || selection.kind === 'racks' ? 380 : 170)
   return (
     <div className={`obar${top > 70 ? '' : ' obar--below'}`} role="toolbar" aria-label="Acciones sobre lo elegido"
       style={{ left: Math.max(half, Math.min(size.w - half, sx)), top: Math.max(8, y) }}

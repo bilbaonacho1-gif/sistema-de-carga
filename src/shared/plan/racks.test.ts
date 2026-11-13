@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { buildDepot } from './depot'
 import { rectanglePlan } from './geometry'
 import { DEFAULT_LAYOUT, autoLayout, placementRect, type RackModuleSize } from './layout'
-import { addRack, duplicateRack, fitPlacement, freezeRacks, joinRacks, moveRack, rackIssues, rotateRack, setRackModules, splitRack } from './racks'
+import { addRack, attachRack, duplicateRack, extendRack, fitPlacement, freezeRacks, joinRacks, moveRack, rackIssues, rotateRack, setRackModules, splitRack } from './racks'
 import { DEFAULT_CONFIGURATION } from '../rack/technicalSpecs'
 import type { Plan, RackPlacement } from './types'
 
@@ -124,15 +124,16 @@ describe('zonas libres y zonas de racks mandan', () => {
     expect(guarded(largo, setRackModules(largo, 'a', 7), 'a', size)).toBe(largo)
   })
 
-  it('marcar una zona libre vuelve a acomodar los racks movidos a mano', async () => {
+  it('marcar una zona libre no toca los racks armados a mano: el que queda abajo se avisa', async () => {
     const { usePlan } = await import('../../web/plan/planStore')
     const s = usePlan.getState()
     s.commit(() => ({ ...rectanglePlan(40_000, 20_000), racks: [rack()] }))
-    expect(usePlan.getState().plan.racks).toBeDefined()
-    usePlan.getState().commit((p) => ({ ...p, zones: [...p.zones, { id: 'z', x: 0, y: 0, w: 5000, d: 5000, name: 'Libre' }] }))
-    expect(usePlan.getState().plan.racks).toBeUndefined()
+    usePlan.getState().commit((p) => ({ ...p, zones: [...p.zones, { id: 'z', x: 0, y: 0, w: 15_000, d: 8000, name: 'Libre' }] }))
+    const plan = usePlan.getState().plan
+    expect(plan.racks).toHaveLength(1)
+    expect(Object.keys(rackIssues(plan, plan.racks!))).toHaveLength(1)
     usePlan.getState().undo()
-    expect(usePlan.getState().plan.racks).toHaveLength(1)
+    expect(Object.keys(rackIssues(usePlan.getState().plan, usePlan.getState().plan.racks!))).toHaveLength(0)
   })
 })
 
@@ -198,5 +199,55 @@ describe('partir y unir racks', () => {
     const cut = splitRack(plan([base]), 'a', 4, size)!
     const tall = { ...cut.plan, racks: cut.plan.racks!.map((r, i) => (i === 1 ? { ...r, height: 9000 } : r)) }
     expect(joinRacks(tall, cut.ids, size)).toBeNull()
+  })
+})
+
+describe('módulo inicial y módulos de continuación', () => {
+  const size = { width: 2700, depth: 1100, upright: 100, backToBackGap: 200 }
+  const plan = (racks: RackPlacement[]): Plan => ({ ...rectanglePlan(60_000, 20_000), racks })
+  const one: RackPlacement = { id: 'a', x: 10_000, y: 5000, orientation: 'x', modules: 1, length: 0, depth: 0, pair: false }
+
+  it('sumar un módulo al final alarga el rack sin moverlo', () => {
+    const out = extendRack(plan([one]), 'a', 'end', size)!
+    expect(out.racks![0]).toMatchObject({ modules: 2, x: 10_000, length: 2 * 2700 + 3 * 100 })
+  })
+  it('sumar un módulo al principio corre el arranque para ese lado y deja el final donde estaba', () => {
+    const before = fitPlacement(one, size)
+    const out = extendRack(plan([one]), 'a', 'start', size)!
+    const r = out.racks![0]
+    expect(r.modules).toBe(2)
+    expect(r.x).toBe(10_000 - 2800)
+    expect(r.x + r.length).toBe(before.x + before.length)
+  })
+  it('al sumar al principio, las piezas propias siguen en el mismo módulo', () => {
+    const out = extendRack(plan([{ ...one, modules: 2, mods: { 1: { width: 1800 } }, frameHeights: { 2: 8000 } }]), 'a', 'start', size)!
+    expect(out.racks![0].mods).toEqual({ 2: { width: 1800 } })
+    expect(out.racks![0].frameHeights).toEqual({ 3: 8000 })
+  })
+  it('no suma un módulo si se sale del depósito', () => {
+    expect(extendRack(plan([{ ...one, x: 57_000 }]), 'a', 'end', size)).toBeNull()
+  })
+  it('un módulo pegado a continuación de otro se une y comparte el parante', () => {
+    const first = fitPlacement(one, size)
+    // lo dejo un poco corrido y desalineado, como al soltarlo con el mouse
+    const loose: RackPlacement = { ...one, id: 'b', x: first.x + first.length + 250, y: 5120 }
+    const out = attachRack(plan([one, loose]), 'b', size)!
+    expect(out.plan.racks).toHaveLength(1)
+    const r = out.plan.racks![0]
+    expect(r.modules).toBe(2)
+    expect([r.x, r.y]).toEqual([10_000, 5000])                 // el primero no se movió
+    expect(r.length).toBe(2 * 2700 + 3 * 100)                  // tres parantes, no cuatro
+    expect(out.id).toBe('a')
+  })
+  it('también se une si se pega antes, sin mover al que ya estaba', () => {
+    const loose: RackPlacement = { ...one, id: 'b', x: 10_000 - 2900 - 300, y: 4900 }
+    const r = attachRack(plan([one, loose]), 'b', size)!.plan.racks![0]
+    expect(r.modules).toBe(2)
+    expect(r.x + r.length).toBe(10_000 + 2900)                 // el final del original quedó en su lugar
+  })
+  it('no une si está lejos, en otra fila o es de otro tipo', () => {
+    expect(attachRack(plan([one, { ...one, id: 'b', x: 20_000 }]), 'b', size)).toBeNull()
+    expect(attachRack(plan([one, { ...one, id: 'b', x: 12_950, y: 9000 }]), 'b', size)).toBeNull()
+    expect(attachRack(plan([one, { ...one, id: 'b', x: 12_950, pair: true }]), 'b', size)).toBeNull()
   })
 })

@@ -5,7 +5,7 @@
  * cuántos racks entran en ESE depósito (filas, pasillos, columnas y zonas) y todo lo demás
  * (materiales, presupuesto) sale del depósito completo.
  */
-import { AlertTriangle, Calculator, ChevronLeft, ChevronRight, Download, Lightbulb, Mail, PenLine, Phone, Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, Calculator, ChevronLeft, ClipboardPaste, ChevronRight, Download, Lightbulb, Mail, Phone, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useMemo } from 'react'
 import { buildDepot, moduleSize, type Depot } from '../shared/plan/depot'
 import { planArea } from '../shared/plan/geometry'
@@ -38,7 +38,7 @@ const META: Record<FlowStep, { title: string; short: string; help: string }> = {
   deposito: { title: 'Tu depósito', short: 'Depósito', help: 'Dibujá el lugar: contorno, columnas, portones y las zonas donde no van racks. Si ya sabés dónde van los racks y los pasillos, marcalos con "Zona de racks" y "Pasillo". Todo lo demás se calcula a partir de este plano.' },
   rack: { title: 'Cómo es el rack', short: 'Rack', help: 'Elegí el módulo que se va a repetir en el depósito: largo de viga, profundidad, altura y niveles.' },
   carga: { title: 'Pallet y carga', short: 'Carga', help: 'El pallet define cuántos entran por módulo. Si el cliente usa uno especial, elegí "A medida".' },
-  distribucion: { title: 'Cuántos racks entran', short: 'Distribución', help: 'El sistema arma las filas dentro de tu depósito (o sólo en las zonas de racks que marques), respetando los pasillos y esquivando columnas y zonas libres. Después podés tocar cualquier rack (en el plano o en 3D) y arrastrarlo, girarlo, duplicarlo o borrarlo.' },
+  distribucion: { title: 'Cuántos racks entran', short: 'Distribución', help: 'Armá los racks desde un módulo inicial: lo ponés en el plano, le sumás módulos y lo copiás y pegás donde quieras. Si preferís, el sistema también llena el depósito solo.' },
   accesorios: { title: 'Accesorios', short: 'Accesorios', help: 'Protección, seguridad y piso de los niveles, para todos los racks del depósito.' },
   resumen: { title: 'Resumen y materiales', short: 'Resumen', help: 'El depósito completo: racks, posiciones y todas las piezas. Desde acá se pide el presupuesto.' },
 }
@@ -269,7 +269,7 @@ function RackStep({ s }: { s: RackStructure }) {
 /* ------------------------------ 4. Distribución ------------------------------ */
 
 function LayoutStep({ depot }: { depot: Depot }) {
-  const { layout, setLayout, plan, commit, select, multi, setMulti, tool, setTool, rackDrawPair, setRackDrawPair } = usePlan()
+  const { layout, setLayout, plan, commit, select, multi, setMulti, tool, setTool, rackDrawPair, setRackDrawPair, clipRacks } = usePlan()
   const config = useDesigner((s) => s.config)
   // la otra orientación, para comparar
   const other = useMemo(() => buildDepot(plan, config, { ...layout, orientation: layout.orientation === 'x' ? 'y' : 'x' }), [plan, config, layout])
@@ -307,37 +307,47 @@ function LayoutStep({ depot }: { depot: Depot }) {
     </>
   )
 
-  // cómo se ubican los racks: solos (la distribución automática) o a mano
+  // cómo se arman los racks: a mano desde un módulo inicial (lo normal) o llenando el depósito solo
   const mode = (
-    <Field label="¿Cómo se ubican los racks?">{() => (
-      <Segmented label="Cómo se ubican los racks" value={depot.manual ? 'mano' : 'solos'}
+    <Field label="¿Cómo armás los racks?">{() => (
+      <Segmented label="Cómo se arman los racks" value={depot.manual ? 'mano' : 'solos'}
         onChange={(v) => {
           if (v === 'mano') { commit((p) => freezeRacks(p, depot.layout.placements)); return }
-          if (!window.confirm('¿Volver a ubicarlos solos? Se pierden los racks que moviste o dibujaste a mano.')) return
-          commit((p) => ({ ...p, racks: undefined })); select(null); if (tool === 'rackdraw') setTool('select')
+          if (depot.layout.placements.length && !window.confirm('¿Llenar el depósito solo? Se pierden los racks que armaste a mano.')) return
+          commit((p) => ({ ...p, racks: undefined })); select(null); if (tool === 'rackdraw' || tool === 'rackpaste') setTool('select')
         }}
-        options={[{ value: 'solos', label: 'Se ubican solos' }, { value: 'mano', label: 'Los ubico yo' }]} />
+        options={[{ value: 'mano', label: 'Lo armo yo' }, { value: 'solos', label: 'Se llena solo' }]} />
     )}</Field>
   )
 
   if (depot.manual) return (
     <div className="cot-fields">
       {mode}
-      <p className="muted small">Arrancás con lo que había. Arrastrá cualquier rack: se alinea con las otras filas y se pega dejando el pasillo justo (Alt: libre). Al elegir uno ves a cuánto queda de las paredes y de los otros racks.</p>
+      <ol className="mod-steps">
+        <li><b>Poné el módulo inicial</b> tocando el plano donde va.</li>
+        <li><b>Sumale módulos</b> con el <i>+</i> de cada punta.</li>
+        <li><b>Copialo y pegalo</b> (Ctrl+C y Ctrl+V): si lo pegás a continuación de otro, se unen.</li>
+      </ol>
       <div className="rack-tools">
-        <Button icon={PenLine} variant={tool === 'rackdraw' ? 'primary' : undefined} onClick={() => setTool(tool === 'rackdraw' ? 'select' : 'rackdraw')} block>
-          {tool === 'rackdraw' ? 'Dibujando filas… (Esc termina)' : 'Dibujar una fila de racks'}
+        <Button icon={Plus} variant={tool === 'rackdraw' ? 'primary' : undefined} onClick={() => setTool(tool === 'rackdraw' ? 'select' : 'rackdraw')} block>
+          {tool === 'rackdraw' ? 'Tocá el plano… (Esc termina)' : 'Poner un módulo inicial'}
         </Button>
-        {tool === 'rackdraw' && (
-          <Segmented label="Fila simple o doble" value={rackDrawPair ? 'doble' : 'simple'} onChange={(v) => setRackDrawPair(v === 'doble')}
-            options={[{ value: 'simple', label: 'Simple' }, { value: 'doble', label: 'Doble (espalda con espalda)' }]} />
+        <Segmented label="Simple o doble" value={rackDrawPair ? 'doble' : 'simple'} onChange={(v) => setRackDrawPair(v === 'doble')}
+          options={[{ value: 'simple', label: 'Simple' }, { value: 'doble', label: 'Doble (espalda con espalda)' }]} />
+        {!!clipRacks?.length && (
+          <Button icon={ClipboardPaste} variant={tool === 'rackpaste' ? 'primary' : undefined} onClick={() => setTool(tool === 'rackpaste' ? 'select' : 'rackpaste')} block>
+            {tool === 'rackpaste' ? 'Tocá donde va la copia… (Esc termina)' : 'Pegar lo copiado'}
+          </Button>
         )}
       </div>
-      {results}
-      <Button variant="ghost" icon={Trash2} block onClick={() => { if (window.confirm('¿Sacar todos los racks y empezar de cero?')) { commit((p) => ({ ...p, racks: [] })); select(null) } }}>
-        Empezar de cero (sacar todos)
-      </Button>
-      <p className="muted small">Si marcás o cambiás una zona libre, una zona de racks o un pasillo, los racks se vuelven a ubicar solos.</p>
+      {!depot.layout.placements.length
+        ? <p className="note note--blue">Todavía no hay racks. Poné el módulo inicial, o elegí "Se llena solo" para ver rápido cuántos entran.</p>
+        : results}
+      {depot.layout.placements.length > 0 && (
+        <Button variant="ghost" icon={Trash2} block onClick={() => { if (window.confirm('¿Sacar todos los racks y empezar de cero?')) { commit((p) => ({ ...p, racks: [] })); select(null) } }}>
+          Sacar todos los racks
+        </Button>
+      )}
     </div>
   )
 
@@ -365,7 +375,7 @@ function LayoutStep({ depot }: { depot: Depot }) {
         <NumberStepper label="Separación de columnas y zonas" meters value={layout.obstacleGap} min={0} max={2000} step={50} onChange={(obstacleGap) => setLayout({ obstacleGap })} />
       </details>
       {results}
-      <p className="muted small">Si movés un rack, pasa solo a "Los ubico yo". También podés elegir "Los ubico yo" y dibujar las filas vos.</p>
+      <p className="muted small">Si movés un rack, pasa solo a "Lo armo yo". Ahí podés partirlo, sumarle módulos o copiarlo y pegarlo.</p>
       {!depot.layout.placements.length && <p className="note note--amber">No entra ningún rack: revisá el plano, el ancho de pasillo o las separaciones.</p>}
     </div>
   )

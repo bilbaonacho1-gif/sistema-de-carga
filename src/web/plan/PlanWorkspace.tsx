@@ -2,7 +2,7 @@
  * Visor del depósito: el plano (2D, editable) o el depósito en 3D (también editable: se toca y
  * se arrastra), con los racks ubicados si los hay. Lo seleccionado tiene su barra de acciones.
  */
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Box, ChevronDown, ChevronRight, Combine, Copy, Focus, Footprints, Forklift, PersonStanding, Scissors, Map as MapIcon, Maximize2, Package, RotateCw, Trash2 } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Box, Lock, LockOpen, ChevronDown, ChevronRight, Combine, Copy, Focus, Footprints, Forklift, PersonStanding, Scissors, Map as MapIcon, Maximize2, Package, RotateCw, Trash2 } from 'lucide-react'
 import { rackNames } from './PlanNotes'
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import type { PlacedRack } from '../../shared/plan/depot'
@@ -26,7 +26,7 @@ const Plan3D = lazy(() => import('./Plan3D').then((x) => ({ default: x.Plan3D })
 const MANY_PALLETS = 1500
 
 export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackLayer; racks?: PlacedRack[]; summary?: ReactNode }) {
-  const { view3d: want3d, setView3d, plan, isolate, setIsolate, selection, walk, setWalk, walkBy, tool, setTool, symbolKind, setSymbolKind } = usePlan()
+  const { view3d: want3d, setView3d, plan, isolate, setIsolate, selection, walk, setWalk, walkBy, tool, setTool, symbolKind, setSymbolKind, lock3d, setLock3d } = usePlan()
   // figuras para ver la escala: se elige cuál y se toca el piso (en el plano o en el 3D) donde va
   const placing = tool === 'symbol' && (symbolKind === 'persona' || symbolKind === 'autoelevador') ? symbolKind : null
   const place = (kind: 'persona' | 'autoelevador') => { if (placing === kind) setTool('select'); else { setSymbolKind(kind); setTool('symbol'); setWalk(null) } }
@@ -64,6 +64,12 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
           <button type="button" className={`vp-btn vp-btn--icon${placing === 'persona' ? ' is-active' : ''}`} aria-pressed={placing === 'persona'} onClick={() => place('persona')} title="Poner una persona para ver la escala" aria-label="Poner una persona para ver la escala"><PersonStanding size={16} aria-hidden /></button>
           <button type="button" className={`vp-btn vp-btn--icon${placing === 'autoelevador' ? ' is-active' : ''}`} aria-pressed={placing === 'autoelevador'} onClick={() => place('autoelevador')} title="Poner un autoelevador para ver la escala" aria-label="Poner un autoelevador para ver la escala"><Forklift size={16} aria-hidden /></button>
         </>}
+        {view3d && !walk && (
+          <button type="button" className={`vp-btn${lock3d ? '' : ' is-active'}`} aria-pressed={!lock3d} onClick={() => setLock3d(!lock3d)}
+            title={lock3d ? 'La edición está bloqueada: nada se mueve al arrastrar. Tocá para poder mover cosas.' : 'Se pueden mover cosas arrastrando. Tocá para bloquear y sólo mirar.'}>
+            {lock3d ? <><Lock size={14} aria-hidden /> Bloqueado</> : <><LockOpen size={14} aria-hidden /> Editando</>}
+          </button>
+        )}
         {view3d && !!racks?.length && (
           <label className="plan-snap plan-stage__loads"><input type="checkbox" checked={showLoads} onChange={(e) => setLoads(e.target.checked)} /> <Package size={14} aria-hidden /> Ver pallets</label>
         )}
@@ -98,7 +104,10 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
           </div>
         )}
         {placing && <p className="plan-stage__hint plan-stage__hint--place">Tocá el piso donde va {placing === 'persona' ? 'la persona' : 'el autoelevador'}{view3d ? '' : ' (después miralo en 3D)'} · Esc termina</p>}
-        {view3d && !isoOn && !walk && !placing && <p className="plan-stage__hint">Tocá algo para elegirlo y arrastralo para moverlo · arrastrá el fondo para girar</p>}
+        {tool === 'rackpaste' && view3d && <p className="plan-stage__hint plan-stage__hint--place">Tocá el piso donde va la copia · Esc termina</p>}
+        {view3d && !isoOn && !walk && !placing && tool !== 'rackpaste' && (
+          <p className="plan-stage__hint">{lock3d ? 'Edición bloqueada: arrastrá para girar la vista · para mover cosas, tocá el candado' : 'Tocá algo para elegirlo y arrastralo para moverlo · arrastrá el fondo para girar'}</p>
+        )}
       </div>
     </section>
   )
@@ -140,7 +149,14 @@ function useKeys3d(active: boolean, layer?: PlanRackLayer) {
       const s = usePlan.getState()
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) s.redo(); else s.undo() }
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); s.redo() }
-      else if (e.key === 'Escape') { if (!s.selection && s.isolate) s.setIsolate(null); else s.select(null) }
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+        // copiar los racks elegidos
+        const ids = selectedRackIds(s.selection)
+        const picked = (layer?.racks ?? []).filter((r) => ids.includes(r.id))
+        if (picked.length) { e.preventDefault(); s.setClipRacks(picked) }
+      }
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') { if (s.clipRacks?.length) { e.preventDefault(); s.setTool('rackpaste') } }
+      else if (e.key === 'Escape') { if (s.tool !== 'select') s.setTool('select'); else if (!s.selection && s.isolate) s.setIsolate(null); else s.select(null) }
       else if ((e.key === 'Delete' || e.key === 'Backspace') && s.selection && s.selection.kind !== 'edge') {
         e.preventDefault()
         const sel = s.selection

@@ -398,7 +398,7 @@ function QuickStart() {
       <summary>Empezar con un depósito rectangular</summary>
       <NumberStepper label="Largo" meters value={L} min={2000} max={500_000} step={1000} typedStep={10} onChange={setL} />
       <NumberStepper label="Ancho" meters value={W} min={2000} max={500_000} step={1000} typedStep={10} onChange={setW} />
-      <Button size="sm" onClick={() => { commit((p) => rectanglePlan(L, W, { wallHeight: p.wallHeight, wallThickness: p.wallThickness })); select(null) }} block>
+      <Button size="sm" onClick={() => { commit((p) => rectanglePlan(L, W, { wallHeight: p.wallHeight, wallThickness: p.wallThickness, racks: p.racks ? [] : undefined })); select(null) }} block>
         Reemplazar el plano por {fmt(L / 1000)} × {fmt(W / 1000)} m
       </Button>
     </details>

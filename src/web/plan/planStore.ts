@@ -3,7 +3,7 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { emptyPlan } from '../../shared/plan/edit'
 import { DEFAULT_LAYOUT, type LayoutOptions } from '../../shared/plan/layout'
-import type { Plan, PlanPoint, PlanSelection, SymbolKind } from '../../shared/plan/types'
+import type { Plan, PlanPoint, PlanSelection, SymbolKind, RackPlacement } from '../../shared/plan/types'
 
 /** Una pieza de un rack: los largueros de un nivel (plane = número de viga, de abajo hacia arriba) o los parantes. */
 /** Persona parada en el depósito: posición en el plano (mm), hacia dónde mira y cuánto levanta la vista. */
@@ -25,7 +25,7 @@ const safeStorage = {
   removeItem: (k: string) => { try { localStorage.removeItem(k) } catch { /* sin memoria */ } },
 }
 
-export type PlanTool = 'select' | 'outline' | 'column' | 'wall' | 'door' | 'zone' | 'area' | 'aisle' | 'measure' | 'dim' | 'text' | 'symbol' | 'calibrate' | 'rackdraw'
+export type PlanTool = 'select' | 'outline' | 'column' | 'wall' | 'door' | 'zone' | 'area' | 'aisle' | 'measure' | 'dim' | 'text' | 'symbol' | 'calibrate' | 'rackdraw' | 'rackpaste'
 
 /** Capas del plano que se pueden apagar (como en AutoCAD). */
 export type PlanLayer = 'grilla' | 'calco' | 'zonas' | 'areas' | 'pasillos' | 'racks' | 'numeros' | 'columnas' | 'tabiques' | 'portones' | 'textos' | 'simbolos' | 'cotasPropias'
@@ -52,11 +52,10 @@ const HISTORY = 80
  * (también si estaban movidos a mano): así nunca quedan racks en una zona libre o fuera de la zona
  * de racks. Ctrl+Z vuelve a como estaba.
  */
-function withMarks(prev: Plan, next: Plan): Plan {
-  if (!next.racks) return next
-  if (prev.zones === next.zones && prev.rackAreas === next.rackAreas && prev.aisles === next.aisles) return next
-  const key = (p: Plan) => JSON.stringify([p.zones, p.rackAreas ?? [], p.aisles ?? []])
-  return key(prev) === key(next) ? next : { ...next, racks: undefined }
+function withMarks(_prev: Plan, next: Plan): Plan {
+  // Los racks armados a mano (módulo por módulo) ya no se pisan con el llenado automático al marcar
+  // una zona o un pasillo: quedan donde están y, si alguno molesta, se avisa en la revisión.
+  return next
 }
 
 interface PlanState {
@@ -112,6 +111,12 @@ interface PlanState {
   setWalk(w: Walk | null): void
   /** Camina `move` mm hacia donde mira y gira `turn` radianes. */
   walkBy(move: number, turn: number): void
+  /** En el 3D, edición bloqueada: se puede girar y elegir, pero nada se mueve arrastrando (así no se corre algo sin querer). */
+  lock3d: boolean
+  setLock3d(v: boolean): void
+  /** Racks copiados (Ctrl+C o "Copiar"), listos para pegar donde se toque el plano. */
+  clipRacks: RackPlacement[] | null
+  setClipRacks(r: RackPlacement[] | null): void
   /** Sección a la vista: el depósito (plano y racks) o el taller de piezas propias. */
   section: 'deposito' | 'piezas'
   setSection(s: 'deposito' | 'piezas'): void
@@ -180,6 +185,10 @@ export const usePlan = create<PlanState>()(
       setPiece: (piece) => set({ piece }),
       section: 'deposito',
       setSection: (section) => set({ section }),
+      lock3d: true,
+      setLock3d: (lock3d) => set({ lock3d }),
+      clipRacks: null,
+      setClipRacks: (clipRacks) => set({ clipRacks }),
       walk: null,
       setWalk: (walk) => set({ walk }),
       walkBy: (move, turn) => set((s) => {
@@ -212,7 +221,7 @@ export const usePlan = create<PlanState>()(
         return out as PlanState
       },
       storage: createJSONStorage(() => safeStorage),
-      partialize: (s) => ({ plan: s.plan, snap: s.snap, snapStep: s.snapStep, osnap: s.osnap, hidden: s.hidden, showCotas: s.showCotas, workspace: s.workspace, view3d: s.view3d, flowStep: s.flowStep, layout: s.layout }),
+      partialize: (s) => ({ plan: s.plan, lock3d: s.lock3d, snap: s.snap, snapStep: s.snapStep, osnap: s.osnap, hidden: s.hidden, showCotas: s.showCotas, workspace: s.workspace, view3d: s.view3d, flowStep: s.flowStep, layout: s.layout }),
       // estados guardados antes de la distribución no tienen estas opciones
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<PlanState>

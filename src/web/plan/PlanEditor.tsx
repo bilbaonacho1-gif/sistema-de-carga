@@ -19,7 +19,7 @@ import './plan-extra.css'
 import { apex, arcOf, edgeLength, edges, nearestOnEdge, planBounds, pointOnEdge, tangentOnEdge, type Edge } from '../../shared/plan/geometry'
 import type { Plan, PlanPoint, PlanSelection } from '../../shared/plan/types'
 import type { RackModuleSize, RackPlacement } from '../../shared/plan/layout'
-import { freezeRacks, moveRack, moveRackWithin, moveRacksBy, rackSelection, racksInBox, removeRacks, selectedRackIds } from '../../shared/plan/racks'
+import { freezeRacks, moveRack, moveRackWithin, moveRacksBy, rackSelection, racksInBox, removeRacks, selectedRackIds, attachRack, extendRack } from '../../shared/plan/racks'
 import { PlanCotas } from './PlanCotas'
 import { Legend, PlanRackNotes, ScaleBar } from './PlanNotes'
 import { PlanAnnotations } from './PlanAnnotations'
@@ -228,6 +228,25 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
     const g = snapRack(box, others, usePlan.getState().layout.aisle, px(10))
     return { rack: { ...base, x: g.x, y: g.y }, guides: g.guides }
   }
+  /**
+   * Los racks copiados, ubicados con su centro donde está el mouse (alineados con las otras filas,
+   * salvo con Alt). Es lo que se ve como fantasma y lo que queda al hacer clic.
+   */
+  const pasteGhosts = (at: PlanPoint, free = false): RackPlacement[] => {
+    const layer = layerRef.current, clip = usePlan.getState().clipRacks
+    if (!layer || !clip?.length) return []
+    const fitted = clip.map((r) => fitPlacement(r, layer.size))
+    const bs = fitted.map(placementRect)
+    const x0 = Math.min(...bs.map((b) => b.x)), y0 = Math.min(...bs.map((b) => b.y))
+    const x1 = Math.max(...bs.map((b) => b.x + b.w)), y1 = Math.max(...bs.map((b) => b.y + b.h))
+    let dx = Math.round(at.x - (x0 + x1) / 2), dy = Math.round(at.y - (y0 + y1) / 2)
+    if (!free) {
+      const first = { ...bs[0], x: bs[0].x + dx, y: bs[0].y + dy }
+      const g = snapRack(first, layer.racks.map(placementRect), usePlan.getState().layout.aisle, px(10))
+      dx += g.x - first.x; dy += g.y - first.y
+    }
+    return fitted.map((r) => ({ ...r, x: r.x + dx, y: r.y + dy }))
+  }
   /** Mientras se dibuja: a 90° del punto anterior si está casi alineado. */
   const ortho = (p: PlanPoint, prev?: PlanPoint): PlanPoint => {
     if (!prev || !snap) return p
@@ -270,13 +289,19 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
       if (drawing && e.key === 'Enter' && typedRef.current) { e.preventDefault(); placeTyped(); return }
       if (e.key === 'Escape') {
         setTyped(''); setMeasure(null); setTwoPoint(null); setCalib(null)
-        if (s.draft.length) s.setDraft([]); else if (s.tool === 'calibrate' || s.tool === 'measure' || s.tool === 'dim' || s.tool === 'rackdraw') s.setTool('select'); else if (!s.selection && s.isolate) s.setIsolate(null); else s.select(null)
+        if (s.draft.length) s.setDraft([]); else if (s.tool === 'calibrate' || s.tool === 'measure' || s.tool === 'dim' || s.tool === 'rackdraw' || s.tool === 'rackpaste') s.setTool('select'); else if (!s.selection && s.isolate) s.setIsolate(null); else s.select(null)
         return
       }
       // copiar, pegar, duplicar
       const racks = layerRef.current?.racks ?? []
       const mod = e.ctrlKey || e.metaKey
-      if (mod && e.key.toLowerCase() === 'c' && s.selection) { const c = copySelection(s.plan, s.selection, racks); if (c) { clipboard = c; pasteCount = 0; e.preventDefault() } return }
+      if (mod && e.key.toLowerCase() === 'c' && s.selection) {
+        const c = copySelection(s.plan, s.selection, racks)
+        if (c) { clipboard = c; pasteCount = 0; e.preventDefault(); s.setClipRacks(c.items.every((i) => i.kind === 'rack') ? c.items.map((i) => i.v as RackPlacement) : null) }
+        return
+      }
+      // pegar racks: se pegan donde se toque el plano (el fantasma sigue al mouse)
+      if (mod && e.key.toLowerCase() === 'v' && s.clipRacks?.length) { e.preventDefault(); s.setTool('rackpaste'); return }
       if (mod && (e.key.toLowerCase() === 'v' || e.key.toLowerCase() === 'd')) {
         if (e.key.toLowerCase() === 'd') { if (!s.selection) return; clipboard = copySelection(s.plan, s.selection, racks); pasteCount = 0 }
         if (!clipboard) return
@@ -425,6 +450,20 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         drag.current = { type: 'rackdraw', a: p }
         setRackDraft({ a: p, b: p })
         break
+      case 'rackpaste': {
+        // pegar lo copiado donde se tocó; si queda a continuación de otro rack, se une a él
+        const layer = layerRef.current, ghosts = pasteGhosts(raw, e.altKey)
+        if (!layer || !ghosts.length) break
+        let ids = ghosts.map(() => newId('r'))
+        commit((pl) => {
+          let next: Plan = freezeRacks(pl, layer.racks)
+          next = { ...next, racks: [...(next.racks ?? []), ...ghosts.map((g, i) => ({ ...g, id: ids[i] }))] }
+          ids = ids.map((id) => { const j = attachRack(next, id, layer.size); if (j) { next = j.plan; return j.id } return id })
+          return next
+        })
+        select(rackSelection([...new Set(ids)]))
+        break
+      }
       case 'measure':
         // primer clic: desde; segundo: hasta (queda fija); tercero: empieza otra medición
         if (!measure || measure.b) setMeasure({ a: p })
@@ -595,15 +634,27 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
     if (d?.type === 'rackdraw') {
       const b = snapPt(toPlan(e.clientX, e.clientY), e.altKey)
       const layer = layerRef.current
-      // un clic sin arrastrar: una fila de 5 módulos desde ahí
+      // un clic sin arrastrar: el módulo inicial (un solo módulo) desde ahí; arrastrando salen varios
       const far = Math.hypot(b.x - d.a.x, b.y - d.a.y) > 800
-      const made = layer && rackFromDrag(d.a, far ? b : { x: d.a.x + 5 * (layer.size.width + layer.size.upright) + layer.size.upright, y: d.a.y })
+      const made = layer && rackFromDrag(d.a, far ? b : { x: d.a.x + layer.size.width + 2 * layer.size.upright, y: d.a.y })
       if (layer && made) {
-        const id = newId('r')
-        commit((pl) => { const base = freezeRacks(pl, layer.racks); return { ...base, racks: [...(base.racks ?? []), { ...made.rack, id }] } })
+        let id = newId('r')
+        commit((pl) => {
+          const base = freezeRacks(pl, layer.racks)
+          const added = { ...base, racks: [...(base.racks ?? []), { ...made.rack, id }] }
+          // si quedó a continuación de otro, se une a él (módulo de continuación)
+          const joined = attachRack(added, id, layer.size)
+          if (joined) id = joined.id
+          return joined?.plan ?? added
+        })
         select({ kind: 'rack', id })
       }
       setRackDraft(null)
+    }
+    if (d?.type === 'rack' && d.started && layerRef.current) {
+      // soltado a continuación de otro rack de la misma fila: se unen y comparten el parante
+      const joined = attachRack(usePlan.getState().plan, d.id, layerRef.current.size, 350)
+      if (joined) { live(() => joined.plan); select({ kind: 'rack', id: joined.id }) }
     }
     if (d?.type === 'box') {
       const b = toPlan(e.clientX, e.clientY)
@@ -907,6 +958,37 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
             </g>
           )
         })()}
+        {/* lo copiado, siguiendo al mouse hasta que se pega con un clic */}
+        {tool === 'rackpaste' && cursor && pasteGhosts(cursor).map((g, i) => {
+          const b = placementRect(g)
+          return (
+            <g key={i} pointerEvents="none">
+              <rect x={b.x} y={b.y} width={b.w} height={b.h} fill="#fdebd3" fillOpacity={0.8} stroke="#e07b1f" strokeWidth={px(2)} strokeDasharray={`${px(8)} ${px(5)}`} />
+              {i === 0 && label({ x: b.x + b.w / 2, y: b.y - px(16) }, 'Clic para pegar', 'rackpaste', '#9a4a0c')}
+            </g>
+          )
+        })}
+        {/* + en cada punta del rack elegido: suma un módulo de continuación de ese lado */}
+        {rackLayer && tool === 'select' && selection?.kind === 'rack' && (() => {
+          const me = rackLayer.racks.find((r) => r.id === selection.id)
+          if (!me) return null
+          const b = placementRect(me), horizontal = me.orientation === 'x'
+          const base = freezeRacks(plan, rackLayer.racks)
+          return (['start', 'end'] as const).map((side) => {
+            const next = extendRack(base, me.id, side, rackLayer.size)
+            const off = px(20) * (side === 'start' ? -1 : 1)
+            const cx = horizontal ? (side === 'start' ? b.x : b.x + b.w) + off : b.x + b.w / 2
+            const cy = horizontal ? b.y + b.h / 2 : (side === 'start' ? b.y : b.y + b.h) + off
+            return (
+              <g key={side} className="no-export" style={{ cursor: next ? 'pointer' : 'not-allowed' }} opacity={next ? 1 : 0.4}
+                onPointerDown={(e) => { e.stopPropagation(); if (next) commit(() => next) }}>
+                <title>{next ? 'Sumar un módulo de este lado' : 'De este lado no entra otro módulo'}</title>
+                <circle cx={cx} cy={cy} r={px(11)} fill="#fff" stroke={RED} strokeWidth={px(2)} />
+                <path d={`M ${cx - px(5)} ${cy} h ${px(10)} M ${cx} ${cy - px(5)} v ${px(10)}`} stroke={RED} strokeWidth={px(2.5)} strokeLinecap="round" />
+              </g>
+            )
+          })
+        })()}
         {/* distancias del rack elegido a lo que tiene alrededor, y guías al moverlo */}
         {rackLayer && tool === 'select' && selection?.kind === 'rack' && (() => {
           const me = rackLayer.racks.find((r) => r.id === selection.id)
@@ -1062,7 +1144,8 @@ const TOOL_HINT: Partial<Record<string, (first: boolean, done: boolean) => strin
   dim: (first) => (first ? 'Ahora clic en el otro extremo de la cota.' : 'Cota: clic en un extremo y clic en el otro. Queda dibujada en el plano.'),
   text: () => 'Texto: clic donde va, escribilo y Enter.',
   symbol: () => 'Símbolo: clic donde va cada uno. Elegí cuál en el panel Herramientas.',
-  rackdraw: () => 'Fila de racks: arrastrá de punta a punta y salen todos los módulos que entran (un clic solo: 5 módulos). Se alinea con las otras filas dejando el pasillo justo. Esc termina.',
+  rackdraw: () => 'Módulo inicial: un clic donde va. Arrastrando de punta a punta salen varios módulos de una. Si queda a continuación de otro rack, se une a él. Esc termina.',
+  rackpaste: () => 'Pegar: clic donde va la copia (se puede pegar varias veces). Si queda a continuación de otro rack, se une a él. Esc termina.',
   calibrate: (first) => (first ? 'Ahora clic en el otro punto de esa medida conocida.' : 'Escala del plano de fondo: clic en dos puntos de una medida que conozcas (por ejemplo, una pared).'),
 }
 

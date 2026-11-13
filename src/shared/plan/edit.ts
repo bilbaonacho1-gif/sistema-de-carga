@@ -209,7 +209,7 @@ export function drawnRect(kind: RectKind, a: PlanPoint, b: PlanPoint, plan: Plan
 
 /** Depósito vacío: así arranca el plano (se crea escribiendo las medidas o dibujándolo). */
 export function emptyPlan(base?: Partial<Plan>): Plan {
-  return { wallHeight: 8000, wallThickness: 200, columns: [], walls: [], doors: [], zones: [], ...base, outline: { points: [], sags: [] }, racks: undefined, rackAreas: [], aisles: [] }
+  return { wallHeight: 8000, wallThickness: 200, columns: [], walls: [], doors: [], zones: [], ...base, outline: { points: [], sags: [] }, racks: [], rackAreas: [], aisles: [] }
 }
 
 /**
