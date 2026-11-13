@@ -131,7 +131,11 @@ export function ScaleBar({ mmPerPx }: { mmPerPx: number }) {
 
 /** Referencias: qué es cada cosa del plano (sólo lo que hay en este plano). */
 export function Legend({ plan, racks, issues }: { plan: Plan; racks: boolean; issues: boolean }) {
-  const [open, setOpen] = useState(() => { try { return localStorage.getItem('sdc-legend') !== '0' } catch { return true } })
+  // abierto o cerrado como se dejó la última vez; si nunca se tocó, abierto sólo en pantallas grandes (en una chica tapa el plano)
+  const [open, setOpen] = useState(() => {
+    const roomy = typeof window === 'undefined' || (window.innerHeight >= 820 && window.innerWidth >= 1280)
+    try { const saved = localStorage.getItem('sdc-legend'); return saved === null ? roomy : saved !== '0' } catch { return roomy }
+  })
   const toggle = () => { setOpen(!open); try { localStorage.setItem('sdc-legend', open ? '0' : '1') } catch { /* sin memoria */ } }
   const items: [string, string][] = [
     ...(racks ? [['rack', 'Rack (fila con su número)'] as [string, string]] : []),

@@ -6,7 +6,7 @@
  * (materiales, presupuesto) sale del depósito completo.
  */
 import { AlertTriangle, Calculator, ChevronLeft, ClipboardPaste, ChevronRight, Download, Lightbulb, Mail, Phone, Plus, Trash2 } from 'lucide-react'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { buildDepot, moduleSize, type Depot } from '../shared/plan/depot'
 import { planArea } from '../shared/plan/geometry'
 import { placementRect } from '../shared/plan/layout'
@@ -62,7 +62,11 @@ export function useDepot(): { depot: Depot; preview: RackStructure } {
 export function DepotFlow({ onQuote }: { onQuote(): void }) {
   const { flowStep } = usePlan()
   // al cambiar de paso se vuelven a ver todos los racks
-  useEffect(() => { usePlan.getState().setIsolate(null) }, [flowStep])
+  useEffect(() => {
+    usePlan.getState().setIsolate(null)
+    // cada paso arranca con sus paneles desde arriba
+    for (const col of document.querySelectorAll('.dock-col__scroll')) col.scrollTo({ top: 0 })
+  }, [flowStep])
   const { depot, preview } = useDepot()
   const plan = usePlan((s) => s.plan)
   const config = useDesigner((s) => s.config)
@@ -75,6 +79,18 @@ export function DepotFlow({ onQuote }: { onQuote(): void }) {
   const selection = usePlan((s) => s.selection)
   const editing = !rackView && !!selection && ((selection.kind !== 'rack' && selection.kind !== 'racks') || !!rackLayer)
   const defaults = { height: config.height, levels: config.levels, config }
+  // al tocar algo en el plano, su panel "Editando" sube a la vista (en pantallas bajas quedaba escondido abajo)
+  const selKey = !editing || !selection ? '' : `${selection.kind}:${'id' in selection ? selection.id : 'ids' in selection ? selection.ids.join() : 'index' in selection ? selection.index : ''}`
+  useEffect(() => {
+    if (!selKey) return
+    const t = requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>('[data-dock-id="editar"]'), col = el?.closest<HTMLElement>('.dock-col__scroll')
+      if (!el || !col) return
+      const top = el.getBoundingClientRect().top - col.getBoundingClientRect().top + col.scrollTop - 6
+      col.scrollTo({ top, behavior: 'smooth' })
+    })
+    return () => cancelAnimationFrame(t)
+  }, [selKey])
   const area = planArea(plan.outline)
   // revisión del plano (sólo con racks a la vista se revisan los racks)
   const layoutOpts = usePlan((s) => s.layout)
@@ -100,11 +116,13 @@ export function DepotFlow({ onQuote }: { onQuote(): void }) {
   }
   // módulos del panel en este paso (como en Photoshop: cada uno se achica o se saca por separado)
   const modules = MODULES[flowStep]
+  const panelsMoved = useDock((st) => Object.keys(st.panels).length > 0)
   const defs: { id: string; title: string; collapsed?: boolean; body: React.ReactNode }[] = [
     { id: 'pasos', title: `Paso ${FLOW.indexOf(flowStep) + 1} · ${META[flowStep].title}`, body: <>
       <Steps />
       <StepNav />
-      <button type="button" className="link-btn dock-reset" onClick={() => useDock.getState().reset()}>Volver a ordenar los paneles</button>
+      {/* sólo si se movió o se achicó algún panel */}
+      {panelsMoved && <button type="button" className="link-btn dock-reset" onClick={() => useDock.getState().reset()}>Volver a ordenar los paneles</button>}
     </> },
     ...(editing ? [{ id: 'editar', title: 'Editando', body: selection?.kind === 'rack' && rackLayer ? <RackEditor rackLayer={rackLayer} defaults={defaults} />
       : selection?.kind === 'racks' && rackLayer ? <MultiRackEditor rackLayer={rackLayer} defaults={defaults} /> : <Selection /> }] : []),
@@ -182,34 +200,46 @@ const MODULES: Record<FlowStep, { id: string; title: string; collapsed?: boolean
 
 /* ------------------------------ Pasos ------------------------------ */
 
+/** Cambiar de paso a mano: lo que estaba elegido en el plano se suelta (cada paso arranca limpio). */
+const goStep = (id: FlowStep) => { const s = usePlan.getState(); s.select(null); s.setFlowStep(id) }
+
 function Steps() {
-  const { flowStep, setFlowStep } = usePlan()
+  const flowStep = usePlan((s) => s.flowStep)
   const i = FLOW.indexOf(flowStep)
+  // la ayuda del paso se puede esconder (queda como se dejó); en una pantalla baja arranca escondida para dejar lugar
+  const [help, setHelp] = useState(() => {
+    const roomy = typeof window === 'undefined' || window.innerHeight >= 720
+    try { const saved = localStorage.getItem('sdc-ayuda-paso'); return saved === null ? roomy : saved === '1' } catch { return roomy }
+  })
+  const toggleHelp = () => { setHelp(!help); try { localStorage.setItem('sdc-ayuda-paso', help ? '0' : '1') } catch { /* sin memoria */ } }
   return (
     <>
       <ol className="cot-steps" aria-label="Pasos">
         {FLOW.map((id, j) => (
           <li key={id}>
-            <button type="button" className={`cot-step${j === i ? ' is-current' : ''}${j < i ? ' is-done' : ''}`} aria-current={j === i ? 'step' : undefined} onClick={() => setFlowStep(id)} title={META[id].title}>
+            <button type="button" className={`cot-step${j === i ? ' is-current' : ''}${j < i ? ' is-done' : ''}`} aria-current={j === i ? 'step' : undefined} onClick={() => goStep(id)} title={META[id].title}>
               <span className="cot-step__n">{j + 1}</span>
               <span className="cot-step__t">{META[id].short}</span>
             </button>
           </li>
         ))}
       </ol>
-      <p className="cot-help"><Lightbulb size={16} aria-hidden /><span>{META[flowStep].help}</span></p>
+      {help
+        ? <p className="cot-help"><Lightbulb size={16} aria-hidden /><span>{META[flowStep].help}</span>
+            <button type="button" className="cot-help__x" onClick={toggleHelp} aria-label="Esconder la ayuda de este paso" title="Esconder la ayuda">×</button></p>
+        : <button type="button" className="cot-help-more" onClick={toggleHelp}><Lightbulb size={14} aria-hidden /> ¿Qué hago en este paso?</button>}
     </>
   )
 }
 
 function StepNav() {
-  const { flowStep, setFlowStep } = usePlan()
+  const flowStep = usePlan((s) => s.flowStep)
   const i = FLOW.indexOf(flowStep)
   const next = FLOW[i + 1]
   return (
     <div className="cot-nav">
-      <Button variant="ghost" icon={ChevronLeft} disabled={i === 0} onClick={() => setFlowStep(FLOW[i - 1])}>Anterior</Button>
-      {next && <Button variant="primary" onClick={() => setFlowStep(next)}>{META[next].short} <ChevronRight size={16} aria-hidden /></Button>}
+      <Button variant="ghost" icon={ChevronLeft} disabled={i === 0} onClick={() => goStep(FLOW[i - 1])}>Anterior</Button>
+      {next && <Button variant="primary" onClick={() => goStep(next)}>{META[next].short} <ChevronRight size={16} aria-hidden /></Button>}
     </div>
   )
 }
