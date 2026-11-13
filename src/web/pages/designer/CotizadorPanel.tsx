@@ -246,14 +246,21 @@ export function BeamHeights({ s }: { s: RackStructure }) {
       {beams.map((b, i) => {
         const lv = levels[b.index]
         return (
-          <div key={b.index} className={`beam-heights__row${pickedBeam === i ? ' is-picked' : ''}`} onFocusCapture={() => pickBeam(i)}>
+          <div key={b.index} className={`beam-heights__row beam-heights__row--x${pickedBeam === i ? ' is-picked' : ''}`} onFocusCapture={() => pickBeam(i)}>
             <NumberStepper label={`Viga ${i + 1}${i === beams.length - 1 ? ' (la de arriba)' : ''}`} meters value={b.elevation} min={50} max={s.config.height} step={50} typedStep={50}
               onChange={(v) => setAt(i, v)}
               hint={Number.isFinite(lv.clearHeight) ? `Libre hasta la viga de arriba: ${metros(lv.clearHeight)}` : undefined} />
+            {/* sacar esta viga: queda un nivel menos (las demás no se mueven) */}
+            <button type="button" className="rack-part__x" disabled={beams.length <= 1} aria-label={`Sacar la viga ${i + 1}`}
+              title={beams.length <= 1 ? 'Es la última viga' : 'Sacar esta viga (queda un nivel menos)'}
+              onClick={() => { update({ levels: config.levels - 1, beamElevations: beams.filter((_, k) => k !== i).map((x) => x.elevation) }); pickBeam(null) }}>
+              <Trash2 size={15} aria-hidden />
+            </button>
           </div>
         )
       })}
       {custom && <Button size="sm" variant="ghost" onClick={() => { update({ beamElevations: undefined }); pickBeam(null) }}>Repartir parejas otra vez</Button>}
+      <p className="muted small">Esto vale para todos los módulos. Para sacarle una viga a un módulo solo (por ejemplo, para que pase el autoelevador), andá a Distribución, tocá el rack y elegí el módulo.</p>
     </details>
   )
 }

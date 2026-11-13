@@ -727,3 +727,15 @@
 .mod-steps b { color: var(--ink); }
 .mod-steps i { display: inline-grid; place-items: center; width: 18px; height: 18px; border: 1.5px solid var(--red); border-radius: 50%; color: var(--red); font-style: normal; font-weight: 800; line-height: 1; }
 .swatch--dot { padding: 0 6px; }
+
+/* módulos de un rack: se elige uno para cambiarle o sacarle vigas */
+.mod-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.mod-chips span { margin-right: 4px; font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
+.mod-chip { position: relative; min-width: 30px; height: 30px; padding: 0 6px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font: 700 12.5px var(--f-mono); color: var(--ink-2); cursor: pointer; }
+.mod-chip:hover { border-color: var(--ink-2); }
+.mod-chip.is-on { border-color: #e0a800; background: #fff1b8; color: var(--ink); }
+.mod-chip.is-own::after { content: ''; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--red); }
+.rack-part__beam, .beam-heights__row--x { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: start; }
+.rack-part__x { margin-top: 24px; width: 36px; height: 40px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink-2); cursor: pointer; }
+.rack-part__x:hover:not(:disabled) { border-color: var(--red); color: var(--red); background: var(--red-tint); }
+.rack-part__x:disabled { opacity: .35; cursor: not-allowed; }

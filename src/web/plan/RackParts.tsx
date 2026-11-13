@@ -93,36 +93,39 @@ export function RackParts({ r, rackLayer, config }: { r: RackPlacement; rackLaye
   if (mine?.kind === 'beam' && row) {
     const mod = row.modules.find((x) => x.key === mine.module)
     const mbeams = mod?.levels.filter((l) => l.hasBeam) ?? []
-    const b = mbeams[mine.plane]
-    if (mod && b) {
+    if (mod) {
       const m = mine.module, o = r.mods?.[m]
+      const elevs = mbeams.map((x) => x.elevation)
       pickedCard = (
-        <section className="rack-part is-picked" aria-label="Viga elegida">
-          <h4>Viga elegida · módulo {m + 1}, viga {mine.plane + 1} desde abajo</h4>
-          <NumberStepper label="Altura de esta viga (desde el piso)" meters value={b.elevation} min={50} max={mod.height} step={50} typedStep={50}
-            onChange={(v) => setMod(m, { beamElevations: withBeamAt(mbeams.map((x) => x.elevation), mine.plane, v, mod.height) })}
-            hint={freeHint(mod.levels[b.index])} />
-          <NumberStepper label="Largo de esta viga" meters value={mod.width} min={L.width.min} max={L.width.max} step={100} typedStep={10}
+        <section className="rack-part is-picked" aria-label="Módulo elegido">
+          <h4>Módulo {m + 1} de {r.modules}</h4>
+          <p className="rack-part__sub">Sus vigas, de abajo hacia arriba</p>
+          {mbeams.map((b, i) => (
+            <div key={b.index} className={`rack-part__row rack-part__beam${mine.plane === i ? ' is-picked' : ''}`}
+              onFocusCapture={() => { if (mine.plane !== i) setPiece({ rack: r.id, kind: 'beam', module: m, plane: i }) }}>
+              <NumberStepper label={`Viga ${i + 1}${i === mbeams.length - 1 ? ' (la de arriba)' : ''}`} meters value={b.elevation} min={50} max={mod.height} step={50} typedStep={50}
+                onChange={(v) => setMod(m, { beamElevations: withBeamAt(elevs, i, v, mod.height) })} hint={freeHint(mod.levels[b.index])} />
+              {/* sacar sólo esta viga (por ejemplo, la de abajo para que pase el autoelevador) */}
+              <button type="button" className="rack-part__x" disabled={mbeams.length <= 1} aria-label={`Sacar la viga ${i + 1} de este módulo`}
+                title={mbeams.length <= 1 ? 'Es la última viga de este módulo: para dejar el hueco entero, partí el rack' : 'Sacar esta viga (y los pallets que apoyan en ella)'}
+                onClick={() => { setMod(m, { beamElevations: elevs.filter((_, k) => k !== i) }); setPiece({ rack: r.id, kind: 'beam', module: m, plane: -1 }) }}>
+                <Trash2 size={15} aria-hidden />
+              </button>
+            </div>
+          ))}
+          {config.floorStorage && (
+            <Switch label="Paso libre abajo" checked={!!o?.noFloor} onChange={(v) => setMod(m, { noFloor: v || undefined })}
+              hint="Sin pallets en el piso de este módulo, para que pase el autoelevador." />
+          )}
+          <NumberStepper label="Largo de las vigas de este módulo" meters value={mod.width} min={L.width.min} max={L.width.max} step={100} typedStep={10}
             onChange={(v) => setMod(m, { width: v === width ? undefined : v })}
-            hint={`Es el hueco entre dos parantes: cambia también las otras vigas de este módulo${o?.width ? '' : ` · como el resto (${metros(width)})`}.`} />
-          <Field label="Perfil de esta viga" hint={o?.beamId ? 'Propio de este módulo (todas sus vigas)' : `Como el resto · ahora ${mod.beam.name}`}>{(id) => (
+            hint={o?.width ? 'Propio de este módulo' : `Como el resto (${metros(width)})`} />
+          <Field label="Perfil de las vigas de este módulo" hint={o?.beamId ? 'Propio de este módulo' : `Como el resto · ahora ${mod.beam.name}`}>{(id) => (
             <Select id={id} value={o?.beamId ?? ''} onChange={(e) => setMod(m, { beamId: e.target.value || undefined })}>
               <option value="">Como el resto</option>
               {all.beams.map((p) => <option key={p.id} value={p.id}>{p.name}{isOwnProfile(config, p.id) ? ' (mía)' : ''}</option>)}
             </Select>
           )}</Field>
-          {/* borrar sólo esta viga (por ejemplo, las de abajo de un módulo para que pase el autoelevador) */}
-          <div className="rack-part__del">
-            <button type="button" className="vp-btn" disabled={mbeams.length <= 1}
-              title={mbeams.length <= 1 ? 'Es la última viga de este módulo: para dejar el hueco entero, partí el rack' : 'Saca sólo esta viga (y los pallets que apoyan en ella)'}
-              onClick={() => { setMod(m, { beamElevations: mbeams.filter((_, k) => k !== mine.plane).map((x) => x.elevation) }); setPiece(null) }}>
-              <Trash2 size={14} aria-hidden /> Borrar esta viga
-            </button>
-          </div>
-          {config.floorStorage && (
-            <Switch label="Paso libre abajo" checked={!!o?.noFloor} onChange={(v) => setMod(m, { noFloor: v || undefined })}
-              hint="Sin pallets en el piso de este módulo, para que pase el autoelevador." />
-          )}
           {o && <button type="button" className="link-btn" onClick={() => setMod(m, { width: undefined, beamId: undefined, beamElevations: undefined, noFloor: undefined })}>Dejar este módulo como el resto</button>}
         </section>
       )
@@ -152,6 +155,19 @@ export function RackParts({ r, rackLayer, config }: { r: RackPlacement; rackLaye
         : <button type="button" className="vp-btn rack-parts__go" onClick={() => { setIsolate([r.id]); setView3d(true) }}>
             <Focus size={14} aria-hidden /> Verlo solo en 3D y tocar sus piezas
           </button>}
+      {/* elegir un módulo del rack (sin ir al 3D) para cambiarle o sacarle vigas */}
+      <div className="mod-chips" role="group" aria-label="Módulos de este rack">
+        <span>Módulo</span>
+        {Array.from({ length: r.modules }, (_, m) => {
+          const on = mine?.kind === 'beam' && mine.module === m
+          return (
+            <button key={m} type="button" className={`mod-chip${on ? ' is-on' : ''}${r.mods?.[m] ? ' is-own' : ''}`} aria-pressed={on}
+              title={r.mods?.[m] ? `Módulo ${m + 1} (con cambios propios)` : `Módulo ${m + 1}`}
+              onClick={() => setPiece(on ? null : { rack: r.id, kind: 'beam', module: m, plane: -1 })}>{m + 1}</button>
+          )
+        })}
+      </div>
+      {!pickedCard && <p className="muted small">Elegí un módulo para cambiarle o sacarle vigas (por ejemplo, para que pase el autoelevador).</p>}
       {pickedCard}
       {note && <p className="rack-editor__issue"><AlertTriangle size={14} aria-hidden /> {note}</p>}
       {changed > 0 && <p className="muted small">{changed === 1 ? 'Una pieza tiene' : `${changed} piezas tienen`} medidas propias.</p>}
