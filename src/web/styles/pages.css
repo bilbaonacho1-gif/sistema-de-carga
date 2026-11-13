@@ -740,3 +740,8 @@
 .rack-part__x:hover:not(:disabled) { border-color: var(--red); color: var(--red); background: var(--red-tint); }
 .rack-part__x:disabled { opacity: .35; cursor: not-allowed; }
 .rack-part__sum { margin: 0; font-size: 12.5px; color: var(--ink-2); }
+.beam-heights__floor { align-items: center; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 10px; }
+.beam-heights__floor div { display: flex; flex-direction: column; }
+.beam-heights__floor span { font-size: 12px; color: var(--ink-2); }
+.beam-heights__floor .rack-part__x { margin-top: 0; }
+.beam-heights__nofloor { margin: 0; padding: 8px 10px; border-radius: 10px; background: var(--steel); font-size: 13px; }

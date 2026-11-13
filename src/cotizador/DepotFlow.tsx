@@ -242,9 +242,10 @@ function RackStep({ s }: { s: RackStructure }) {
         <Segmented label="Niveles" value={String(config.levels)} onChange={(v) => update({ levels: Number(v) })}
           options={Array.from({ length: L.levels.max }, (_, i) => i + 1).filter((n) => n >= minLevels).map((n) => ({ value: String(n), label: String(n) }))} />
       )}</Field>
-      <Switch label="Usar el piso como primer nivel" checked={config.floorStorage}
-        onChange={(floorStorage) => update({ floorStorage, levels: Math.max(config.levels, floorStorage ? 2 : 1) })}
-        hint={`${plural(s.beamLevels, 'plano', 'planos')} de vigas`} />
+      {/* al sacar o poner el piso, las vigas quedan como están: sólo cambia si hay pallets abajo */}
+      <Switch label="Pallets en el piso" checked={config.floorStorage}
+        onChange={(floorStorage) => update({ floorStorage, levels: floorStorage ? Math.min(L.levels.max, config.levels + 1) : Math.max(1, config.levels - 1) })}
+        hint={config.floorStorage ? `El piso es el primer nivel · ${plural(s.beamLevels, 'plano', 'planos')} de vigas arriba` : `Abajo queda libre · ${plural(s.beamLevels, 'plano', 'planos')} de vigas`} />
       <BeamHeights s={s} />
       <details className="plan-more">
         <summary>Parante y viga</summary>

@@ -243,6 +243,18 @@ export function BeamHeights({ s }: { s: RackStructure }) {
     <details className="plan-more beam-heights" open={pickedBeam !== null || custom}>
       <summary>Altura de cada viga{custom ? ' (a mano)' : ''}</summary>
       <p className="muted small">De abajo hacia arriba, medida desde el piso hasta la viga. También podés tocar una viga en el 3D.</p>
+      {/* el piso también es un nivel: se saca con su tacho y abajo queda libre (las vigas no se mueven) */}
+      {config.floorStorage ? (
+        <div className="beam-heights__row beam-heights__row--x beam-heights__floor">
+          <div><strong>Piso</strong><span>Pallets apoyados en el piso</span></div>
+          <button type="button" className="rack-part__x" aria-label="Sacar los pallets del piso" title="Sacar los pallets del piso: abajo queda libre"
+            onClick={() => update({ floorStorage: false, levels: Math.max(1, config.levels - 1) })}>
+            <Trash2 size={15} aria-hidden />
+          </button>
+        </div>
+      ) : (
+        <p className="beam-heights__nofloor">Abajo queda libre (sin pallets en el piso). <button type="button" className="link-btn" onClick={() => update({ floorStorage: true, levels: Math.min(L.levels.max, config.levels + 1) })}>Volver a ponerlos</button></p>
+      )}
       {beams.map((b, i) => {
         const lv = levels[b.index]
         return (
