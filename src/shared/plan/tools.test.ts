@@ -271,6 +271,19 @@ describe('el pórtico por sus piezas: columnas, bases y riendas', () => {
     expect(s.counts.basePlates).toBe(plain.counts.basePlates - 1)
     expect(s.counts.anchorBolts).toBe(plain.counts.anchorBolts - 4)
   })
+  it('lo que se elige para los pórticos en el módulo inicial vale para todos, salvo el que tiene lo suyo', async () => {
+    const { placementStructure } = await import('./depot')
+    const { DEFAULT_CONFIGURATION } = await import('../rack/technicalSpecs')
+    const plain = placementStructure(DEFAULT_CONFIGURATION, rack({ modules: 3 }))
+    const d0 = plain.rows[0].frames[0].diagonals, h = DEFAULT_CONFIGURATION.height
+    const config = { ...DEFAULT_CONFIGURATION, frameDefault: { diagonals: d0 + 2, backHeight: h + 1000 } }
+    const s = placementStructure(config, rack({ modules: 3, frameParts: { 2: { diagonals: d0 } } }))
+    const f = (k: number) => s.rows[0].frames.find((x) => x.key === k)!
+    expect([f(0).diagonals, f(1).diagonals, f(2).diagonals, f(3).diagonals]).toEqual([d0 + 2, d0 + 2, d0, d0 + 2])
+    // la columna de atrás más alta va en todos (también en el que tiene sus propias riendas)
+    expect(s.rows[0].frames.every((x) => x.columns[0] === h && x.columns[1] === h + 1000)).toBe(true)
+    expect(s.counts.diagonals).toBe(plain.counts.diagonals + 2 * 3)
+  })
   it('al partir un rack, las riendas propias siguen con su pórtico', async () => {
     const { splitRack } = await import('./racks')
     const size = { width: 2700, depth: 1100, upright: 100, backToBackGap: 200 }

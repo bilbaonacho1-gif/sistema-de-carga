@@ -49,6 +49,8 @@ export interface RackConfiguration {
   frameHeights?: Record<number, number>
   /** Piezas propias de algunos pórticos (índice → riendas y bases). Si no, las que salen de la regla. */
   frameParts?: Record<number, FrameParts>
+  /** Cómo son TODOS los pórticos mientras no tengan piezas propias (se elige en el módulo inicial). */
+  frameDefault?: FrameParts
   /** Cómo es la carga del pallet: un bloque, o cajas apiladas (ver shared/rack/load.ts). */
   load?: { mode: 'block' | 'boxes'; boxW: number; boxD: number; boxH: number; boxKg: number; maxHeight: number }
   /** Perfiles elegidos a mano. 'auto' = el motor elige el más liviano que alcanza. */

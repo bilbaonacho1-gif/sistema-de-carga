@@ -11,7 +11,7 @@ interface Step { target: string; title: string; text: string }
 
 export const TOUR: Step[] = [
   { target: '.plan-editor', title: 'El plano del depósito', text: 'Acá se dibuja el depósito. Empezá escribiendo el largo y el ancho, o dibujalo a mano. Todo se mide en metros y cada cuadrito de fondo es 1 m.' },
-  { target: '[data-dock-id="pasos"]', title: 'Los 6 pasos', text: 'Depósito, rack, carga, distribución, accesorios y resumen. Podés ir y volver cuando quieras; con Siguiente pasás al que sigue.' },
+  { target: '[data-dock-id="pasos"]', title: 'Los 5 pasos', text: 'Depósito, rack (con sus accesorios), carga, distribución y resumen. Podés ir y volver cuando quieras; con Siguiente pasás al que sigue.' },
   { target: '[data-dock-id="herramientas"]', title: 'Herramientas', text: 'Contorno, columnas, tabiques, portones, zonas libres, zonas de racks y pasillos. También medir, poner cotas, textos y símbolos (matafuegos, salidas…).' },
   { target: '.depot-strip', title: 'Cuántos entran', text: 'Posiciones, filas, módulos y capacidad del depósito. Se actualiza solo con cada cambio.' },
   { target: '.plan-stage__bar .segmented', title: 'Plano o 3D', text: 'Pasá del plano al 3D para ver el depósito armado. En los dos se toca cualquier cosa para elegirla y arrastrarla.' },

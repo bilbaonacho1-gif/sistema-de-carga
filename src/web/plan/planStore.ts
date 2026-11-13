@@ -31,7 +31,7 @@ export type PlanTool = 'select' | 'outline' | 'column' | 'wall' | 'door' | 'zone
 export type PlanLayer = 'grilla' | 'calco' | 'zonas' | 'areas' | 'pasillos' | 'racks' | 'numeros' | 'columnas' | 'tabiques' | 'portones' | 'textos' | 'simbolos' | 'cotasPropias'
 
 /** Pasos del cotizador de depósitos: primero el lugar, después el rack y su distribución. */
-export const FLOW = ['deposito', 'rack', 'carga', 'distribucion', 'accesorios', 'resumen'] as const
+export const FLOW = ['deposito', 'rack', 'carga', 'distribucion', 'resumen'] as const
 export type FlowStep = (typeof FLOW)[number]
 
 /** El plano arranca vacío: el depósito se crea escribiendo sus medidas o dibujándolo. */
@@ -230,7 +230,9 @@ export const usePlan = create<PlanState>()(
       // estados guardados antes de la distribución no tienen estas opciones
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<PlanState>
-        return { ...current, ...p, layout: { ...DEFAULT_LAYOUT, ...p.layout } }
+        // el paso "Accesorios" ahora es parte del paso "Rack"
+        const flowStep = p.flowStep && (FLOW as readonly string[]).includes(p.flowStep) ? p.flowStep : p.flowStep ? 'rack' : current.flowStep
+        return { ...current, ...p, flowStep, layout: { ...DEFAULT_LAYOUT, ...p.layout } }
       },
     },
   ),

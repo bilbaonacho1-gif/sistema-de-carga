@@ -408,7 +408,9 @@ function StructureStep({ s }: { s: RackStructure }) {
  * días) y lo demás plegado, con un resumen de lo elegido. En el depósito, `counts` trae las
  * cantidades de todos los racks juntos.
  */
-export function AccessoriesStep({ s, counts, multiRow }: { s: RackStructure; counts?: ComponentCounts; multiRow?: boolean }) {
+export function AccessoriesStep({ s, counts, multiRow, closed }: { s: RackStructure; counts?: ComponentCounts; multiRow?: boolean
+  /** Arranca con los grupos cerrados (salvo los que ya tienen algo elegido). */
+  closed?: boolean }) {
   const { updateAccessories, config } = useDesigner()
   const a = s.accessories
   const c = counts ?? s.counts
@@ -417,7 +419,7 @@ export function AccessoriesStep({ s, counts, multiRow }: { s: RackStructure; cou
   const on = (...flags: boolean[]) => { const n = flags.filter(Boolean).length; return n ? `${n} ${n === 1 ? 'elegido' : 'elegidos'}` : 'nada elegido' }
   return (
     <div className="cot-fields">
-      <AccGroup title="Protección" summary={on(a.protectors !== 'none', a.guardrails)} defaultOpen>
+      <AccGroup title="Protección" summary={on(a.protectors !== 'none', a.guardrails)} defaultOpen={!closed || a.protectors !== 'none' || a.guardrails}>
         <Field label="Protectores de columna" hint={`Del lado del pasillo, contra golpes de autoelevador${qty(c.protectors)}.`}>{() => (
           <Segmented label="Protectores" value={a.protectors} onChange={(protectors) => set({ protectors })}
             options={[{ value: 'none', label: 'Sin' }, { value: 'ends', label: 'Extremos' }, { value: 'all', label: 'Todos' }]} />
@@ -477,7 +479,7 @@ export function AccessoriesStep({ s, counts, multiRow }: { s: RackStructure; cou
 }
 
 /** Un grupo de accesorios que se abre y se cierra; cerrado muestra un resumen de lo elegido. */
-function AccGroup({ title, summary, defaultOpen = false, children }: { title: string; summary: string; defaultOpen?: boolean; children: ReactNode }) {
+export function AccGroup({ title, summary, defaultOpen = false, children }: { title: string; summary: string; defaultOpen?: boolean; children: ReactNode }) {
   // se abre solo la primera vez si ya tiene algo elegido; después manda quien lo usa
   const [open, setOpen] = useState(defaultOpen)
   return (

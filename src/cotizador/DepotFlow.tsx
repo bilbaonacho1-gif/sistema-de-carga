@@ -1,6 +1,6 @@
 /**
  * COTIZADOR DE DEPÓSITOS, paso a paso:
- *   1 Depósito → 2 Rack → 3 Carga → 4 Distribución → 5 Accesorios → 6 Resumen
+ *   1 Depósito → 2 Rack (el módulo inicial y sus accesorios) → 3 Carga → 4 Distribución → 5 Resumen
  * Primero se dibuja el lugar; el rack es el módulo que se repite; la distribución calcula
  * cuántos racks entran en ESE depósito (filas, pasillos, columnas y zonas) y todo lo demás
  * (materiales, presupuesto) sale del depósito completo.
@@ -15,11 +15,11 @@ import { calculateRackStructure } from '../shared/rack/calculateRackStructure'
 import { beamCapacityForSpan } from '../shared/rack/rules'
 import { CONTACT, DESIGN_RULES, OFFICIAL_REFERENCE } from '../shared/rack/technicalSpecs'
 import { isOwnProfile, profilesOf } from '../shared/rack/profiles'
-import type { RackStructure } from '../shared/rack/types'
+import type { FrameParts, RackStructure } from '../shared/rack/types'
 import { NumberStepper, Switch } from '../web/components/fields'
 import { Button, Field, KeyValue, Segmented, Select } from '../web/components/ui'
 import { fmt, plural } from '../web/lib/format'
-import { AccessoriesStep, BeamHeights, LoadStep, MaterialsList, downloadMaterials } from '../web/pages/designer/CotizadorPanel'
+import { AccessoriesStep, AccGroup, BeamHeights, LoadStep, MaterialsList, downloadMaterials } from '../web/pages/designer/CotizadorPanel'
 import { Viewport, Warnings } from '../web/pages/designer/CotizadorView'
 import { useDesigner } from '../web/pages/designer/designerStore'
 import { MarkTools, PlanDepotData, PlanToolbar, Selection } from '../web/plan/PlanPanel'
@@ -36,10 +36,9 @@ const kg = (n: number) => `${fmt(n)} kg`
 
 const META: Record<FlowStep, { title: string; short: string; help: string }> = {
   deposito: { title: 'Tu depósito', short: 'Depósito', help: 'Dibujá el lugar: contorno, columnas, portones y las zonas donde no van racks. Si ya sabés dónde van los racks y los pasillos, marcalos con "Zona de racks" y "Pasillo". Todo lo demás se calcula a partir de este plano.' },
-  rack: { title: 'Cómo es el módulo', short: 'Rack', help: 'Así es el módulo inicial: largo de viga, profundidad, altura y niveles. Después lo ponés en el depósito, le sumás módulos y lo copiás.' },
+  rack: { title: 'El módulo inicial', short: 'Rack', help: 'Este es el módulo inicial, el más importante: acá le cambiás todo (medidas, cada viga, los pórticos, los perfiles y los accesorios). Después lo ponés en el depósito, le sumás módulos y lo copiás.' },
   carga: { title: 'Pallet y carga', short: 'Carga', help: 'El pallet define cuántos entran por módulo. Si el cliente usa uno especial, elegí "A medida".' },
   distribucion: { title: 'Cuántos racks entran', short: 'Distribución', help: 'Armá los racks desde un módulo inicial: lo ponés en el plano, le sumás módulos y lo copiás y pegás donde quieras. Si preferís, el sistema también llena el depósito solo.' },
-  accesorios: { title: 'Accesorios', short: 'Accesorios', help: 'Protección, seguridad y piso de los niveles, para todos los racks del depósito.' },
   resumen: { title: 'Resumen y materiales', short: 'Resumen', help: 'El depósito completo: racks, posiciones y todas las piezas. Desde acá se pide el presupuesto.' },
 }
 
@@ -117,6 +116,10 @@ export function DepotFlow({ onQuote }: { onQuote(): void }) {
       {m.id === 'calco' && <CalcoPanel />}
       {m.id === 'revision' && <ChecksPanel checks={checks} />}
       {m.id === 'exportar' && <ExportPanel racks={showRacks ? depot.layout.placements : []} size={size} sheet={sheet} />}
+      {m.id === 'accesorios' && <>
+        <p className="muted small">Protección, pisos, refuerzos, señalización y colores. Van en todos los racks del depósito.</p>
+        <AccessoriesStep s={depot.sample} counts={depot.counts} multiRow={depot.layout.rows > 1} closed />
+      </>}
       {m.id === 'paso' && <>
         <StepBody step={flowStep} depot={depot} preview={preview} onQuote={onQuote} />
         {rackView && <Warnings warnings={preview.warnings.filter((w) => w.code !== 'free-positions')} />}
@@ -167,14 +170,13 @@ const MODULES: Record<FlowStep, { id: string; title: string; collapsed?: boolean
     { id: 'calco', title: 'Calcar un plano', collapsed: true }, { id: 'capas', title: 'Capas', collapsed: true },
     { id: 'revision', title: 'Revisión del plano' }, { id: 'exportar', title: 'Exportar', collapsed: true },
   ],
-  rack: [{ id: 'paso', title: 'El rack' }],
+  rack: [{ id: 'paso', title: 'El módulo inicial' }, { id: 'accesorios', title: 'Accesorios' }],
   carga: [{ id: 'paso', title: 'Pallet y carga' }],
   distribucion: [
     { id: 'marcar', title: 'Dónde van los racks' }, { id: 'paso', title: 'Distribución' },
     { id: 'herramientas', title: 'Herramientas', collapsed: true }, { id: 'capas', title: 'Capas', collapsed: true },
     { id: 'revision', title: 'Revisión del plano' }, { id: 'exportar', title: 'Exportar', collapsed: true },
   ],
-  accesorios: [{ id: 'paso', title: 'Accesorios' }],
   resumen: [{ id: 'paso', title: 'Resumen y materiales' }, { id: 'revision', title: 'Revisión del plano' }, { id: 'exportar', title: 'Exportar' }],
 }
 
@@ -218,7 +220,6 @@ function StepBody({ step, depot, preview, onQuote }: { step: FlowStep; depot: De
     case 'rack': return <RackStep s={preview} />
     case 'carga': return <LoadStep s={preview} />
     case 'distribucion': return <LayoutStep depot={depot} />
-    case 'accesorios': return <AccessoriesStep s={depot.sample} counts={depot.counts} multiRow={depot.layout.rows > 1} />
     case 'resumen': return <SummaryStep depot={depot} onQuote={onQuote} />
   }
 }
@@ -247,8 +248,8 @@ function RackStep({ s }: { s: RackStructure }) {
         onChange={(floorStorage) => update({ floorStorage, levels: floorStorage ? Math.min(L.levels.max, config.levels + 1) : Math.max(1, config.levels - 1) })}
         hint={config.floorStorage ? `El piso es el primer nivel · ${plural(s.beamLevels, 'plano', 'planos')} de vigas arriba` : `Abajo queda libre · ${plural(s.beamLevels, 'plano', 'planos')} de vigas`} />
       <BeamHeights s={s} />
-      <details className="plan-more">
-        <summary>Parante y viga</summary>
+      <FrameDefaults s={s} />
+      <AccGroup title="Parante y viga" summary={`${autoUpright ? 'parante automático' : s.upright.name} · ${autoBeam ? 'viga automática' : s.beam.name}`}>
         <Field label="Parante" hint={autoUpright ? `Automático: ${s.upright.name}.` : undefined}>{(id) => (
           <Select id={id} value={config.uprightId ?? 'auto'} onChange={(e) => update({ uprightId: e.target.value })}>
             <option value="auto">Automático (el más liviano que alcanza)</option>
@@ -262,8 +263,47 @@ function RackStep({ s }: { s: RackStructure }) {
           </Select>
         )}</Field>
         <button type="button" className="link-btn" onClick={() => usePlan.getState().setSection('piezas')}>Crear mis propias piezas…</button>
-      </details>
+      </AccGroup>
     </div>
+  )
+}
+
+/**
+ * Los pórticos del módulo inicial: dos columnas, sus bases y sus riendas. Lo que se elige acá vale
+ * para todos los pórticos; después, en el plano, cada pórtico se puede cambiar por separado.
+ */
+function FrameDefaults({ s }: { s: RackStructure }) {
+  const { config, update } = useDesigner()
+  const d = config.frameDefault
+  const f = s.rows[0]?.frames[0]
+  if (!f) return null
+  const set = (patch: Partial<FrameParts>) => {
+    const next: FrameParts = { ...d, ...patch }
+    for (const k of Object.keys(next) as (keyof FrameParts)[]) if (next[k] === undefined || next[k] === false) delete next[k]
+    update({ frameDefault: Object.keys(next).length ? next : undefined })
+  }
+  const bases = (f.bases[0] ? 1 : 0) + (f.bases[1] ? 1 : 0)
+  const cols = f.columns[0] === f.columns[1] ? mm(f.columns[0]) : `${mm(f.columns[0])} y ${mm(f.columns[1])}`
+  return (
+    <AccGroup title="Pórticos" summary={`2 columnas (${cols}) · ${bases === 1 ? '1 base' : `${bases} bases`} · ${f.diagonals + f.horizontals} riendas`} defaultOpen={!!d}>
+      <p className="muted small">Cada pórtico son dos columnas, sus bases y sus riendas. Lo que elijas acá vale para todos; después, en el plano, podés cambiar un pórtico solo.</p>
+      <div className="plan-xy">
+        <NumberStepper label="Riendas diagonales" value={f.diagonals} min={0} max={60} step={1} onChange={(diagonals) => set({ diagonals })}
+          hint={d?.diagonals === undefined ? 'Las de siempre' : 'Elegidas'} />
+        <NumberStepper label="Riendas horizontales" value={f.horizontals} min={0} max={20} step={1} onChange={(horizontals) => set({ horizontals })}
+          hint={d?.horizontals === undefined ? 'Las de siempre' : 'Elegidas'} />
+      </div>
+      <div className="plan-xy">
+        <NumberStepper label="Columna de adelante" meters value={f.columns[0]} min={L.height.min} max={L.height.max} step={100} typedStep={10}
+          onChange={(frontHeight) => set({ frontHeight })} hint={d?.frontHeight === undefined ? 'El alto del rack' : 'Propia'} />
+        <NumberStepper label="Columna de atrás" meters value={f.columns[1]} min={L.height.min} max={L.height.max} step={100} typedStep={10}
+          onChange={(backHeight) => set({ backHeight })} hint={d?.backHeight === undefined ? 'El alto del rack' : 'Propia'} />
+      </div>
+      <p className="muted small">Una columna puede ser más alta que la otra, por ejemplo donde va un arriostre superior. La de adelante es la del lado del pasillo.</p>
+      <Switch label="Base de adelante" checked={f.bases[0]} onChange={(v) => set({ noBaseFront: v ? undefined : true })} hint="La de la columna del lado del pasillo." />
+      <Switch label="Base de atrás" checked={f.bases[1]} onChange={(v) => set({ noBaseBack: v ? undefined : true })} />
+      {d && <button type="button" className="link-btn" onClick={() => update({ frameDefault: undefined })}>Volver a los pórticos de siempre</button>}
+    </AccGroup>
   )
 }
 
