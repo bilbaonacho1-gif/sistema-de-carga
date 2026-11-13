@@ -14,8 +14,8 @@ import { addRack, freezeRacks, rackSelection } from '../shared/plan/racks'
 import { calculateRackStructure } from '../shared/rack/calculateRackStructure'
 import { beamCapacityForSpan } from '../shared/rack/rules'
 import { CONTACT, DESIGN_RULES, OFFICIAL_REFERENCE } from '../shared/rack/technicalSpecs'
-import { isOwnProfile, profilesOf } from '../shared/rack/profiles'
-import type { FrameParts, RackStructure } from '../shared/rack/types'
+import { beamName, isOwnProfile, PIECE_LIMITS as P, profilesOf, uprightName } from '../shared/rack/profiles'
+import type { BeamProfile, FrameParts, RackStructure, UprightProfile } from '../shared/rack/types'
 import { NumberStepper, Switch } from '../web/components/fields'
 import { Button, Field, KeyValue, Segmented, Select } from '../web/components/ui'
 import { fmt, plural } from '../web/lib/format'
@@ -232,6 +232,42 @@ function RackStep({ s }: { s: RackStructure }) {
   const autoUpright = !config.uprightId || config.uprightId === 'auto'
   const autoBeam = !config.beamId || config.beamId === 'auto'
   const all = profilesOf(config)
+  // parante y viga: se eligen de la lista o se ponen a mano (quedan guardados en "Mis piezas")
+  const own = { uprights: config.customProfiles?.uprights ?? [], beams: config.customProfiles?.beams ?? [], objects: config.customProfiles?.objects }
+  const myBeam = own.beams.find((b) => b.id === config.beamId), myUpright = own.uprights.find((u) => u.id === config.uprightId)
+  const newId = (prefix: string) => `${prefix}${Math.random().toString(36).slice(2, 7)}`
+  const fit = (v: number, r: { min: number; max: number }) => Math.min(r.max, Math.max(r.min, Math.round(v)))
+  /** Una viga propia que arranca con las medidas de la que está puesta ahora. */
+  const newBeam = () => {
+    const b: BeamProfile = {
+      id: newId('mv-'), name: '', height: fit(s.beam.height, P.beamHeight), depth: fit(s.beam.depth, P.beamDepth),
+      capacityBySpan: [{ maxSpan: P.beamSpan.max, capacity: fit(beamCapacityForSpan(s.beam, s.config.width) || 2000, P.beamCapacity) }],
+    }
+    b.name = beamName(b)
+    update({ customProfiles: { ...own, beams: [...own.beams, b] }, beamId: b.id })
+  }
+  const newUpright = () => {
+    const u: UprightProfile = {
+      id: newId('mp-'), name: '', faceWidth: fit(s.upright.faceWidth, P.uprightFace), depth: fit(s.upright.depth, P.uprightDepth),
+      thickness: s.upright.thickness, maxFrameLoad: fit(s.upright.maxFrameLoad, P.uprightLoad),
+    }
+    u.name = uprightName(u)
+    update({ customProfiles: { ...own, uprights: [...own.uprights, u] }, uprightId: u.id })
+  }
+  // el nombre sigue a las medidas mientras no se le haya puesto uno propio
+  const setBeam = (patch: Partial<BeamProfile>) => myBeam && update({ customProfiles: { ...own, beams: own.beams.map((b) => {
+    if (b.id !== myBeam.id) return b
+    const next = { ...b, ...patch }
+    return b.name === beamName(b) ? { ...next, name: beamName(next) } : next
+  }) } })
+  const setUpright = (patch: Partial<UprightProfile>) => myUpright && update({ customProfiles: { ...own, uprights: own.uprights.map((u) => {
+    if (u.id !== myUpright.id) return u
+    const next = { ...u, ...patch }
+    return u.name === uprightName(u) ? { ...next, name: uprightName(next) } : next
+  }) } })
+  // lo que aguanta la viga con el largo de este módulo (el renglón de su tabla que le toca)
+  const spanRow = myBeam ? Math.max(0, myBeam.capacityBySpan.findIndex((c) => s.config.width <= c.maxSpan)) : 0
+  const toPieces = () => usePlan.getState().setSection('piezas')
   return (
     <div className="cot-fields">
       <NumberStepper label="Largo de viga (ancho del módulo)" meters value={config.width} min={L.width.min} max={L.width.max} step={50} typedStep={10} slider onChange={(width) => update({ width })}
@@ -251,18 +287,50 @@ function RackStep({ s }: { s: RackStructure }) {
       <FrameDefaults s={s} />
       <AccGroup title="Parante y viga" summary={`${autoUpright ? 'parante automático' : s.upright.name} · ${autoBeam ? 'viga automática' : s.beam.name}`}>
         <Field label="Parante" hint={autoUpright ? `Automático: ${s.upright.name}.` : undefined}>{(id) => (
-          <Select id={id} value={config.uprightId ?? 'auto'} onChange={(e) => update({ uprightId: e.target.value })}>
+          <Select id={id} value={config.uprightId ?? 'auto'} onChange={(e) => (e.target.value === 'nuevo' ? newUpright() : update({ uprightId: e.target.value }))}>
             <option value="auto">Automático (el más liviano que alcanza)</option>
-            {all.uprights.map((u) => <option key={u.id} value={u.id}>{u.name}{isOwnProfile(config, u.id) ? ' (mía)' : ''} · hasta {kg(u.maxFrameLoad)}</option>)}
+            {all.uprights.map((u) => <option key={u.id} value={u.id}>{u.name}{isOwnProfile(config, u.id) ? ' (mío)' : ''} · hasta {kg(u.maxFrameLoad)}</option>)}
+            <option value="nuevo">+ Poner las medidas yo…</option>
           </Select>
         )}</Field>
+        {myUpright && (
+          <div className="own-piece">
+            <strong>Tu parante</strong>
+            {myUpright.shape
+              ? <p className="muted small">Mide {myUpright.faceWidth} × {myUpright.depth} mm: sale de la forma que dibujaste en "Mis piezas".</p>
+              : <>
+                  <div className="own-fields">
+                    <NumberStepper label="Frente" unit="mm" value={myUpright.faceWidth} min={P.uprightFace.min} max={P.uprightFace.max} step={10} typedStep={1} onChange={(faceWidth) => setUpright({ faceWidth })} />
+                    <NumberStepper label="Fondo" unit="mm" value={myUpright.depth} min={P.uprightDepth.min} max={P.uprightDepth.max} step={5} typedStep={1} onChange={(depth) => setUpright({ depth })} />
+                  </div>
+                  <NumberStepper label="Espesor de la chapa" unit="mm" value={myUpright.thickness} min={P.uprightThickness.min} max={P.uprightThickness.max} step={0.5} onChange={(thickness) => setUpright({ thickness })} />
+                </>}
+            <NumberStepper label="Cuánto aguanta cada pórtico" unit="kg" value={myUpright.maxFrameLoad} min={P.uprightLoad.min} max={P.uprightLoad.max} step={500} typedStep={100} onChange={(maxFrameLoad) => setUpright({ maxFrameLoad })} />
+            <button type="button" className="link-btn" onClick={toPieces}>Nombre y forma, en "Mis piezas"…</button>
+          </div>
+        )}
         <Field label="Viga" hint={autoBeam ? `Automática: ${s.beam.name} para ${kg(s.levelLoad)} por nivel.` : `Carga por nivel: ${kg(s.levelLoad)}.`}>{(id) => (
-          <Select id={id} value={config.beamId ?? 'auto'} onChange={(e) => update({ beamId: e.target.value })}>
+          <Select id={id} value={config.beamId ?? 'auto'} onChange={(e) => (e.target.value === 'nueva' ? newBeam() : update({ beamId: e.target.value }))}>
             <option value="auto">Automática (la más liviana que alcanza)</option>
             {all.beams.map((b) => <option key={b.id} value={b.id}>{b.name}{isOwnProfile(config, b.id) ? ' (mía)' : ''} · {kg(beamCapacityForSpan(b, s.config.width))} con {mm(s.config.width)}</option>)}
+            <option value="nueva">+ Poner las medidas yo…</option>
           </Select>
         )}</Field>
-        <button type="button" className="link-btn" onClick={() => usePlan.getState().setSection('piezas')}>Crear mis propias piezas…</button>
+        {myBeam && (
+          <div className="own-piece">
+            <strong>Tu viga</strong>
+            {myBeam.shape
+              ? <p className="muted small">Mide {myBeam.height} × {myBeam.depth} mm (alto × ancho): sale de la forma que dibujaste en "Mis piezas".</p>
+              : <div className="own-fields">
+                  <NumberStepper label="Alto" unit="mm" value={myBeam.height} min={P.beamHeight.min} max={P.beamHeight.max} step={10} typedStep={1} onChange={(height) => setBeam({ height })} />
+                  <NumberStepper label="Ancho" unit="mm" value={myBeam.depth} min={P.beamDepth.min} max={P.beamDepth.max} step={10} typedStep={1} onChange={(depth) => setBeam({ depth })} />
+                </div>}
+            <NumberStepper label={`Cuánto aguanta el par, con ${mm(s.config.width)} de largo`} unit="kg" value={myBeam.capacityBySpan[spanRow]?.capacity ?? 0} min={P.beamCapacity.min} max={P.beamCapacity.max} step={100} typedStep={10}
+              onChange={(capacity) => setBeam({ capacityBySpan: myBeam.capacityBySpan.map((c, i) => (i === spanRow ? { ...c, capacity } : c)) })} />
+            <button type="button" className="link-btn" onClick={toPieces}>Nombre, forma y otros largos, en "Mis piezas"…</button>
+          </div>
+        )}
+        {!myBeam && !myUpright && <p className="muted small">Elegí una de la lista o poné vos las medidas con la última opción. Las tuyas quedan guardadas en "Mis piezas".</p>}
       </AccGroup>
     </div>
   )
@@ -287,13 +355,13 @@ function FrameDefaults({ s }: { s: RackStructure }) {
   return (
     <AccGroup title="Pórticos" summary={`2 columnas (${cols}) · ${bases === 1 ? '1 base' : `${bases} bases`} · ${f.diagonals + f.horizontals} riendas`} defaultOpen={!!d}>
       <p className="muted small">Cada pórtico son dos columnas, sus bases y sus riendas. Lo que elijas acá vale para todos; después, en el plano, podés cambiar un pórtico solo.</p>
-      <div className="plan-xy">
+      <div className="own-fields">
         <NumberStepper label="Riendas diagonales" value={f.diagonals} min={0} max={60} step={1} onChange={(diagonals) => set({ diagonals })}
           hint={d?.diagonals === undefined ? 'Las de siempre' : 'Elegidas'} />
         <NumberStepper label="Riendas horizontales" value={f.horizontals} min={0} max={20} step={1} onChange={(horizontals) => set({ horizontals })}
           hint={d?.horizontals === undefined ? 'Las de siempre' : 'Elegidas'} />
       </div>
-      <div className="plan-xy">
+      <div className="own-fields">
         <NumberStepper label="Columna de adelante" meters value={f.columns[0]} min={L.height.min} max={L.height.max} step={100} typedStep={10}
           onChange={(frontHeight) => set({ frontHeight })} hint={d?.frontHeight === undefined ? 'El alto del rack' : 'Propia'} />
         <NumberStepper label="Columna de atrás" meters value={f.columns[1]} min={L.height.min} max={L.height.max} step={100} typedStep={10}
