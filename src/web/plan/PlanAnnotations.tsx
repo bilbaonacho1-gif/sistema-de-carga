@@ -2,7 +2,7 @@
  * ANOTACIONES DEL PLANO: textos sueltos, símbolos (matafuegos, salidas, baños…) y cotas puestas a
  * mano. Se dibujan en el plano (SVG en mm) y se tocan para elegirlas y arrastrarlas.
  */
-import { Ambulance, BatteryCharging, Droplets, FireExtinguisher, Forklift, LogOut, PackageSearch, Toilet, Truck, Zap, type LucideIcon } from 'lucide-react'
+import { Ambulance, BatteryCharging, Droplets, FireExtinguisher, Forklift, LogOut, PackageSearch, Toilet, Truck, Zap, type LucideIcon, PersonStanding } from 'lucide-react'
 import type { PlanDim, PlanSymbol, PlanText, SymbolKind } from '../../shared/plan/types'
 import { metros } from '../../shared/units'
 
@@ -17,6 +17,7 @@ export const SYMBOLS: Record<SymbolKind, { label: string; icon: LucideIcon; colo
   autoelevador: { label: 'Autoelevador', icon: Forklift, color: '#e07b1f' },
   picking: { label: 'Puesto de picking', icon: PackageSearch, color: '#0f8a8a' },
   anden: { label: 'Dársena / andén', icon: Truck, color: '#7a5230' },
+  persona: { label: 'Persona (para ver la escala)', icon: PersonStanding, color: '#2f6fb8' },
 }
 export const SYMBOL_KINDS = Object.keys(SYMBOLS) as SymbolKind[]
 

@@ -130,6 +130,8 @@ export const DEFAULT_ACCESSORIES: AccessoryConfig = {
   protectorType: 'angulo',
   guardrailType: 'baranda',
   backMesh: false,
+  rowSigns: false,
+  floorGuide: false,
   beamColor: 'rojo',
   uprightColor: 'galvanizado',
   protectorColor: 'rojo',
@@ -180,6 +182,9 @@ export const VISUAL = {
   sign: { width: 300, height: 200, elevation: 1500 },
   deck: { thickness: 25 },
   post: { side: 90, height: 600, plate: 160 },
+  lowProtector: { height: 220 },
+  rowSign: { width: 300, height: 300, elevation: 2200 },
+  floorGuide: { height: 100, offset: 300 },
   arch: { height: 450, tube: 60 },
 } as const
 

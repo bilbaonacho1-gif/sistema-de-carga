@@ -89,13 +89,17 @@ export interface AccessoryConfig {
   guardrailType: GuardrailType
   /** Malla de fondo (anticaída) en la cara de atrás de cada módulo. */
   backMesh: boolean
+  /** Carteles de fila en las cabeceras (la letra o el número de cada fila). */
+  rowSigns: boolean
+  /** Guía en el piso a lo largo de cada fila, para el autoelevador. */
+  floorGuide: boolean
   /** Colores de pintura. */
   beamColor: PaintColor
   uprightColor: UprightColor
   protectorColor: PaintColor
 }
 
-export type ProtectorType = 'angulo' | 'u' | 'poste'
+export type ProtectorType = 'angulo' | 'u' | 'poste' | 'bajo'
 export type GuardrailType = 'baranda' | 'arco'
 export type PaintColor = 'rojo' | 'naranja' | 'amarillo' | 'azul' | 'gris'
 /** Los parantes, además, pueden ir galvanizados (sin pintar). */
@@ -267,6 +271,8 @@ export interface ComponentCounts {
   deckPanels: number
   palletSupports: number
   backMesh: number
+  rowSigns: number
+  floorGuides: number
 }
 
 export interface RackStructure {

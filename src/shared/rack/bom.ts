@@ -42,7 +42,10 @@ export function buildMaterials(s: RackStructure): MaterialLine[] {
   add({ code: 'ANC-M12', group: 'Fijación', qty: counts.anchorBolts, name: 'Anclaje al piso M12', detail: `${DESIGN_RULES.anchorBoltsPerPlate} por placa base` })
   add({ code: 'DIST-ESP', group: 'Estructura', qty: counts.spacers, name: 'Distanciador espalda con espalda', detail: metros(DESIGN_RULES.backToBackGap) })
 
-  const prot = { angulo: ['PROT-ANG', 'Protector de columna en ángulo'], u: ['PROT-U', 'Protector de columna en U'], poste: ['PROT-POSTE', 'Protector de columna tipo poste'] }[acc.protectorType]
+  const prot = {
+    angulo: ['PROT-ANG', 'Protector de columna en ángulo'], u: ['PROT-U', 'Protector de columna en U'],
+    poste: ['PROT-POSTE', 'Protector de columna tipo poste'], bajo: ['PROT-BAJO', 'Protector de columna bajo'],
+  }[acc.protectorType]
   add({
     code: prot[0], group: 'Accesorios', qty: counts.protectors, name: prot[1],
     detail: `${acc.protectors === 'ends' ? 'En los extremos de cada fila' : 'En cada parante del lado del pasillo'} · ${colorName(acc.protectorColor).toLowerCase()}`,
@@ -50,6 +53,8 @@ export function buildMaterials(s: RackStructure): MaterialLine[] {
   add(acc.guardrailType === 'arco'
     ? { code: 'DEF-ARCO', group: 'Accesorios', qty: counts.guardrails, name: 'Defensa de cabecera en arco', detail: `Para bastidor de ${metros(config.depth)}` }
     : { code: 'GUARD-CAB', group: 'Accesorios', qty: counts.guardrails, name: 'Guardarraíl de cabecera', detail: `Para bastidor de ${metros(config.depth)}` })
+  add({ code: 'CART-FILA', group: 'Accesorios', qty: counts.rowSigns, name: 'Cartel de fila', detail: 'Uno en cada cabecera' })
+  add({ code: 'GUIA-PISO', group: 'Accesorios', qty: counts.floorGuides, name: 'Guía de piso para autoelevador', detail: `Una por fila, de ${metros(s.totalWidth)}` })
   add({ code: 'MALLA-FONDO', group: 'Accesorios', qty: counts.backMesh, name: 'Malla de fondo anticaída', detail: 'Una por módulo, en la cara de atrás' })
   add({ code: 'CONEC-SUP', group: 'Accesorios', qty: counts.topTies, name: 'Conector superior', detail: config.layout.backToBack ? 'Une las filas espalda con espalda por arriba' : `Une las filas por arriba del pasillo (${metros(config.layout.aisleWidth)})` })
   add({ code: 'CRUZ-ARR', group: 'Accesorios', qty: counts.crossBraces, name: 'Cruz de arriostramiento posterior', detail: `Una cada ${DESIGN_RULES.modulesPerCrossBrace} módulos` })

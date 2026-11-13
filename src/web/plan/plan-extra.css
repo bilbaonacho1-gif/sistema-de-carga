@@ -69,3 +69,18 @@
 /* el panel "Editando" destella al abrirlo desde la barra */
 .dock.is-flash, .rack-editor.is-flash { animation: dock-flash 1.4s ease-out; }
 @keyframes dock-flash { 0%, 30% { box-shadow: 0 0 0 3px #2f6fb8; } 100% { box-shadow: 0 0 0 3px transparent; } }
+
+/* vista a pie: aviso arriba y flechas para caminar */
+.walk__pill { background: #1f2328; }
+.walk__pill button { color: #1f2328; }
+.walk__pad { position: absolute; z-index: 7; left: 50%; bottom: 46px; transform: translateX(-50%); display: grid; grid-template-columns: repeat(3, 44px); grid-template-rows: repeat(2, 44px); gap: 4px; }
+.walk__pad button { display: grid; place-items: center; border: 0; border-radius: 10px; background: rgba(31, 35, 40, .82); color: #fff; cursor: pointer; }
+.walk__pad button:hover { background: #1f2328; }
+.walk__pad button:nth-child(1) { grid-column: 2; grid-row: 1; }
+.walk__pad button:nth-child(2) { grid-column: 1; grid-row: 2; }
+.walk__pad button:nth-child(3) { grid-column: 2; grid-row: 2; }
+.walk__pad button:nth-child(4) { grid-column: 3; grid-row: 2; }
+.plan-stage__hint--place { background: #2f6fb8; color: #fff; }
+.vp-btn--icon { padding-left: 8px; padding-right: 8px; }
+.plan-stage__bar .vp-btn { white-space: nowrap; flex: none; }
+.walk .plan-stage__hint { top: auto; bottom: 10px; }

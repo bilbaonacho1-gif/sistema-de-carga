@@ -2,12 +2,14 @@
  * Visor del depósito: el plano (2D, editable) o el depósito en 3D (también editable: se toca y
  * se arrastra), con los racks ubicados si los hay. Lo seleccionado tiene su barra de acciones.
  */
-import { AlertTriangle, Box, ChevronDown, ChevronRight, Combine, Copy, Focus, Scissors, Map as MapIcon, Maximize2, Package, RotateCw, Trash2 } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Box, ChevronDown, ChevronRight, Combine, Copy, Focus, Footprints, Forklift, PersonStanding, Scissors, Map as MapIcon, Maximize2, Package, RotateCw, Trash2 } from 'lucide-react'
 import { rackNames } from './PlanNotes'
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import type { PlacedRack } from '../../shared/plan/depot'
 import { removeItem, removeVertex } from '../../shared/plan/edit'
 import { duplicateWithin, fitPlacement, freezeRacks, joinRacks, mapRacks, rackSelection, removeRacks, selectedRackIds, guarded, moveRack, rotateRack, setRackModules, setRackPair, splitRack } from '../../shared/plan/racks'
+import { outlinePolygon, planBounds, pointInPolygon } from '../../shared/plan/geometry'
+import { placementRect } from '../../shared/plan/layout'
 import { metros } from '../../shared/units'
 import { NumberStepper } from '../components/fields'
 import type { Plan, PlanSelection, RackPlacement } from '../../shared/plan/types'
@@ -24,7 +26,21 @@ const Plan3D = lazy(() => import('./Plan3D').then((x) => ({ default: x.Plan3D })
 const MANY_PALLETS = 1500
 
 export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackLayer; racks?: PlacedRack[]; summary?: ReactNode }) {
-  const { view3d: want3d, setView3d, plan, isolate, setIsolate, selection } = usePlan()
+  const { view3d: want3d, setView3d, plan, isolate, setIsolate, selection, walk, setWalk, walkBy, tool, setTool, symbolKind, setSymbolKind } = usePlan()
+  // figuras para ver la escala: se elige cuál y se toca el piso (en el plano o en el 3D) donde va
+  const placing = tool === 'symbol' && (symbolKind === 'persona' || symbolKind === 'autoelevador') ? symbolKind : null
+  const place = (kind: 'persona' | 'autoelevador') => { if (placing === kind) setTool('select'); else { setSymbolKind(kind); setTool('symbol'); setWalk(null) } }
+  // vista a pie: arranca en un lugar libre (un pasillo) cerca del centro, mirando a lo largo
+  const startWalk = () => {
+    if (walk) { setWalk(null); return }
+    const spot = freeSpot(plan, rackLayer?.racks ?? [])
+    // mirando a lo largo del pasillo (como van las filas), hacia el lado más largo del depósito
+    const b = planBounds(plan), alongX = (rackLayer?.racks[0]?.orientation ?? 'x') === 'x'
+    const yaw = alongX ? (spot.x < (b.minX + b.maxX) / 2 ? -Math.PI / 2 : Math.PI / 2) : (spot.y < (b.minY + b.maxY) / 2 ? Math.PI : 0)
+    setWalk({ ...spot, yaw, pitch: 0 })
+    setTool('select')
+    setView3d(true)
+  }
   // sin depósito todavía no hay nada que ver en 3D: se queda en el plano
   const empty = plan.outline.points.length < 3
   const view3d = want3d && !empty
@@ -43,6 +59,11 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
         {!empty && <Segmented label="Vista" value={view3d ? '3d' : '2d'} onChange={(v) => setView3d(v === '3d')}
           options={[{ value: '2d', label: <><MapIcon size={15} aria-hidden /> Plano</> }, { value: '3d', label: <><Box size={15} aria-hidden /> 3D</> }]} />}
         {!view3d && !empty && <button type="button" className="vp-btn" onClick={() => setFit((n) => n + 1)}><Maximize2 size={14} aria-hidden /> Encuadrar</button>}
+        {!empty && <>
+          <button type="button" className={`vp-btn${walk && view3d ? ' is-active' : ''}`} aria-pressed={!!walk && view3d} onClick={startWalk} title="Recorrer el depósito a la altura de los ojos de una persona"><Footprints size={14} aria-hidden /> A&nbsp;pie</button>
+          <button type="button" className={`vp-btn vp-btn--icon${placing === 'persona' ? ' is-active' : ''}`} aria-pressed={placing === 'persona'} onClick={() => place('persona')} title="Poner una persona para ver la escala" aria-label="Poner una persona para ver la escala"><PersonStanding size={16} aria-hidden /></button>
+          <button type="button" className={`vp-btn vp-btn--icon${placing === 'autoelevador' ? ' is-active' : ''}`} aria-pressed={placing === 'autoelevador'} onClick={() => place('autoelevador')} title="Poner un autoelevador para ver la escala" aria-label="Poner un autoelevador para ver la escala"><Forklift size={16} aria-hidden /></button>
+        </>}
         {view3d && !!racks?.length && (
           <label className="plan-snap plan-stage__loads"><input type="checkbox" checked={showLoads} onChange={(e) => setLoads(e.target.checked)} /> <Package size={14} aria-hidden /> Ver pallets</label>
         )}
@@ -61,10 +82,45 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
             <button type="button" onClick={() => setIsolate(null)}>Ver todos</button>
           </div>
         )}
-        {view3d && !isoOn && <p className="plan-stage__hint">Tocá algo para elegirlo y arrastralo para moverlo · arrastrá el fondo para girar</p>}
+        {view3d && walk && (
+          <div className="walk" role="group" aria-label="Vista a pie">
+            <div className="iso-pill walk__pill" role="status">
+              <span>Vista a pie · ojos a 1,65 m</span>
+              <button type="button" onClick={() => setWalk(null)}>Salir</button>
+            </div>
+            <div className="walk__pad">
+              <button type="button" onClick={() => walkBy(1000, 0)} aria-label="Avanzar" title="Avanzar"><ArrowUp size={18} aria-hidden /></button>
+              <button type="button" onClick={() => walkBy(0, Math.PI / 12)} aria-label="Girar a la izquierda" title="Girar a la izquierda"><ArrowLeft size={18} aria-hidden /></button>
+              <button type="button" onClick={() => walkBy(-1000, 0)} aria-label="Retroceder" title="Retroceder"><ArrowDown size={18} aria-hidden /></button>
+              <button type="button" onClick={() => walkBy(0, -Math.PI / 12)} aria-label="Girar a la derecha" title="Girar a la derecha"><ArrowRight size={18} aria-hidden /></button>
+            </div>
+            <p className="plan-stage__hint">Arrastrá para mirar · flechas o WASD para caminar · clic en el piso para ir hasta ahí · Esc sale</p>
+          </div>
+        )}
+        {placing && <p className="plan-stage__hint plan-stage__hint--place">Tocá el piso donde va {placing === 'persona' ? 'la persona' : 'el autoelevador'}{view3d ? '' : ' (después miralo en 3D)'} · Esc termina</p>}
+        {view3d && !isoOn && !walk && !placing && <p className="plan-stage__hint">Tocá algo para elegirlo y arrastralo para moverlo · arrastrá el fondo para girar</p>}
       </div>
     </section>
   )
+}
+
+/**
+ * Un lugar libre para pararse: el punto más cerca del centro del depósito que queda adentro y a más
+ * de 60 cm de cualquier rack (o sea, en un pasillo).
+ */
+function freeSpot(plan: Plan, racks: RackPlacement[]): { x: number; y: number } {
+  const b = planBounds(plan)
+  const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2
+  const poly = outlinePolygon(plan.outline, 300)
+  const rects = racks.map(placementRect)
+  const free = (x: number, y: number) => pointInPolygon({ x, y }, poly) && !rects.some((r) => x > r.x - 600 && x < r.x + r.w + 600 && y > r.y - 600 && y < r.y + r.h + 600)
+  const max = Math.max(b.maxX - b.minX, b.maxY - b.minY)
+  for (let d = 0; d <= max; d += 500)
+    for (let k = 0; k < 16; k++) {
+      const a = (k / 16) * Math.PI * 2, x = Math.round(cx + Math.cos(a) * d), y = Math.round(cy + Math.sin(a) * d)
+      if (free(x, y)) return { x, y }
+    }
+  return { x: Math.round(cx), y: Math.round(cy) }
 }
 
 /** Borra lo seleccionado (los racks automáticos se copian al plano antes de borrar uno). */
@@ -266,13 +322,13 @@ function RackItem({ r, name, rackLayer, defaults, ids }: { r: RackPlacement; nam
       <button type="button" className="rack-list__h" onClick={() => setFocusRack(open ? null : r.id)} aria-expanded={open}>
         {open ? <ChevronDown size={15} aria-hidden /> : <ChevronRight size={15} aria-hidden />}
         <strong>{name ? `Fila ${name}` : 'Rack'}</strong>
-        <span>{r.modules} mód. · {r.pair ? 'doble' : 'simple'} · {metros(len)}{r.levels !== undefined || r.height !== undefined ? ' · medidas propias' : ''}</span>
+        <span>{r.modules} mód. · {r.pair ? 'doble' : 'simple'} · {metros(len)}{r.levels !== undefined || r.height !== undefined || r.mods || r.frameHeights || r.beamLength || r.beamId || r.uprightId ? ' · medidas propias' : ''}</span>
       </button>
       {open && (
         <div className="rack-list__b">
           <NumberStepper label="Módulos" value={r.modules} min={1} max={120} step={1}
             onChange={(v) => { const next = tryEdit((p) => setRackModules(p, r.id, v)); if (next) commit(() => next) }} />
-          <RackOverrides racks={[r]} defaults={defaults} onChange={(patch) => commit(() => mapRacks(base, [r.id], (q) => ({ ...q, ...patch })))} />
+          <RackOverrides racks={[r]} defaults={defaults} onlyLevels={!!defaults.config} onChange={(patch) => commit(() => mapRacks(base, [r.id], (q) => ({ ...q, ...patch })))} />
           <div className="rack-editor__actions">
             <button type="button" className="vp-btn" disabled={!rot} onClick={() => rot && commit(() => rot)}><RotateCw size={14} aria-hidden /> Girar</button>
             <button type="button" className="vp-btn" disabled={!pair} onClick={() => pair && commit(() => pair)}>{r.pair ? 'Hacer simple' : 'Hacer doble'}</button>
@@ -280,6 +336,8 @@ function RackItem({ r, name, rackLayer, defaults, ids }: { r: RackPlacement; nam
             <button type="button" className="vp-btn" onClick={() => { const rest = ids.filter((x) => x !== r.id); select(rest.length === 1 ? { kind: 'rack', id: rest[0] } : { kind: 'racks', ids: rest }); setFocusRack(null) }}>Sacar de la selección</button>
             <button type="button" className="vp-btn" onClick={() => { const rest = ids.filter((x) => x !== r.id); commit(() => removeRacks(base, [r.id])); select(rest.length === 1 ? { kind: 'rack', id: rest[0] } : rest.length ? { kind: 'racks', ids: rest } : null); setFocusRack(null) }}><Trash2 size={14} aria-hidden /> Borrar este</button>
           </div>
+          {/* las piezas de este rack (vigas y parantes), igual que con un rack solo */}
+          {defaults.config && <RackParts r={r} rackLayer={rackLayer} config={defaults.config} />}
         </div>
       )}
     </li>

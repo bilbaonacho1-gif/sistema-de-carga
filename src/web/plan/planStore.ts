@@ -6,6 +6,9 @@ import { DEFAULT_LAYOUT, type LayoutOptions } from '../../shared/plan/layout'
 import type { Plan, PlanPoint, PlanSelection, SymbolKind } from '../../shared/plan/types'
 
 /** Una pieza de un rack: los largueros de un nivel (plane = número de viga, de abajo hacia arriba) o los parantes. */
+/** Persona parada en el depósito: posición en el plano (mm), hacia dónde mira y cuánto levanta la vista. */
+export interface Walk { x: number; y: number; yaw: number; pitch: number }
+
 export type RackPiece = { rack: string; kind: 'beam'; module: number; plane: number } | { rack: string; kind: 'upright'; frame: number }
 
 /**
@@ -101,6 +104,14 @@ interface PlanState {
   /** "Ver solo este": racks que se miran aislados (los demás quedan apagados). */
   isolate: string[] | null
   setIsolate(ids: string[] | null): void
+  /**
+   * Vista "a pie" en el 3D (como el muñequito de un mapa): dónde está parada la persona (mm del
+   * plano) y hacia dónde mira (radianes). null = vista normal desde arriba.
+   */
+  walk: Walk | null
+  setWalk(w: Walk | null): void
+  /** Camina `move` mm hacia donde mira y gira `turn` radianes. */
+  walkBy(move: number, turn: number): void
   /** Sección a la vista: el depósito (plano y racks) o el taller de piezas propias. */
   section: 'deposito' | 'piezas'
   setSection(s: 'deposito' | 'piezas'): void
@@ -169,6 +180,13 @@ export const usePlan = create<PlanState>()(
       setPiece: (piece) => set({ piece }),
       section: 'deposito',
       setSection: (section) => set({ section }),
+      walk: null,
+      setWalk: (walk) => set({ walk }),
+      walkBy: (move, turn) => set((s) => {
+        if (!s.walk) return s
+        const yaw = s.walk.yaw + turn
+        return { walk: { ...s.walk, yaw, x: Math.round(s.walk.x - Math.sin(yaw) * move), y: Math.round(s.walk.y - Math.cos(yaw) * move) } }
+      }),
       symbolKind: 'matafuego',
       rackDrawPair: true,
       setRackDrawPair: (rackDrawPair) => set({ rackDrawPair }),

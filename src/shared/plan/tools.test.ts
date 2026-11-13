@@ -179,3 +179,33 @@ describe('una pieza sola de un rack', () => {
     expect(total - b0.xEnd).toBeCloseTo(f0.xStart)
   })
 })
+
+describe('lista de materiales con piezas propias en un rack', () => {
+  it('cada largo y cada perfil de viga distinto sale en su renglón, y cada alto de bastidor también', async () => {
+    const { placementStructure } = await import('./depot')
+    const { DEFAULT_CONFIGURATION } = await import('../rack/technicalSpecs')
+    const plain = placementStructure(DEFAULT_CONFIGURATION, rack({ modules: 4 }))
+    const own = placementStructure(DEFAULT_CONFIGURATION, rack({ modules: 4, mods: { 1: { width: 1800 }, 2: { beamId: 'V160' } }, frameHeights: { 0: 8000 } }))
+    const vigas = (s: typeof own) => s.materials.filter((m) => m.code.startsWith('VIGA-'))
+    const basts = (s: typeof own) => s.materials.filter((m) => m.code.startsWith('BAST-'))
+    expect(vigas(plain)).toHaveLength(1)
+    expect(vigas(own)).toHaveLength(3)                       // la de siempre, la corta y la de otro perfil
+    expect(vigas(own).some((m) => m.code.includes('-1800'))).toBe(true)
+    expect(vigas(own).some((m) => m.code.includes('V160'))).toBe(true)
+    // no se pierden ni se duplican vigas: la cantidad total es la misma
+    const total = (s: typeof own) => vigas(s).reduce((n, m) => n + m.qty, 0)
+    expect(total(own)).toBe(total(plain))
+    expect(basts(own)).toHaveLength(2)                       // el bastidor alto va aparte
+    expect(basts(own).reduce((n, m) => n + m.qty, 0)).toBe(basts(plain).reduce((n, m) => n + m.qty, 0))
+  })
+  it('el depósito suma las piezas de los racks distintos', async () => {
+    const { buildDepot } = await import('./depot')
+    const { DEFAULT_CONFIGURATION } = await import('../rack/technicalSpecs')
+    const { DEFAULT_LAYOUT } = await import('./layout')
+    const plan = { ...rectanglePlan(40_000, 20_000), racks: [rack({ id: 'a', modules: 4 }), rack({ id: 'b', y: 9000, modules: 4, mods: { 0: { width: 1800 } } })] }
+    const depot = buildDepot(plan, DEFAULT_CONFIGURATION, DEFAULT_LAYOUT)
+    const vigas = depot.materials.filter((m) => m.code.startsWith('VIGA-'))
+    expect(vigas.length).toBe(2)
+    expect(vigas.reduce((n, m) => n + m.qty, 0)).toBe(depot.racks.reduce((n, r) => n + r.structure.counts.beams, 0))
+  })
+})

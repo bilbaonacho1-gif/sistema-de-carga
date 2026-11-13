@@ -10,13 +10,14 @@ import { memo, useEffect, useMemo, useRef, useState, type MutableRefObject } fro
 import * as THREE from 'three'
 import { edges, nearestOnEdge, outlinePolygon, planBounds, pointOnEdge, tangentOnEdge } from '../../shared/plan/geometry'
 import type { PlacedRack } from '../../shared/plan/depot'
-import { moveVertex, updateRect } from '../../shared/plan/edit'
+import { moveVertex, updateRect, newId } from '../../shared/plan/edit'
 import { placementRect, type RackModuleSize } from '../../shared/plan/layout'
 import { freezeRacks, moveRack, moveRackWithin, rackSelection, selectedRackIds } from '../../shared/plan/racks'
 import type { Plan, PlanPoint, PlanSelection, RackPlacement } from '../../shared/plan/types'
 import { fmt } from '../lib/format'
 import { RackModel, RackPickContext, type PickedPart } from '../three/RackModel'
 import { RackInstances, type InstanceStats } from './RackInstances'
+import { EYE_HEIGHT, Forklift, Person } from './Figures'
 import { usePlan } from './planStore'
 import { useDock } from '../components/dock'
 
@@ -89,8 +90,10 @@ function useDrag() {
   return (select: PlanSelection, apply?: Apply) => ({
     onPointerDown: (e: ThreeEvent<PointerEvent>) => {
       if (e.button !== 0) return
-      e.stopPropagation()
       const s = usePlan.getState()
+      // caminando a pie no se agarra ni se mueve nada: sólo se mira
+      if (s.walk) return
+      e.stopPropagation()
       // Shift / Ctrl + clic en un rack: lo suma o lo saca de la selección (sin moverlo)
       if (select?.kind === 'rack' && (e.shiftKey || e.ctrlKey || e.metaKey || s.multi)) {
         const cur = selectedRackIds(s.selection)
@@ -171,6 +174,7 @@ export function Plan3D(props: Props) {
   const [stats, setStats] = useState<InstanceStats | null>(null)
   const zoomRef = useRef<((k: number) => void) | null>(null)
   const many = (props.racks?.length ?? 0) > MANY_RACKS
+  const walking = usePlan((s) => !!s.walk)
   useEffect(() => { if (!many) setStats(null) }, [many])
   return (
     <div className="plan3d">
@@ -184,13 +188,14 @@ export function Plan3D(props: Props) {
       <Grid position={[0, -0.002, 0]} infiniteGrid cellSize={1} sectionSize={5} cellColor="#dfe2e6" sectionColor="#c9cdd2" fadeDistance={span * 4} />
       <Scene {...props} span={span} onStats={setStats} />
       <OrbitControls makeDefault target={center} enableDamping maxPolarAngle={Math.PI / 2 - 0.02} minDistance={2} maxDistance={span * 6} />
+      <WalkControls center={center} span={span} />
       <ZoomBridge zoomRef={zoomRef} min={2} max={span * 6} />
       <IsolateCamera racks={props.racks} center={center} span={span} />
     </Canvas>
-    <div className="zoom-btns" role="group" aria-label="Zoom">
+    {!walking && <div className="zoom-btns" role="group" aria-label="Zoom">
       <button type="button" onClick={() => zoomRef.current?.(1 / 1.4)} aria-label="Acercar" title="Acercar">+</button>
       <button type="button" onClick={() => zoomRef.current?.(1.4)} aria-label="Alejar" title="Alejar">−</button>
-    </div>
+    </div>}
     {stats && (
       <div className="plan3d__stats" aria-live="polite">
         {fmt(stats.racks)} racks · {fmt(stats.pieces)} piezas{stats.detail !== 'completo' && <> · vista {stats.detail === 'medio' ? 'simplificada' : 'sólo estructura'} para que no se trabe</>}
@@ -229,7 +234,27 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, size, span, on
 
   return (
     <>
-      <mesh geometry={floor} material={MAT.floor} rotation-x={-Math.PI / 2} position={[0, 0.001, 0]} receiveShadow />
+      <mesh geometry={floor} material={MAT.floor} rotation-x={-Math.PI / 2} position={[0, 0.001, 0]} receiveShadow
+        onClick={(e) => {
+          // un clic (sin arrastrar) en el piso: a pie, caminar hasta ahí; con la herramienta de figuras, poner una
+          if (e.delta > 4) return
+          const s = usePlan.getState()
+          const at = { x: Math.round(e.point.x * 1000), y: Math.round(e.point.z * 1000) }
+          if (s.walk) { e.stopPropagation(); s.setWalk({ ...s.walk, ...at }) }
+          else if (s.tool === 'symbol' && (s.symbolKind === 'persona' || s.symbolKind === 'autoelevador')) {
+            e.stopPropagation()
+            s.commit((pl) => ({ ...pl, symbols: [...(pl.symbols ?? []), { id: newId('s'), ...at, kind: s.symbolKind }] }))
+            s.setTool('select')
+          }
+        }} />
+
+      {/* figuras para ver la escala: personas y autoelevadores puestos en el plano */}
+      {(plan.symbols ?? []).filter((f) => f.kind === 'persona' || f.kind === 'autoelevador').map((f) => (
+        <group key={f.id} position={[m(f.x), 0, m(f.y)]}
+          {...drag({ kind: 'symbol', id: f.id }, (dx, dy, free) => live((pl) => ({ ...pl, symbols: pl.symbols?.map((q) => (q.id === f.id ? { ...q, x: snapTo(f.x + dx, free), y: snapTo(f.y + dy, free) } : q)) })))}>
+          {f.kind === 'persona' ? <Person selected={isSel('symbol', f.id)} /> : <Forklift selected={isSel('symbol', f.id)} />}
+        </group>
+      ))}
 
       {/* paredes del contorno (viendo un rack solo, no están: taparían el rack) */}
       {shown === racks && <mesh geometry={ring} material={MAT.wall} castShadow />}
@@ -447,4 +472,85 @@ function PickableRack({ rack, showLoads }: { rack: PlacedRack; showLoads: boolea
     },
   }), [key, id]) // eslint-disable-line react-hooks/exhaustive-deps -- piece se compara por su clave
   return <RackPickContext.Provider value={value}><PlacedRackModel rack={rack} showLoads={showLoads} /></RackPickContext.Provider>
+}
+
+/**
+ * VISTA A PIE (como soltar el muñequito en un mapa): la cámara va a la altura de los ojos de una
+ * persona parada en el depósito. Arrastrar gira la vista, las flechas o WASD caminan, la rueda
+ * avanza o retrocede y un clic en el piso lleva hasta ahí. Al salir, vuelve la vista de antes.
+ */
+function WalkControls({ center, span }: { center: THREE.Vector3; span: number }) {
+  const walk = usePlan((s) => s.walk)
+  const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera
+  const gl = useThree((s) => s.gl)
+  const controls = useThree((s) => s.controls) as unknown as { enabled: boolean; target: THREE.Vector3; update(): void } | null
+  const invalidate = useThree((s) => s.invalidate)
+  const active = !!walk
+
+  // al entrar se guarda la vista de arriba; al salir se la devuelve
+  useEffect(() => {
+    if (!active || !controls) return
+    const saved = { pos: camera.position.clone(), target: controls.target.clone() }
+    controls.enabled = false
+    camera.fov = 62; camera.near = 0.05; camera.updateProjectionMatrix()
+    return () => {
+      // si el 3D se abrió ya caminando no hay vista de arriba guardada: se vuelve a la general
+      const fromAbove = saved.pos.y > EYE_HEIGHT + 1
+      camera.position.copy(fromAbove ? saved.pos : new THREE.Vector3(center.x + span * 0.7, span * 0.75, center.z + span * 1.05))
+      camera.fov = 40; camera.near = 0.1; camera.updateProjectionMatrix()
+      controls.target.copy(fromAbove ? saved.target : center); controls.enabled = true; controls.update()
+      invalidate()
+    }
+  }, [active, controls, camera, invalidate, center, span])
+
+  // la cámara sigue a la persona
+  useEffect(() => {
+    if (!walk) return
+    camera.position.set(m(walk.x), EYE_HEIGHT, m(walk.y))
+    camera.rotation.set(walk.pitch, walk.yaw, 0, 'YXZ')
+    invalidate()
+  }, [walk, camera, invalidate])
+
+  // mirar arrastrando, caminar con el teclado y la rueda
+  useEffect(() => {
+    if (!active) return
+    const el = gl.domElement
+    let last: { x: number; y: number } | null = null
+    const down = (e: PointerEvent) => { if (e.button === 0) last = { x: e.clientX, y: e.clientY } }
+    const move = (e: PointerEvent) => {
+      if (!last) return
+      const s = usePlan.getState()
+      if (!s.walk) return
+      const dx = e.clientX - last.x, dy = e.clientY - last.y
+      last = { x: e.clientX, y: e.clientY }
+      s.setWalk({ ...s.walk, yaw: s.walk.yaw + dx * 0.005, pitch: Math.max(-1.2, Math.min(1.2, s.walk.pitch + dy * 0.005)) })
+    }
+    const up = () => { last = null }
+    const wheel = (e: WheelEvent) => { e.preventDefault(); usePlan.getState().walkBy(e.deltaY < 0 ? 1000 : -1000, 0) }
+    const key = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).closest('input, textarea, select, [contenteditable]')) return
+      const s = usePlan.getState(), k = e.key.toLowerCase()
+      const step = e.shiftKey ? 1500 : 500, turn = Math.PI / 12
+      if (k === 'arrowup' || k === 'w') s.walkBy(step, 0)
+      else if (k === 'arrowdown' || k === 's') s.walkBy(-step, 0)
+      else if (k === 'arrowleft' || k === 'a') s.walkBy(0, turn)
+      else if (k === 'arrowright' || k === 'd') s.walkBy(0, -turn)
+      else if (k === 'escape') s.setWalk(null)
+      else return
+      e.preventDefault(); e.stopPropagation()
+    }
+    el.addEventListener('pointerdown', down)
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    el.addEventListener('wheel', wheel, { passive: false })
+    window.addEventListener('keydown', key, true)
+    return () => {
+      el.removeEventListener('pointerdown', down)
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      el.removeEventListener('wheel', wheel)
+      window.removeEventListener('keydown', key, true)
+    }
+  }, [active, gl])
+  return null
 }

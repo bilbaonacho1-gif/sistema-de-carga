@@ -74,6 +74,12 @@ function Row({ row, structure, before }: { row: RowLayout; structure: RackStruct
         const delay = rowDelay + (f.index === 0 ? 0 : Math.max(0, f.index - 1 - baseModules) * step)
         return <Frame key={f.id} frame={f} row={row} structure={structure} isNew={isNew} delay={delay} />
       })}
+      {/* guía en el piso para el autoelevador, a lo largo de la fila del lado del pasillo */}
+      {structure.accessories.floorGuide && (
+        <mesh material={MATERIALS.plate} position={[rowLength / 2, m(VISUAL.floorGuide.height) / 2, m(VISUAL.floorGuide.offset)]}>
+          <boxGeometry args={[rowLength, m(VISUAL.floorGuide.height), 0.06]} />
+        </mesh>
+      )}
       {row.modules.map((mod) => (
         <Module
           key={mod.id}
@@ -157,6 +163,13 @@ function Frame({ frame, row, structure, isNew, delay }: {
       ))}
       {acc.topTies && pairedBehind && <Bar a={[0, tieY, -D + 0.03]} b={[0, tieY, -D - gap - 0.03]} size={0.05} material={paintMaterial(acc.beamColor)} />}
       {tieAcross && <Bar a={[0, tieY, -D + 0.03]} b={[0, tieY, -D - m(aisleWidth) - 0.03]} size={0.05} material={paintMaterial(acc.beamColor)} />}
+      {/* cartel de fila en cada cabecera: chapa blanca con una franja, mirando hacia afuera */}
+      {acc.rowSigns && isEnd && (
+        <group position={[(frame.index === 0 ? -1 : 1) * (m(upright.faceWidth) / 2 + 0.012), Math.min(m(VISUAL.rowSign.elevation), H - 0.25), -D / 2]} rotation-y={Math.PI / 2}>
+          <mesh material={MATERIALS.plate}><boxGeometry args={[m(VISUAL.rowSign.width), m(VISUAL.rowSign.height), 0.006]} /></mesh>
+          {[-1, 1].map((k) => <mesh key={k} material={MATERIALS.brace} position={[0, 0, k * 0.004]}><boxGeometry args={[m(VISUAL.rowSign.width) * 0.5, m(VISUAL.rowSign.height) * 0.5, 0.003]} /></mesh>)}
+        </group>
+      )}
       {guard && (acc.guardrailType === 'arco' ? <ArchGuard x={gOff} depth={guardDepth} material={guardMat} /> : <Guardrail x={gOff} depth={guardDepth} material={guardMat} />)}
     </Animated>
   )

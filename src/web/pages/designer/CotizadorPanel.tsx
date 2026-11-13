@@ -398,9 +398,9 @@ export function AccessoriesStep({ s, counts, multiRow }: { s: RackStructure; cou
           options={[{ value: 'none', label: 'Sin' }, { value: 'ends', label: 'Extremos' }, { value: 'all', label: 'Todos' }]} />
       )}</Field>
       {a.protectors !== 'none' && (
-        <Field label="Tipo de protector" hint={{ angulo: 'Chapa plegada con la punta en V, abulonada al piso.', u: 'Chapa en U que envuelve el parante, abulonada al piso.', poste: 'Poste de tubo cuadrado delante del parante, con su placa al piso.' }[a.protectorType]}>{() => (
+        <Field label="Tipo de protector" hint={{ angulo: 'Chapa plegada con la punta en V, abulonada al piso.', u: 'Chapa en U que envuelve el parante, abulonada al piso.', poste: 'Poste de tubo cuadrado delante del parante, con su placa al piso.', bajo: 'Protector petiso de seis caras, abulonado al piso.' }[a.protectorType]}>{() => (
           <Segmented label="Tipo de protector" value={a.protectorType} onChange={(protectorType) => set({ protectorType })}
-            options={[{ value: 'angulo', label: 'En ángulo' }, { value: 'u', label: 'En U' }, { value: 'poste', label: 'Poste' }]} />
+            options={[{ value: 'angulo', label: 'En ángulo' }, { value: 'u', label: 'En U' }, { value: 'poste', label: 'Poste' }, { value: 'bajo', label: 'Bajo' }]} />
         )}</Field>
       )}
       <Switch label="Defensas de cabecera" checked={a.guardrails} onChange={(guardrails) => set({ guardrails })}
@@ -424,6 +424,10 @@ export function AccessoriesStep({ s, counts, multiRow }: { s: RackStructure; cou
         <Segmented label="Piso" value={a.decking} onChange={(decking) => set({ decking })}
           options={[{ value: 'none', label: 'Sin piso' }, { value: 'wood', label: 'Madera' }, { value: 'mesh', label: 'Malla' }, { value: 'steel', label: 'Chapa' }]} />
       )}</Field>
+      <Switch label="Carteles de fila" checked={a.rowSigns} onChange={(rowSigns) => set({ rowSigns })}
+        hint={`Un cartel en cada cabecera, para la letra o el número de la fila${qty(c.rowSigns)}.`} />
+      <Switch label="Guía en el piso" checked={a.floorGuide} onChange={(floorGuide) => set({ floorGuide })}
+        hint={`Perfil en el piso a lo largo de cada fila, para guiar al autoelevador${qty(c.floorGuides)}.`} />
       <Switch label="Malla de fondo" checked={a.backMesh} onChange={(backMesh) => set({ backMesh })}
         hint={`Cierra la cara de atrás para que no se caiga mercadería${qty(c.backMesh)}.`} />
       <Switch label="Travesaños de apoyo de pallet" checked={a.palletSupports} onChange={(palletSupports) => set({ palletSupports })}

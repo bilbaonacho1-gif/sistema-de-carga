@@ -83,7 +83,7 @@ export interface PlanAisle {
 export interface PlanText { id: string; x: number; y: number; text: string; size: number }
 
 /** Símbolos que se pueden poner en el plano (matafuegos, salidas, baños…). */
-export type SymbolKind = 'matafuego' | 'hidrante' | 'salida' | 'botiquin' | 'banio' | 'tablero' | 'cargador' | 'autoelevador' | 'picking' | 'anden'
+export type SymbolKind = 'matafuego' | 'hidrante' | 'salida' | 'botiquin' | 'banio' | 'tablero' | 'cargador' | 'autoelevador' | 'picking' | 'anden' | 'persona'
 export interface PlanSymbol { id: string; x: number; y: number; kind: SymbolKind }
 
 /** Cota puesta a mano entre dos puntos (como DIM en AutoCAD); `offset` corre la línea hacia un costado. */

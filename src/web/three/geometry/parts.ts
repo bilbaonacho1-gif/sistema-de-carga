@@ -61,7 +61,7 @@ export function basePlateGeometry(profile: UprightProfile) {
 }
 
 /* ---------- Protector de columna: en ángulo (punta en V), en U envolvente o poste de tubo ---------- */
-export function protectorGeometry(profile: UprightProfile, type: 'angulo' | 'u' | 'poste' = 'angulo', color: string = COLORS.red) {
+export function protectorGeometry(profile: UprightProfile, type: 'angulo' | 'u' | 'poste' | 'bajo' = 'angulo', color: string = COLORS.red) {
   return cached(store, `prot-${type}-${color}-${profile.id}:${profile.faceWidth}x${profile.depth}x${profile.thickness}`, () => {
     const parts: THREE.BufferGeometry[] = []
     if (type === 'poste') {
@@ -72,7 +72,8 @@ export function protectorGeometry(profile: UprightProfile, type: 'angulo' | 'u' 
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) parts.push(paint(hexNut([sx * (plate / 2 - 0.02), 0.012, z + sz * (plate / 2 - 0.02)], 0.008, 0.008), COLORS.galvanized))
       return merge(parts)
     }
-    const h = m(VISUAL.protector.height)
+    // el bajo es como el de ángulo pero petiso y con la punta chata (seis caras)
+    const h = m(type === 'bajo' ? VISUAL.lowProtector.height : VISUAL.protector.height)
     const e = m(VISUAL.protector.thickness)
     const xs = m(profile.faceWidth) / 2 + 0.045
     const zBack = -(m(profile.depth) + 0.005)
@@ -87,12 +88,14 @@ export function protectorGeometry(profile: UprightProfile, type: 'angulo' | 'u' 
     for (const s of [-1, 1]) {
       parts.push(paint(sheet(s * xs, zBack, s * xs, zFold), color))      // costado
       if (type === 'angulo') parts.push(paint(sheet(s * xs, zFold, 0, zTip), color))   // cara en V
+      if (type === 'bajo') parts.push(paint(sheet(s * xs, zFold, s * xs * 0.45, zTip * 0.85), color))   // cara inclinada
       const xf = s * (xs + 0.032)
       parts.push(paint(box([xf, 0.004, zBack + 0.03], [0.064, 0.008, 0.06]), color))   // pestaña
       for (const z of [zBack + 0.015, zBack + 0.045])
         parts.push(paint(hexNut([xf + s * 0.006, 0.012, z], 0.008, 0.008), COLORS.galvanized))
     }
     if (type === 'u') parts.push(paint(sheet(-xs, zFold, xs, zFold), color))   // frente plano de la U
+    if (type === 'bajo') parts.push(paint(sheet(-xs * 0.45, zTip * 0.85, xs * 0.45, zTip * 0.85), color))   // punta chata
     return merge(parts)
   })
 }

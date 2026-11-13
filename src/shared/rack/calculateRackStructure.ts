@@ -50,9 +50,11 @@ function sanitizeAccessories(a: Partial<AccessoryConfig> | undefined): Accessory
     capacitySigns: !!x.capacitySigns,
     decking: ['none', 'wood', 'mesh', 'steel'].includes(x.decking) ? x.decking : 'none',
     palletSupports: !!x.palletSupports,
-    protectorType: ['angulo', 'u', 'poste'].includes(x.protectorType) ? x.protectorType : DEFAULT_ACCESSORIES.protectorType,
+    protectorType: ['angulo', 'u', 'poste', 'bajo'].includes(x.protectorType) ? x.protectorType : DEFAULT_ACCESSORIES.protectorType,
     guardrailType: ['baranda', 'arco'].includes(x.guardrailType) ? x.guardrailType : DEFAULT_ACCESSORIES.guardrailType,
     backMesh: !!x.backMesh,
+    rowSigns: !!x.rowSigns,
+    floorGuide: !!x.floorGuide,
     beamColor: paint(x.beamColor, DEFAULT_ACCESSORIES.beamColor),
     uprightColor: x.uprightColor === 'galvanizado' ? 'galvanizado' : paint(x.uprightColor, 'galvanizado' as never),
     protectorColor: paint(x.protectorColor, DEFAULT_ACCESSORIES.protectorColor),
@@ -387,6 +389,9 @@ export function calculateRackStructure(
     palletSupports: acc.palletSupports ? beamPositions * R.supportsPerPallet : 0,
     // una malla por módulo y por fila, en la cara de atrás
     backMesh: acc.backMesh ? layout.rows * totalModules : 0,
+    // un cartel en cada cabecera y una guía por fila
+    rowSigns: acc.rowSigns ? layout.rows * 2 : 0,
+    floorGuides: acc.floorGuide ? layout.rows : 0,
   }
 
   /* ---- 9. Advertencias técnicas ---- */
