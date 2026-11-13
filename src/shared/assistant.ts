@@ -7,9 +7,9 @@
 import { buildDepot, type Depot } from './plan/depot'
 import { ROOF_CLEARANCE } from './plan/checks'
 import type { LayoutOptions } from './plan/layout'
-import { newId } from './plan/edit'
-import type { Plan } from './plan/types'
-import { DESIGN_RULES } from './rack/technicalSpecs'
+import { addObject, newId } from './plan/edit'
+import type { Plan, SymbolKind } from './plan/types'
+import { DESIGN_RULES, OBJECT_COLORS } from './rack/technicalSpecs'
 import type { AccessoryConfig, FrameParts, RackConfiguration } from './rack/types'
 import { metros } from './units'
 
@@ -31,6 +31,10 @@ export type Shape =
   | { kind: 'column'; at: Place; size: number }
   | { kind: 'grid'; dx: number; dy: number; size: number }
   | { kind: 'door'; width: number; wall: Wall; at?: number }
+  | { kind: 'wall'; a: { x: number; y: number }; b: { x: number; y: number } }
+  | { kind: 'symbol'; what: SymbolKind; at: Place }
+  | { kind: 'text'; text: string; at: Place }
+  | { kind: 'object'; name: string; shape: 'caja' | 'cilindro'; w: number; d: number; h: number; color: string; at: Place }
 
 export interface Order {
   depot?: { l: number; w: number }
@@ -87,13 +91,24 @@ const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1)
  * Saca de un renglón lo que se dibuja en el plano (zonas, pasillos marcados, columnas, portones) y
  * devuelve lo que sobra del renglón, para leerle las medidas generales.
  */
-function takeShapes(line: string, shapes: Shape[]): string {
+function takeShapes(line: string, shapes: Shape[], name?: string): string {
   let t = line
   const each = (re: string, use: (m: RegExpExecArray) => Shape | null) => {
     const rx = new RegExp(re, 'g')
     t = t.replace(rx, (...args) => { const sh = use(args.slice(0, -2) as unknown as RegExpExecArray); if (sh) shapes.push(sh); return sh ? ' ' : args[0] })
   }
-  const name = /\(([^)]{1,40})\)/.exec(line)?.[1]
+  const POINT = `${NUM}${UNIT}\\s*(?:,|\\by\\b)\\s*${NUM}${UNIT}`
+  const hex = (w: string | undefined) => OBJECT_COLORS.find((c) => c.id === w)?.hex ?? '#8f969d'
+  const TINT = `(?:\\s*\\([^)]*\\))?(?:\\s*(?:de\\s*)?(?:color\\s*)?(${OBJECT_COLORS.map((c) => c.id).join('|')}))?`
+  // objetos sueltos: una caja (largo por ancho por alto) o un cilindro (diámetro por alto), con su nombre entre paréntesis
+  each(`(?:cajas?|objetos?|mesas?|maquinas?|tarimas?)\\s*(?:de\\s*)?${NUM}${UNIT}\\s*(?:x|por)\\s*${NUM}${UNIT}\\s*(?:x|por)\\s*${NUM}${UNIT}\\s*en\\s*${POINT}${TINT}`,
+    (m) => ({ kind: 'object', shape: 'caja', w: mm(m[1]), d: mm(m[2]), h: mm(m[3]), at: { x: mm(m[4]), y: mm(m[5]) }, name: cap(name ?? 'caja'), color: hex(m[6]) }))
+  each(`(?:cilindros?|tanques?|tambores?)\\s*(?:de\\s*)?${NUM}${UNIT}\\s*(?:x|por)\\s*${NUM}${UNIT}\\s*en\\s*${POINT}${TINT}`,
+    (m) => ({ kind: 'object', shape: 'cilindro', w: mm(m[1]), d: mm(m[1]), h: mm(m[2]), at: { x: mm(m[3]), y: mm(m[4]) }, name: cap(name ?? 'cilindro'), color: hex(m[5]) }))
+  each(`tabiques?\\s*(?:de|desde)?\\s*${POINT}\\s*(?:a|hasta)\\s*${POINT}`, (m) => ({ kind: 'wall', a: { x: mm(m[1]), y: mm(m[2]) }, b: { x: mm(m[3]), y: mm(m[4]) } }))
+  const SYMBOLS: [string, SymbolKind][] = [['matafuegos?', 'matafuego'], ['hidrantes?', 'hidrante'], ['salidas?(?: de emergencia)?', 'salida'], ['botiquin(?:es)?', 'botiquin'], ['banos?', 'banio'],
+    ['tableros?(?: electrico)?', 'tablero'], ['cargador(?:es)?(?: de baterias)?', 'cargador'], ['autoelevador(?:es)?', 'autoelevador'], ['personas?', 'persona'], ['picking', 'picking'], ['anden(?:es)?', 'anden']]
+  for (const [word, what] of SYMBOLS) each(`(?:un\\s*|una\\s*)?${word}\\s*en\\s*${POINT}`, (m) => ({ kind: 'symbol', what, at: { x: mm(m[1]), y: mm(m[2]) } }))
   each(`(?:zona libre|zona sin racks|area libre|(oficinas?))\\s*(?:de\\s*)?${SIZE}${WHERE}(?:\\s*\\([^)]*\\))?`, (m) => ({ kind: 'zone', w: mm(m[2]), d: mm(m[3]), at: place(m[4], m[5], m[6]), name: cap(name ?? (m[1] ? 'oficina' : 'zona libre')) }))
   each(`zonas? de racks?\\s*(?:de\\s*)?${SIZE}${WHERE}(?:\\s*(?:con\\s*)?(?:filas\\s*)?(verticales|horizontales))?`, (m) => ({ kind: 'area', w: mm(m[1]), d: mm(m[2]), at: place(m[3], m[4], m[5]), ...(m[6] ? { orientation: m[6] === 'verticales' ? 'y' as const : 'x' as const } : {}) }))
   each(`pasillos?\\s*(?:marcado\\s*)?(?:de\\s*)?${SIZE}${WHERE}`, (m) => ({ kind: 'aisle', w: mm(m[1]), d: mm(m[2]), at: place(m[3], m[4], m[5]) }))
@@ -107,6 +122,7 @@ function takeShapes(line: string, shapes: Shape[]): string {
 
 /**
  * Lee un pedido escrito, de una frase o de varios renglones (un "prompt" pegado). Entiende:
+ *  - tabiques, símbolos (matafuego, salida, autoelevador, persona…), textos y objetos sueltos (cajas y cilindros);
  *  - el depósito ("30 por 20"), el techo, columnas ("columnas cada 10 por 8"), portones ("portón de 4 en
  *    la pared de abajo a 12"), zonas libres, zonas de racks y pasillos marcados ("… de 8 por 5 en 0, 0");
  *  - el rack: alto, niveles, largo de viga, profundidad, cantidad de módulos, la altura de una viga
@@ -132,8 +148,10 @@ export function parseOrder(text: string): Order {
   const metric = (line: string) => line
     .replace(/(\d+(?:[.,]\d+)?)\s*(?:cm|centimetros?)\b/g, (_m, v) => `${num(v) / 100} m`)
     .replace(/(\d+(?:[.,]\d+)?)\s*(?:mm|milimetros?)\b/g, (_m, v) => `${num(v) / 1000} m`)
+  // los textos se leen antes que nada, tal como se escribieron (con sus mayúsculas)
+  text = text.replace(new RegExp(`textos?\\s*["“'«]([^"”'»\\n]{1,40})["”'»]\\s*en\\s*${NUM}\\s*(?:,|\\by\\b)\\s*${NUM}`, 'gi'), (_m, words, x, y) => { shapes.push({ kind: 'text', text: String(words).trim(), at: { x: mm(x), y: mm(y) } }); return ' ' })
   // renglón por renglón: primero lo que se dibuja; con lo que sobra, las medidas generales
-  const t = text.split(/\n|;|\.(?=\s|$)/).map(plain).filter(Boolean).map((line) => takeShapes(takeParts(metric(line)), shapes)).join(' , ')
+  const t = text.split(/\n|;|\.(?=\s|$)/).filter((raw) => plain(raw)).map((raw) => takeShapes(takeParts(metric(plain(raw))), shapes, /\(([^)]{1,40})\)/.exec(raw)?.[1].trim())).join(' , ')
   if (shapes.length) o.shapes = shapes.slice(0, 80)
   if (beamAt.length) o.beamAt = beamAt
   if (Object.keys(frame).length) o.frame = frame
@@ -226,6 +244,10 @@ export function withBeams(elevs: number[], beamAt: NonNullable<Order['beamAt']>,
   return arr
 }
 
+const SYMBOL_NAME: Record<SymbolKind, string> = {
+  matafuego: 'Matafuego', hidrante: 'Hidrante', salida: 'Salida de emergencia', botiquin: 'Botiquín', banio: 'Baño', tablero: 'Tablero eléctrico',
+  cargador: 'Cargador de baterías', autoelevador: 'Autoelevador', picking: 'Picking', anden: 'Andén', persona: 'Persona',
+}
 const WALL_NAME: Record<Wall, string> = { top: 'de arriba', bottom: 'de abajo', left: 'de la izquierda', right: 'de la derecha' }
 const CORNER_NAME: Record<NonNullable<Place['corner']>, string> = { tl: 'arriba a la izquierda', tr: 'arriba a la derecha', bl: 'abajo a la izquierda', br: 'abajo a la derecha', c: 'en el centro' }
 const where = (at: Place) => (at.corner ? CORNER_NAME[at.corner] : `a ${metros(at.x ?? 0)} y ${metros(at.y ?? 0)} de la esquina`)
@@ -241,6 +263,10 @@ export function describeOrder(o: Order): string[] {
     else if (sh.kind === 'aisle') out.push(`Pasillo marcado de ${metros(sh.w)} × ${metros(sh.d)}, ${where(sh.at)}`)
     else if (sh.kind === 'grid') out.push(`Columnas cada ${metros(sh.dx)} × ${metros(sh.dy)}`)
     else if (sh.kind === 'column') out.push(`Columna ${where(sh.at)}`)
+    else if (sh.kind === 'wall') out.push(`Tabique de ${metros(Math.round(Math.hypot(sh.b.x - sh.a.x, sh.b.y - sh.a.y)))} de largo`)
+    else if (sh.kind === 'symbol') out.push(`${SYMBOL_NAME[sh.what]}, ${where(sh.at)}`)
+    else if (sh.kind === 'text') out.push(`Texto "${sh.text}"`)
+    else if (sh.kind === 'object') out.push(`${sh.name} (${sh.shape === 'caja' ? `caja de ${metros(sh.w)} × ${metros(sh.d)} × ${metros(sh.h)}` : `cilindro de ${metros(sh.w)} × ${metros(sh.h)} de alto`}), ${where(sh.at)}`)
     else out.push(`Portón de ${metros(sh.width)} en la pared ${WALL_NAME[sh.wall]}${sh.at !== undefined ? `, a ${metros(sh.at)}` : ', en el medio'}`)
   }
   if (o.modules) out.push(`${o.modules} ${o.modules === 1 ? 'módulo' : 'módulos'}`)
@@ -306,6 +332,14 @@ export function applyShapes(plan: Plan, shapes: Shape[]): { plan: Plan; notes: s
     else if (sh.kind === 'column') {
       const r = rect(sh.size, sh.size, sh.at.corner ? sh.at : { x: (sh.at.x ?? 0) - sh.size / 2, y: (sh.at.y ?? 0) - sh.size / 2 })
       next = { ...next, columns: [...next.columns, { id: newId('c'), x: r.x + sh.size / 2, y: r.y + sh.size / 2, shape: 'rect', w: sh.size, d: sh.size }] }
+    } else if (sh.kind === 'wall') {
+      const pt = (q: { x: number; y: number }) => ({ x: Math.min(Math.max(x0 + q.x, x0), x1), y: Math.min(Math.max(y0 + q.y, y0), y1) })
+      next = { ...next, walls: [...next.walls, { id: newId('w'), a: pt(sh.a), b: pt(sh.b), thickness: 150 }] }
+    } else if (sh.kind === 'symbol' || sh.kind === 'text' || sh.kind === 'object') {
+      const r = rect(0, 0, sh.at)
+      if (sh.kind === 'symbol') next = { ...next, symbols: [...(next.symbols ?? []), { id: newId('s'), x: r.x, y: r.y, kind: sh.what }] }
+      else if (sh.kind === 'text') next = { ...next, texts: [...(next.texts ?? []), { id: newId('t'), x: r.x, y: r.y, text: sh.text, size: 600 }] }
+      else next = addObject(next, { name: sh.name, shape: sh.shape, w: sh.w, d: sh.d, h: sh.h, color: sh.color }, r).plan
     } else if (sh.kind === 'grid') {
       const cols: Plan['columns'] = []
       for (let x = x0 + sh.dx; x < x1 - 1 && cols.length < 400; x += Math.max(1000, sh.dx))

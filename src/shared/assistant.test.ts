@@ -90,6 +90,22 @@ describe('ayudante: cambiar las medidas de un rack', () => {
     expect(f.orientation).toBeUndefined()
     expect(parseOrder('profundidad 90 cm').depth).toBe(900)
   })
+  it('también dibuja tabiques, símbolos, textos y objetos, con sus nombres tal como se escribieron', () => {
+    const o = parseOrder('Zona libre de 6 por 5 arriba a la derecha (Baños)\nTabique de 10, 0 a 10, 6\nMatafuego en 1, 8. Salida de emergencia en 59, 20\nCaja de 2 por 1,2 por 1 en 6, 31 (Mesa de control) color verde\nCilindro de 1,5 por 2,5 en 20, 31 (Tanque)\nTexto "RECEPCIÓN" en 54, 30')
+    expect(o.depot).toBeUndefined()
+    expect(o.shapes).toEqual([
+      { kind: 'text', text: 'RECEPCIÓN', at: { x: 54_000, y: 30_000 } },
+      { kind: 'zone', w: 6000, d: 5000, at: { corner: 'tr' }, name: 'Baños' },
+      { kind: 'wall', a: { x: 10_000, y: 0 }, b: { x: 10_000, y: 6000 } },
+      { kind: 'symbol', what: 'matafuego', at: { x: 1000, y: 8000 } },
+      { kind: 'symbol', what: 'salida', at: { x: 59_000, y: 20_000 } },
+      { kind: 'object', shape: 'caja', w: 2000, d: 1200, h: 1000, at: { x: 6000, y: 31_000 }, name: 'Mesa de control', color: '#2e8b57' },
+      { kind: 'object', shape: 'cilindro', w: 1500, d: 1500, h: 2500, at: { x: 20_000, y: 31_000 }, name: 'Tanque', color: '#8f969d' },
+    ])
+    const { plan } = applyShapes(rectanglePlan(60_000, 35_000), o.shapes!)
+    expect([plan.walls.length, plan.symbols?.length, plan.texts?.length, plan.objects?.length]).toEqual([1, 2, 1, 2])
+    expect(plan.objects![0]).toMatchObject({ name: 'Mesa de control', x: 6000, y: 31_000, h: 1000 })
+  })
   it('mueve una viga sin pisar a las vecinas ni pasar el tope', () => {
     expect(withBeams([1500, 3000, 4500], [{ n: 2, h: 3500 }], 6000)).toEqual([1500, 3500, 4500])
     expect(withBeams([1500, 3000, 4500], [{ n: 1, h: 4000 }], 6000)).toEqual([4000, 4200, 4500])
