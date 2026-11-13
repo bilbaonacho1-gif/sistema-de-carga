@@ -50,7 +50,7 @@ export function Intro({ onStart }: { onStart(): void }) {
         <ol className="intro__steps">
           <li><b>1</b>Escribí las medidas del depósito</li>
           <li><b>2</b>Elegí el rack y la carga</li>
-          <li><b>3</b>Mirá la distribución y pedí presupuesto</li>
+          <li><b>3</b>Mirá la distribución y bajá la lista de materiales</li>
         </ol>
         <button type="button" className="intro__go" onClick={onStart} autoFocus>Empezar <ArrowRight size={18} aria-hidden /></button>
       </div>

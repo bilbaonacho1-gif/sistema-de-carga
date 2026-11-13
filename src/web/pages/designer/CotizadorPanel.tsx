@@ -552,7 +552,7 @@ export function MaterialsList({ lines, bare }: { lines: MaterialLine[]
       })}
       {bare ? null : total !== null
         ? <p className="bom__total"><span>Total estimado</span><strong>{money(total)}</strong></p>
-        : <p className="bom__note">Sin precios cargados: el presupuesto se arma con esta lista de materiales.</p>}
+        : <p className="bom__note">Sin precios cargados: la lista muestra las cantidades de cada pieza.</p>}
     </div>
   )
 }

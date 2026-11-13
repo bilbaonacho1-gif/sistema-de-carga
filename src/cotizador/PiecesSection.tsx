@@ -5,13 +5,13 @@
  * Desde acá la pieza se mete en todos los racks o sólo en los racks elegidos en el plano.
  * Las piezas se guardan con el rack y no se borran al empezar de nuevo.
  */
-import { ArrowLeft, Copy, Lock, MousePointerClick, PenTool, Plus, Trash2, Upload } from 'lucide-react'
+import { ArrowLeft, Copy, Download, Lock, MousePointerClick, PenTool, Plus, Trash2, Upload } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { sanitizeObjectShape } from '../shared/plan/edit'
 import { selectedRackIds } from '../shared/plan/racks'
 import type { ObjectShape } from '../shared/plan/types'
 import { calculateRackStructure } from '../shared/rack/calculateRackStructure'
-import { beamName, PIECE_LIMITS as P, uprightName } from '../shared/rack/profiles'
+import { beamName, mergeProfiles, PIECE_LIMITS as P, piecesFile, readPiecesFile, uprightName } from '../shared/rack/profiles'
 import { presetShape, sectionSize, shapeFromDxf, type SectionShape } from '../shared/rack/section'
 import { BEAM_PROFILES, UPRIGHT_PROFILES } from '../shared/rack/technicalSpecs'
 import type { BeamProfile, ObjectType, UprightProfile } from '../shared/rack/types'
@@ -44,6 +44,28 @@ export function PiecesSection() {
   // qué se ve en 3D: la pieza sola (para girarla y mirarla) o un rack armado con ella
   const [view3d, setView3d] = useState<'pieza' | 'rack'>('pieza')
   const dxf = useRef<HTMLInputElement>(null)
+
+  // pasar las piezas a otra computadora: bajarlas a un archivo y cargarlas allá
+  const fileIn = useRef<HTMLInputElement>(null)
+  const ownCount = own.beams.length + own.uprights.length + own.objects.length
+  const saveFile = () => {
+    const url = URL.createObjectURL(new Blob([piecesFile(own)], { type: 'application/json' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `mis-piezas-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    toast.ok(`Se guardaron ${ownCount === 1 ? 'tu pieza' : `tus ${ownCount} piezas`} en un archivo. Buscalo en Descargas.`)
+  }
+  const loadFile = async (f: File | undefined) => {
+    if (!f) return
+    const incoming = readPiecesFile(await f.text())
+    if (!incoming) { toast.error('Ese archivo no es de piezas. Tiene que ser el que baja "Guardar en un archivo".'); return }
+    const { profiles, added, updated } = mergeProfiles(own, incoming)
+    if (!added && !updated) { toast.error('El archivo no trae ninguna pieza.'); return }
+    save({ uprights: profiles.uprights, beams: profiles.beams, objects: profiles.objects ?? [] })
+    toast.ok(`Listo: ${added ? `${added} ${added === 1 ? 'pieza nueva' : 'piezas nuevas'}` : ''}${added && updated ? ' y ' : ''}${updated ? `${updated} ${updated === 1 ? 'actualizada' : 'actualizadas'}` : ''}.`)
+  }
 
   const beam = sel?.kind === 'beam' ? own.beams.find((b) => b.id === sel.id) ?? BEAM_PROFILES.find((b) => b.id === sel.id) : undefined
   const upright = sel?.kind === 'upright' ? own.uprights.find((u) => u.id === sel.id) ?? UPRIGHT_PROFILES.find((u) => u.id === sel.id) : undefined
@@ -197,6 +219,14 @@ export function PiecesSection() {
             {UPRIGHT_PROFILES.map((u) => item('upright', u.id, u.name, `aguanta ${kg(u.maxFrameLoad)}`, true))}
           </ul>
         </details>
+        {/* pasar las piezas a otra computadora: se bajan a un archivo y se cargan allá */}
+        <div className="pieces__share">
+          <h2 className="pieces__h">Pasarlas a otra computadora</h2>
+          <Button size="sm" icon={Download} onClick={saveFile} disabled={!ownCount} block>Guardar en un archivo</Button>
+          <Button size="sm" icon={Upload} onClick={() => fileIn.current?.click()} block>Cargar de un archivo</Button>
+          <input ref={fileIn} type="file" accept=".json,application/json" hidden onChange={(e) => { void loadFile(e.target.files?.[0]); e.target.value = '' }} />
+          <p className="muted small">Tus piezas quedan guardadas en este navegador. Con el archivo las llevás a otra computadora o se las pasás a otra persona.</p>
+        </div>
       </aside>
 
       {/* ---------- las medidas ---------- */}

@@ -71,3 +71,43 @@ export function profilesOf(config: Pick<RackConfiguration, 'customProfiles'> | u
 /** ¿Es una pieza creada por el usuario? */
 export const isOwnProfile = (config: Pick<RackConfiguration, 'customProfiles'> | undefined, id: string) =>
   !!config?.customProfiles && (config.customProfiles.uprights.some((u) => u.id === id) || config.customProfiles.beams.some((b) => b.id === id))
+
+/* ------------------------------ Pasar las piezas a otra computadora ------------------------------ */
+
+const FILE_KIND = 'sistema-de-depositos/mis-piezas'
+
+/** El texto del archivo con todas las piezas propias (para bajarlo y cargarlo en otra computadora). */
+export function piecesFile(own: Partial<CustomProfiles> | undefined): string {
+  const clean = sanitizeProfiles(own)
+  return JSON.stringify({ archivo: FILE_KIND, version: 1, vigas: clean.beams, parantes: clean.uprights, objetos: clean.objects ?? [] }, null, 1)
+}
+
+/** Lee un archivo de piezas. Devuelve null si no es uno (otro archivo, o roto). */
+export function readPiecesFile(text: string): CustomProfiles | null {
+  try {
+    const d = JSON.parse(text) as { archivo?: string; vigas?: unknown; parantes?: unknown; objetos?: unknown }
+    if (!d || d.archivo !== FILE_KIND) return null
+    return sanitizeProfiles({ beams: d.vigas as BeamProfile[], uprights: d.parantes as UprightProfile[], objects: d.objetos as ObjectType[] })
+  } catch { return null }
+}
+
+/**
+ * Suma las piezas de un archivo a las propias. Una pieza que ya estaba (la misma, por su id) se
+ * actualiza con la del archivo; las demás se agregan. Devuelve cuántas entraron de cada modo.
+ */
+export function mergeProfiles(own: Partial<CustomProfiles> | undefined, incoming: CustomProfiles): { profiles: CustomProfiles; added: number; updated: number } {
+  const base = sanitizeProfiles(own)
+  let added = 0, updated = 0
+  const join = <T extends { id: string }>(mine: T[], theirs: T[]): T[] => {
+    const out = [...mine]
+    for (const t of theirs) {
+      const i = out.findIndex((x) => x.id === t.id)
+      if (i >= 0) { out[i] = t; updated++ } else { out.push(t); added++ }
+    }
+    return out
+  }
+  const profiles = sanitizeProfiles({
+    uprights: join(base.uprights, incoming.uprights), beams: join(base.beams, incoming.beams), objects: join(base.objects ?? [], incoming.objects ?? []),
+  })
+  return { profiles, added, updated }
+}

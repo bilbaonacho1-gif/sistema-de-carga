@@ -123,3 +123,28 @@ describe('doblar la chapa', () => {
     expect(sectionSize(s)).toEqual({ w: 110, h: 120 })
   })
 })
+
+describe('pasar las piezas a otra computadora', () => {
+  it('lo que se guarda en el archivo vuelve igual, con su forma dibujada', async () => {
+    const { piecesFile, readPiecesFile, mergeProfiles } = await import('./profiles')
+    const own = {
+      beams: [{ id: 'mv-1', name: 'Viga reforzada', height: 140, depth: 60, capacityBySpan: [{ maxSpan: 3600, capacity: 4200 }], shape: presetShape('caja', 58, 138, 2) }],
+      uprights: [{ id: 'mp-1', name: 'Parante pesado', faceWidth: 120, depth: 90, thickness: 3, maxFrameLoad: 18_000 }],
+      objects: [{ id: 'mo-1', name: 'Mesa', shape: 'caja' as const, w: 2000, d: 1000, h: 900, color: '#2e8b57' }],
+    }
+    const back = readPiecesFile(piecesFile(own))!
+    expect(back.beams[0]).toMatchObject({ id: 'mv-1', name: 'Viga reforzada', height: 140, depth: 60 })
+    expect(back.beams[0].shape?.points).toHaveLength(4)
+    expect(back.uprights[0]).toMatchObject({ name: 'Parante pesado', maxFrameLoad: 18_000 })
+    expect(back.objects?.[0]).toMatchObject({ name: 'Mesa', w: 2000 })
+    // en otra computadora: se suman a las que había; la que ya estaba se actualiza y no se duplica
+    const there = { beams: [{ ...own.beams[0], name: 'Viga vieja' }, { id: 'mv-9', name: 'Otra', height: 100, depth: 50, capacityBySpan: [{ maxSpan: 3600, capacity: 2000 }] }], uprights: [] }
+    const merged = mergeProfiles(there, back)
+    expect([merged.added, merged.updated]).toEqual([2, 1])
+    expect(merged.profiles.beams.map((b) => b.name)).toEqual(['Viga reforzada', 'Otra'])
+    expect(merged.profiles.uprights).toHaveLength(1)
+    // otro archivo cualquiera no se toma
+    expect(readPiecesFile('{"hola": 1}')).toBeNull()
+    expect(readPiecesFile('no es json')).toBeNull()
+  })
+})

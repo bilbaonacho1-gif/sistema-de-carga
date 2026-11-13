@@ -17,7 +17,7 @@ export const TOUR: Step[] = [
   { target: '.plan-stage__bar .segmented', title: 'Plano o 3D', text: 'Pasá del plano al 3D para ver el depósito armado. En los dos se toca cualquier cosa para elegirla y arrastrarla.' },
   { target: '.zoom-btns', title: 'Zoom', text: 'Acercá y alejá con + y − (o con la rueda del mouse). Arrastrando el fondo te movés por el plano.' },
   { target: '.dock__bar', title: 'Paneles a tu gusto', text: 'Cada módulo se achica tocando su nombre. Arrastrándolo de la barra lo llevás a cualquier lugar o a un costado, como en los programas de Adobe.' },
-  { target: '.cz-top__actions', title: 'Pedir el presupuesto', text: 'Cuando el depósito esté listo, pedí el presupuesto: se arma con el plano y la lista de materiales. "Empezar de nuevo" borra todo.' },
+  { target: '.cz-top__actions', title: 'El ayudante', text: 'Si no sabés cómo hacer algo, abrí el Ayudante: revisa el depósito, te explica los pasos y arma cosas si se las escribís. "Empezar de nuevo" borra todo.' },
 ]
 
 const KEY = 'sdc-recorrido-visto'

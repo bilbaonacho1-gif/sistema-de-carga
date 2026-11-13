@@ -5,7 +5,7 @@
  * cuántos racks entran en ESE depósito (filas, pasillos, columnas y zonas) y todo lo demás
  * (materiales, presupuesto) sale del depósito completo.
  */
-import { AlertTriangle, Calculator, ChevronLeft, ClipboardPaste, ChevronRight, Download, Lightbulb, Mail, Phone, Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, ClipboardPaste, ChevronRight, Download, Lightbulb, Mail, Phone, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { buildDepot, moduleSize, type Depot } from '../shared/plan/depot'
 import { planArea } from '../shared/plan/geometry'
@@ -40,7 +40,7 @@ const META: Record<FlowStep, { title: string; short: string; help: string }> = {
   rack: { title: 'El módulo inicial', short: 'Rack', help: 'Este es el módulo inicial, el más importante: acá le cambiás todo (medidas, cada viga, los pórticos, los perfiles y los accesorios). Después lo ponés en el depósito, le sumás módulos y lo copiás.' },
   carga: { title: 'Pallet y carga', short: 'Carga', help: 'El pallet define cuántos entran por módulo. Si el cliente usa uno especial, elegí "A medida".' },
   distribucion: { title: 'Cuántos racks entran', short: 'Distribución', help: 'Armá los racks desde un módulo inicial: lo ponés en el plano, le sumás módulos y lo copiás y pegás donde quieras. Si preferís, el sistema también llena el depósito solo.' },
-  resumen: { title: 'Resumen y materiales', short: 'Resumen', help: 'El depósito completo: racks, posiciones y todas las piezas. Desde acá se pide el presupuesto.' },
+  resumen: { title: 'Resumen y materiales', short: 'Resumen', help: 'El depósito completo: racks, posiciones y todas las piezas. Acá se baja la lista de materiales; el plano sale del panel "Exportar".' },
 }
 
 /** El depósito calculado con la configuración actual (lo usan el panel, el visor y el presupuesto). */
@@ -60,7 +60,7 @@ export function useDepot(): { depot: Depot; preview: RackStructure } {
   return { depot, preview }
 }
 
-export function DepotFlow({ onQuote }: { onQuote(): void }) {
+export function DepotFlow() {
   const { flowStep } = usePlan()
   // al cambiar de paso se vuelven a ver todos los racks
   useEffect(() => {
@@ -140,7 +140,7 @@ export function DepotFlow({ onQuote }: { onQuote(): void }) {
         <AccessoriesStep s={depot.sample} counts={depot.counts} multiRow={depot.layout.rows > 1} closed />
       </>}
       {m.id === 'paso' && <>
-        <StepBody step={flowStep} depot={depot} preview={preview} onQuote={onQuote} />
+        <StepBody step={flowStep} depot={depot} preview={preview} />
         {rackView && <Warnings warnings={preview.warnings.filter((w) => w.code !== 'free-positions')} />}
         {flowStep === 'resumen' && <>
           <p className="disclaimer">Simulación de referencia: no reemplaza el cálculo estructural. Toda configuración la valida el departamento técnico.</p>
@@ -245,13 +245,13 @@ function StepNav() {
   )
 }
 
-function StepBody({ step, depot, preview, onQuote }: { step: FlowStep; depot: Depot; preview: RackStructure; onQuote(): void }) {
+function StepBody({ step, depot, preview }: { step: FlowStep; depot: Depot; preview: RackStructure }) {
   switch (step) {
     case 'deposito': return null
     case 'rack': return <RackStep s={preview} />
     case 'carga': return <LoadStep s={preview} />
     case 'distribucion': return <LayoutStep depot={depot} />
-    case 'resumen': return <SummaryStep depot={depot} onQuote={onQuote} />
+    case 'resumen': return <SummaryStep depot={depot} />
   }
 }
 
@@ -540,7 +540,7 @@ function LayoutStep({ depot }: { depot: Depot }) {
 
 /* ------------------------------ 6. Resumen ------------------------------ */
 
-function SummaryStep({ depot, onQuote }: { depot: Depot; onQuote(): void }) {
+function SummaryStep({ depot }: { depot: Depot }) {
   return (
     <div className="cot-fields">
       <KeyValue items={[
@@ -552,7 +552,6 @@ function SummaryStep({ depot, onQuote }: { depot: Depot; onQuote(): void }) {
       ]} />
       <MaterialsList lines={depot.materials} />
       <Button icon={Download} onClick={() => downloadMaterials(depot.materials, `materiales-deposito-${depot.positions}-posiciones`)} block>Descargar lista (CSV)</Button>
-      <Button variant="primary" icon={Calculator} onClick={onQuote} block>Pedir presupuesto</Button>
     </div>
   )
 }

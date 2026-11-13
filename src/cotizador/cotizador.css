@@ -201,3 +201,6 @@
 
 /* qué lleva cada módulo (paso Rack) */
 .kit__t { margin: 6px 0 0; font: 700 12.5px/1.2 var(--f-display); text-transform: uppercase; letter-spacing: .04em; color: var(--ink-2); }
+
+/* pasar las piezas a otra computadora */
+.pieces__share { display: grid; gap: 6px; margin-top: 14px; padding-top: 4px; border-top: 1px solid var(--line-2); }
