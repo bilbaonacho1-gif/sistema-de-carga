@@ -6,7 +6,7 @@
 import { newId } from './edit'
 import { outlinePolygon, pointInPolygon } from './geometry'
 import { placementRect, type LayoutResult, type RackModuleSize } from './layout'
-import type { Plan, PlanPoint, PlanSelection, RackPlacement } from './types'
+import type { ModulePieces, Plan, PlanPoint, PlanSelection, RackPlacement } from './types'
 import { UPRIGHT_PROFILES } from '../rack/technicalSpecs'
 
 type Rect = { x: number; y: number; w: number; h: number }
@@ -323,4 +323,74 @@ export function moveRacksBy(plan: Plan, ids: string[], dx: number, dy: number, s
 export function racksInBox(racks: RackPlacement[], x0: number, y0: number, x1: number, y1: number): string[] {
   const bx = Math.min(x0, x1), by = Math.min(y0, y1), bw = Math.abs(x1 - x0), bh = Math.abs(y1 - y0)
   return racks.filter((r) => overlap(placementRect(r), { x: bx, y: by, w: bw, h: bh })).map((r) => r.id)
+}
+
+/* ------------------------------ Partir y unir racks ------------------------------ */
+
+/** Las piezas propias (de módulos y de parantes) de un pedazo del rack: módulos `from`..`to` (sin incluir `to`). */
+function partsOf(r: RackPlacement, from: number, to: number): Pick<RackPlacement, 'mods' | 'frameHeights'> {
+  const mods = Object.fromEntries(Object.entries(r.mods ?? {}).filter(([k]) => +k >= from && +k < to).map(([k, v]) => [+k - from, v]))
+  const frames = Object.fromEntries(Object.entries(r.frameHeights ?? {}).filter(([k]) => +k >= from && +k <= to).map(([k, v]) => [+k - from, v]))
+  return { mods: Object.keys(mods).length ? mods : undefined, frameHeights: Object.keys(frames).length ? frames : undefined }
+}
+
+const along = (r: RackPlacement, d: number): Pick<RackPlacement, 'x' | 'y'> => (r.orientation === 'x' ? { x: Math.round(r.x + d), y: r.y } : { x: r.x, y: Math.round(r.y + d) })
+
+/**
+ * Parte un rack en dos después del módulo `at` (1 = después del primero). Quedan dos racks seguidos,
+ * cada uno con sus parantes de punta: por eso el conjunto se alarga el ancho de un parante. Si así
+ * no entra, se corre ese poquito para el otro lado. Devuelve null si no se puede (un solo módulo o sin lugar).
+ */
+export function splitRack(plan: Plan, id: string, at: number, size: RackModuleSize): { plan: Plan; ids: [string, string] } | null {
+  const r = plan.racks?.find((x) => x.id === id)
+  if (!r || r.modules < 2) return null
+  const k = Math.max(1, Math.min(r.modules - 1, Math.round(at)))
+  const up = rackDims(r, size).upright
+  const wasBad = !!blockedReason(plan, fitPlacement(r, size))
+  for (const shift of [0, -up]) {
+    const first = fitPlacement({ ...r, ...along(r, shift), modules: k, ...partsOf(r, 0, k) }, size)
+    const second = fitPlacement({ ...r, id: newId('r'), ...along(first, first.length), modules: r.modules - k, ...partsOf(r, k, r.modules) }, size)
+    if (!wasBad && (blockedReason(plan, first) || blockedReason(plan, second))) continue
+    return { plan: { ...plan, racks: (plan.racks ?? []).flatMap((x) => (x.id === id ? [first, second] : [x])) }, ids: [first.id, second.id] }
+  }
+  return null
+}
+
+/**
+ * Une racks que están en la misma fila, uno a continuación del otro (tocándose o casi), en uno solo.
+ * Tienen que ser del mismo tipo (simple o doble) y de la misma altura, niveles, fondo y parante. Si
+ * las vigas de alguno son distintas, cada módulo conserva las suyas. Devuelve null si no se pueden unir.
+ */
+export function joinRacks(plan: Plan, ids: string[], size: RackModuleSize): { plan: Plan; id: string } | null {
+  const set = new Set(ids)
+  const rs = (plan.racks ?? []).filter((r) => set.has(r.id)).map((r) => fitPlacement(r, size))
+  if (rs.length < 2) return null
+  const o = rs[0].orientation
+  const pos = (r: RackPlacement) => (o === 'x' ? r.x : r.y), across = (r: RackPlacement) => (o === 'x' ? r.y : r.x)
+  rs.sort((a, b) => pos(a) - pos(b))
+  const f = rs[0]
+  const same = (r: RackPlacement) => r.orientation === o && r.pair === f.pair && Math.abs(across(r) - across(f)) <= 50
+    && r.height === f.height && r.levels === f.levels && r.frameDepth === f.frameDepth && (r.uprightId ?? 'auto') === (f.uprightId ?? 'auto')
+  if (!rs.every(same)) return null
+  const up = rackDims(f, size).upright
+  for (let i = 1; i < rs.length; i++) {
+    const gap = pos(rs[i]) - (pos(rs[i - 1]) + rs[i - 1].length)
+    if (gap < -up - 50 || gap > 600) return null
+  }
+  const mods: Record<number, ModulePieces> = {}, frames: Record<number, number> = {}
+  let off = 0
+  for (const r of rs) {
+    for (let m = 0; m < r.modules; m++) {
+      const e: ModulePieces = { ...r.mods?.[m] }
+      // las vigas distintas a las del primero quedan como propias de cada módulo
+      if (r.beamLength !== f.beamLength && e.width === undefined) e.width = r.beamLength ?? size.width
+      if (r.beamId !== f.beamId && e.beamId === undefined && r.beamId && r.beamId !== 'auto') e.beamId = r.beamId
+      if (r.beamElevations && r.beamElevations.join() !== f.beamElevations?.join() && !e.beamElevations) e.beamElevations = r.beamElevations
+      if (Object.keys(e).length) mods[off + m] = e
+    }
+    for (const [k, v] of Object.entries(r.frameHeights ?? {})) if (frames[off + +k] === undefined) frames[off + +k] = v
+    off += r.modules
+  }
+  const merged = fitPlacement({ ...f, modules: off, mods: Object.keys(mods).length ? mods : undefined, frameHeights: Object.keys(frames).length ? frames : undefined }, size)
+  return { plan: { ...plan, racks: (plan.racks ?? []).filter((r) => r.id === f.id || !set.has(r.id)).map((r) => (r.id === f.id ? merged : r)) }, id: f.id }
 }

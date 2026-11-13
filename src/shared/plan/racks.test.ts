@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { buildDepot } from './depot'
 import { rectanglePlan } from './geometry'
 import { DEFAULT_LAYOUT, autoLayout, placementRect, type RackModuleSize } from './layout'
-import { addRack, duplicateRack, fitPlacement, freezeRacks, moveRack, rackIssues, rotateRack, setRackModules } from './racks'
+import { addRack, duplicateRack, fitPlacement, freezeRacks, joinRacks, moveRack, rackIssues, rotateRack, setRackModules, splitRack } from './racks'
 import { DEFAULT_CONFIGURATION } from '../rack/technicalSpecs'
-import type { RackPlacement } from './types'
+import type { Plan, RackPlacement } from './types'
 
 const size: RackModuleSize = { width: 2700, depth: 1000, upright: 100, backToBackGap: 200 }
 const rack = (o: Partial<RackPlacement> = {}): RackPlacement => fitPlacement({ id: 'a', x: 2000, y: 2000, orientation: 'x', modules: 3, length: 0, depth: 0, pair: false, ...o }, size)
@@ -157,5 +157,46 @@ describe('varios racks y medidas propias', () => {
     const despues = buildDepot(alto, config, DEFAULT_LAYOUT)
     expect(despues.positions).toBeGreaterThan(antes)
     expect(despues.racks[1].structure.config.height).toBe(8000)
+  })
+})
+
+describe('partir y unir racks', () => {
+  const size = { width: 2700, depth: 1100, upright: 100, backToBackGap: 200 }
+  const plan = (racks: RackPlacement[]): Plan => ({ ...rectanglePlan(60_000, 20_000), racks })
+  const base: RackPlacement = { id: 'a', x: 2000, y: 2000, orientation: 'x', modules: 10, length: 0, depth: 0, pair: true }
+
+  it('partir deja dos racks seguidos con los módulos repartidos', () => {
+    const out = splitRack(plan([base]), 'a', 4, size)!
+    const [first, second] = out.plan.racks!
+    expect([first.modules, second.modules]).toEqual([4, 6])
+    expect(second.x).toBe(first.x + first.length)
+    expect(second.y).toBe(first.y)
+    expect(second.pair).toBe(true)
+    expect(out.ids).toEqual([first.id, second.id])
+  })
+  it('las piezas propias de cada módulo quedan en la mitad que les toca', () => {
+    const out = splitRack(plan([{ ...base, mods: { 1: { width: 1800 }, 7: { beamId: 'V160' } }, frameHeights: { 4: 8000, 9: 7000 } }]), 'a', 4, size)!
+    const [first, second] = out.plan.racks!
+    expect(first.mods).toEqual({ 1: { width: 1800 } })
+    expect(second.mods).toEqual({ 3: { beamId: 'V160' } })
+    expect(first.frameHeights).toEqual({ 4: 8000 })
+    expect(second.frameHeights).toEqual({ 0: 8000, 5: 7000 })
+  })
+  it('un rack de un solo módulo no se parte', () => {
+    expect(splitRack(plan([{ ...base, modules: 1 }]), 'a', 1, size)).toBeNull()
+  })
+  it('unir vuelve a dejar un solo rack con todos los módulos', () => {
+    const cut = splitRack(plan([base]), 'a', 4, size)!
+    const out = joinRacks(cut.plan, cut.ids, size)!
+    expect(out.plan.racks).toHaveLength(1)
+    expect(out.plan.racks![0].modules).toBe(10)
+    expect(out.plan.racks![0].x).toBe(2000)
+  })
+  it('no une racks de otra fila ni de distinta altura', () => {
+    const other: RackPlacement = { ...base, id: 'b', y: 9000 }
+    expect(joinRacks(plan([base, other]), ['a', 'b'], size)).toBeNull()
+    const cut = splitRack(plan([base]), 'a', 4, size)!
+    const tall = { ...cut.plan, racks: cut.plan.racks!.map((r, i) => (i === 1 ? { ...r, height: 9000 } : r)) }
+    expect(joinRacks(tall, cut.ids, size)).toBeNull()
   })
 })

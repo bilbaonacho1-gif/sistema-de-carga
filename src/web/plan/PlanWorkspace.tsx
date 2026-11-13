@@ -2,12 +2,12 @@
  * Visor del depósito: el plano (2D, editable) o el depósito en 3D (también editable: se toca y
  * se arrastra), con los racks ubicados si los hay. Lo seleccionado tiene su barra de acciones.
  */
-import { AlertTriangle, Box, ChevronDown, ChevronRight, Copy, Focus, Map as MapIcon, Maximize2, Package, RotateCw, Trash2 } from 'lucide-react'
+import { AlertTriangle, Box, ChevronDown, ChevronRight, Combine, Copy, Focus, Scissors, Map as MapIcon, Maximize2, Package, RotateCw, Trash2 } from 'lucide-react'
 import { rackNames } from './PlanNotes'
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import type { PlacedRack } from '../../shared/plan/depot'
 import { removeItem, removeVertex } from '../../shared/plan/edit'
-import { duplicateWithin, fitPlacement, freezeRacks, mapRacks, removeRacks, selectedRackIds, guarded, moveRack, rotateRack, setRackModules, setRackPair } from '../../shared/plan/racks'
+import { duplicateWithin, fitPlacement, freezeRacks, joinRacks, mapRacks, rackSelection, removeRacks, selectedRackIds, guarded, moveRack, rotateRack, setRackModules, setRackPair, splitRack } from '../../shared/plan/racks'
 import { metros } from '../../shared/units'
 import { NumberStepper } from '../components/fields'
 import type { Plan, PlanSelection, RackPlacement } from '../../shared/plan/types'
@@ -146,8 +146,35 @@ export function RackEditor({ rackLayer, defaults }: { rackLayer: PlanRackLayer; 
         <button type="button" className="vp-btn" disabled={!dup} title={dup ? undefined : 'No hay lugar al lado para otro rack igual'} onClick={() => { if (dup) { commit(() => dup.plan); select({ kind: 'rack', id: dup.id }) } }}><Copy size={14} aria-hidden /> Duplicar</button>
         <button type="button" className="vp-btn" onClick={() => { commit((p) => removeSelection(p, selection, rackLayer)); select(null) }}><Trash2 size={14} aria-hidden /> Borrar</button>
       </div>
+      <SplitRack key={`${r.id}-${r.modules}`} r={r} base={base} size={size} />
       {defaults.config && <RackParts r={r} rackLayer={rackLayer} config={defaults.config} />}
       <p className="muted small">Arrastralo en el plano o en el 3D para moverlo: no entra en zonas libres ni pasillos{plan.rackAreas?.length ? ' y no sale de la zona de racks' : ''}. Supr lo borra, Esc termina.</p>
+    </div>
+  )
+}
+
+/**
+ * Partir un rack largo en dos: se elige después de qué módulo. Quedan dos racks seguidos que se
+ * mueven y se editan por separado (y se pueden volver a unir eligiendo los dos).
+ */
+function SplitRack({ r, base, size }: { r: RackPlacement; base: Plan; size: PlanRackLayer['size'] }) {
+  const { commit, select } = usePlan()
+  const [at, setAt] = useState(Math.ceil(r.modules / 2))
+  const [failed, setFailed] = useState(false)
+  if (r.modules < 2) return null
+  const split = () => {
+    const out = splitRack(base, r.id, at, size)
+    if (!out) { setFailed(true); return }
+    commit(() => out.plan)
+    select(rackSelection(out.ids))
+  }
+  return (
+    <div className="rack-split">
+      <h3 className="rack-list__t">Partir este rack</h3>
+      <NumberStepper label="Después del módulo" value={at} min={1} max={r.modules - 1} step={1} onChange={(v) => { setAt(v); setFailed(false) }}
+        hint={`Quedan dos racks: uno de ${at} y otro de ${r.modules - at} ${r.modules - at === 1 ? 'módulo' : 'módulos'}`} />
+      <button type="button" className="vp-btn" onClick={split}><Scissors size={14} aria-hidden /> Partir en dos</button>
+      {failed && <p className="rack-editor__issue"><AlertTriangle size={14} aria-hidden /> No entra partido: los dos racks juntos son un poquito más largos (llevan un parante más). Sacale un módulo o corré el rack.</p>}
     </div>
   )
 }
@@ -193,6 +220,7 @@ export function MultiRackEditor({ rackLayer, defaults }: { rackLayer: PlanRackLa
     setNote(skipped ? `${skipped} ${skipped === 1 ? 'rack no entraba y quedó' : 'racks no entraban y quedaron'} como estaba${skipped === 1 ? '' : 'n'}.` : null)
   }
   const modules = racks.every((r) => r.modules === racks[0].modules) ? racks[0].modules : undefined
+  const joined = joinRacks(base, ids, size)
   const names = rackNames(rackLayer.racks)
   return (
     <div className="plan-sel rack-editor">
@@ -207,6 +235,8 @@ export function MultiRackEditor({ rackLayer, defaults }: { rackLayer: PlanRackLa
         <button type="button" className="vp-btn" onClick={() => each((p, id) => setRackPair(p, id, true))}>Todos dobles</button>
         <button type="button" className="vp-btn" onClick={() => each((p, id) => rotateRack(p, id))}><RotateCw size={14} aria-hidden /> Girar cada uno</button>
         <button type="button" className="vp-btn" onClick={() => { commit(() => removeRacks(base, ids)); select(null) }}><Trash2 size={14} aria-hidden /> Borrar los {racks.length}</button>
+        <button type="button" className="vp-btn" disabled={!joined} title={joined ? undefined : 'Para unirlos tienen que estar en la misma fila, uno al lado del otro, y tener la misma altura, niveles y parante'}
+          onClick={() => { if (joined) { commit(() => joined.plan); select({ kind: 'rack', id: joined.id }) } }}><Combine size={14} aria-hidden /> Unir en uno</button>
       </div>
       {note && <p className="rack-editor__issue"><AlertTriangle size={14} aria-hidden /> {note}</p>}
 

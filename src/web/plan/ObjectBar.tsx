@@ -4,11 +4,11 @@
  * zonas de racks, pasillos, columnas, tabiques, textos, símbolos, cotas, racks y el depósito entero
  * (tocando una de sus paredes).
  */
-import { AlignStartHorizontal, AlignStartVertical, Copy, Focus, Maximize, Minus, Plus, RotateCw, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { AlignStartHorizontal, AlignStartVertical, Combine, Copy, Focus, Maximize, Minus, Plus, RotateCw, Scissors, SlidersHorizontal, Trash2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { removeItem, removeVertex, setTotal } from '../../shared/plan/edit'
 import { placementRect, type RackModuleSize } from '../../shared/plan/layout'
-import { duplicateWithin, fitPlacement, freezeRacks, guarded, mapRacks, removeRacks, rotateRack, selectedRackIds, setRackModules, setRackPair } from '../../shared/plan/racks'
+import { duplicateWithin, fitPlacement, freezeRacks, guarded, joinRacks, mapRacks, rackSelection, removeRacks, rotateRack, selectedRackIds, setRackModules, setRackPair, splitRack } from '../../shared/plan/racks'
 import { fitToDepot, growRect, growWall, rotatePlan, rotateRect, rotateWall, type Rect } from '../../shared/plan/transform'
 import type { Plan, RackPlacement } from '../../shared/plan/types'
 import { metros } from '../../shared/units'
@@ -157,11 +157,14 @@ export function ObjectBar({ vb, size, layer, onFit }: Props) {
       const more = tryEdit((p) => setRackModules(p, r.id, r.modules + 1)), less = r.modules > 1 ? tryEdit((p) => setRackModules(p, r.id, r.modules - 1)) : null
       const rot = tryEdit((p) => rotateRack(p, r.id)), pair = tryEdit((p) => setRackPair(p, r.id, !r.pair))
       const dup = duplicateWithin(base, r.id, layout.aisle, layer.size)
+      // partir al medio: quedan dos racks que se editan por separado
+      const cut = r.modules > 1 ? splitRack(base, r.id, Math.ceil(r.modules / 2), layer.size) : null
       body = <>
         <Btn title="Girar 90°" onClick={() => rot && commit(() => rot)} disabled={!rot}><RotateCw size={15} aria-hidden /></Btn>
         <Step label="Módulos" value={String(r.modules)} onMinus={() => less && commit(() => less)} onPlus={() => more && commit(() => more)} minusOff={!less} plusOff={!more} />
         <button type="button" className="obar__t" onClick={() => pair && commit(() => pair)} disabled={!pair}>{r.pair ? 'Hacer simple' : 'Hacer doble'}</button>
         <Btn title="Duplicar al lado" onClick={() => { if (dup) { commit(() => dup.plan); select({ kind: 'rack', id: dup.id }) } }} disabled={!dup}><Copy size={15} aria-hidden /></Btn>
+        <Btn title={r.modules > 1 ? 'Partir en dos (al medio)' : 'Tiene un solo módulo: no se puede partir'} onClick={() => { if (cut) { commit(() => cut.plan); select(rackSelection(cut.ids)) } }} disabled={!cut}><Scissors size={15} aria-hidden /></Btn>
         <Btn title="Borrar" onClick={() => del(() => removeRacks(base, [r.id]))}><Trash2 size={15} aria-hidden /></Btn>
         <span className="obar__v obar__v--info">{metros(fitPlacement(r, layer.size).length)}</span>
         <span className="obar__sep" aria-hidden />
@@ -185,6 +188,8 @@ export function ObjectBar({ vb, size, layer, onFit }: Props) {
         commit(() => p)
       }
       const allPair = rs.every((r) => r.pair)
+      // unir: sólo si están en la misma fila, uno a continuación del otro
+      const joined = joinRacks(base, [...ids], layer.size)
       // alinear: todos con el borde izquierdo (o de arriba) del primero
       const align = (axis: 'x' | 'y') => {
         const v = Math.min(...bs.map((b) => b[axis]))
@@ -198,6 +203,7 @@ export function ObjectBar({ vb, size, layer, onFit }: Props) {
         <button type="button" className="obar__t" onClick={() => each((p, id) => setRackPair(p, id, !allPair))}>{allPair ? 'Todos simples' : 'Todos dobles'}</button>
         <Btn title="Alinear a la izquierda" onClick={() => align('x')}><AlignStartVertical size={15} aria-hidden /></Btn>
         <Btn title="Alinear arriba" onClick={() => align('y')}><AlignStartHorizontal size={15} aria-hidden /></Btn>
+        <Btn title={joined ? 'Unir en un solo rack' : 'Para unirlos tienen que estar en la misma fila, uno al lado del otro, y ser iguales'} onClick={() => { if (joined) { commit(() => joined.plan); select({ kind: 'rack', id: joined.id }) } }} disabled={!joined}><Combine size={15} aria-hidden /></Btn>
         <Btn title={`Borrar los ${rs.length}`} onClick={() => del(() => removeRacks(base, [...ids]))}><Trash2 size={15} aria-hidden /></Btn>
         <span className="obar__sep" aria-hidden />
         {isoBtn([...ids])}

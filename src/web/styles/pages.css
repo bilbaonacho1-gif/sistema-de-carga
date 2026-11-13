@@ -703,3 +703,7 @@
 .my-pieces { display: flex; flex-direction: column; gap: 8px; }
 .my-pieces__add { align-self: flex-start; }
 .my-pieces .rack-list__h strong { font-weight: 700; }
+
+/* partir un rack */
+.rack-split { display: flex; flex-direction: column; gap: 8px; }
+.rack-split .vp-btn { align-self: flex-start; }

@@ -26,12 +26,17 @@ export function rackNames(racks: RackPlacement[]): Map<string, string> {
     // de arriba hacia abajo (o de izquierda a derecha para filas verticales); en la misma fila, de izquierda a derecha
     g.sort((a, b) => (a.orientation === 'x' ? a.y - b.y || a.x - b.x : a.x - b.x || a.y - b.y))
     let n = 1, lastBand: number | null = null, lastPair = false
+    let row: RackPlacement[] = []
+    // varios racks en la misma fila (una fila partida): se distinguen con a, b, c…
+    const closeRow = () => { if (row.length > 1) row.forEach((r, i) => names.set(r.id, `${names.get(r.id)}${String.fromCharCode(97 + Math.min(25, i))}`)); row = [] }
     for (const r of g) {
       const band = r.orientation === 'x' ? r.y : r.x
-      if (lastBand !== null && Math.abs(band - lastBand) > 1) n += lastPair ? 2 : 1
+      if (lastBand !== null && Math.abs(band - lastBand) > 1) { n += lastPair ? 2 : 1; closeRow() }
       lastBand = band; lastPair = r.pair
       names.set(r.id, r.pair ? `${letter}${n}-${n + 1}` : `${letter}${n}`)
+      row.push(r)
     }
+    closeRow()
   }
   return names
 }
