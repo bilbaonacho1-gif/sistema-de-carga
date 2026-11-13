@@ -1,5 +1,5 @@
 import { useFrame } from '@react-three/fiber'
-import { useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useRef, useState, type ReactNode } from 'react'
 import * as THREE from 'three'
 
 export type AppearMode = 'grow-y' | 'grow-x' | 'drop' | 'none'
@@ -16,6 +16,11 @@ interface AnimatedProps {
   children: ReactNode
 }
 
+/** Modelo liviano: los parantes llevan los agujeros como imagen en vez de modelados (se usa en el depósito). */
+export const LightModel = createContext(false)
+/** Modelo fijo: las piezas nacen en su lugar, sin animación de entrada (para fundirlo en pocas mallas). */
+export const StillModel = createContext(false)
+
 /** Con "reducir movimiento" activado en el sistema, las piezas aparecen sin animación. */
 const reducedMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
@@ -28,9 +33,10 @@ const easeOutBack = (t: number) => 1 + 2.2 * Math.pow(t - 1, 3) + 1.2 * Math.pow
  */
 export function Animated({ position, rotationY = 0, appear = 'none', delay = 0, duration = 0.55, children }: AnimatedProps) {
   const ref = useRef<THREE.Group>(null)
+  const still = useContext(StillModel)
   // el delay y el modo sólo importan al montar: se congelan
   const [mount] = useState(() => {
-    const mode: AppearMode = reducedMotion ? 'none' : appear
+    const mode: AppearMode = reducedMotion || still ? 'none' : appear
     return { appear: mode, delay, start: -1, done: mode === 'none' }
   })
   const target = useRef(new THREE.Vector3())

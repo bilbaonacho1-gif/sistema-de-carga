@@ -45,6 +45,20 @@ export function paintMaterial(id: string): THREE.Material {
 }
 /** Diagonales y travesaños del bastidor: galvanizados, o del color del parante si va pintado. */
 export const braceMaterial = (uprightColor: string): THREE.Material => (uprightColor === 'galvanizado' ? MATERIALS.brace : paintMaterial(uprightColor))
+const perforatedCache = new Map<THREE.Material, THREE.Material>()
+/**
+ * El mismo material con los agujeros recortados por una imagen (para las chapas del parante liviano):
+ * se ve de los dos lados y los agujeros dejan pasar la vista y la sombra.
+ */
+export function perforatedMaterial(base: THREE.Material, holes: THREE.Texture): THREE.Material {
+  let mat = perforatedCache.get(base)
+  if (!mat) {
+    mat = base.clone()
+    Object.assign(mat, { alphaMap: holes, alphaTest: 0.5, side: THREE.DoubleSide, alphaToCoverage: true })
+    perforatedCache.set(base, mat)
+  }
+  return mat
+}
 /** Chapa gris de los pisos de nivel. */
 export const STEEL_DECK = new THREE.MeshStandardMaterial({ color: '#8f969d', metalness: 0.55, roughness: 0.5 })
 /** Para marcar la pieza tocada cuando lo amarillo no se distingue (vigas amarillas). */

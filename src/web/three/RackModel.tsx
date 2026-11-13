@@ -10,12 +10,12 @@ import { createContext, useContext, useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { DESIGN_RULES, VISUAL } from '../../shared/rack/technicalSpecs'
 import type { FrameLayout, LevelLayout, ModuleLayout, PositionSlot, RackStructure, RowLayout } from '../../shared/rack/types'
-import { Animated } from './Animated'
+import { Animated, LightModel } from './Animated'
 import {
   basePlateGeometry, beamGeometry, bracingGeometry, connectorGeometry, boxesGeometry, loadGeometry, palletGeometry, protectorGeometry,
 } from './geometry/parts'
-import { uprightGeometry } from './geometry/upright'
-import { braceMaterial, MATERIALS, m, paintHex, paintMaterial, PICK_BLUE, STEEL_DECK } from './materials'
+import { lightUprightGeometry, slotTexture, uprightGeometry } from './geometry/upright'
+import { braceMaterial, MATERIALS, m, paintHex, paintMaterial, perforatedMaterial, PICK_BLUE, STEEL_DECK } from './materials'
 import { useDesigner } from '../pages/designer/designerStore'
 import { loadOf, stackBoxes } from '../../shared/rack/load'
 
@@ -124,9 +124,11 @@ function Frame({ frame, row, structure, isNew, delay }: {
   const { config, upright, accessories: acc } = structure
   const D = m(config.depth)
   const H = m(frame.height)
+  // con muchos racks juntos, el parante va liviano: los agujeros son una imagen, no miles de caras
+  const light = useContext(LightModel) && !upright.shape
   // cada columna con su alto (una puede ser más alta que la otra)
-  const upGeo = uprightGeometry(upright, frame.columns[0])
-  const upGeoBack = frame.columns[1] === frame.columns[0] ? upGeo : uprightGeometry(upright, frame.columns[1])
+  const upGeo = light ? null : uprightGeometry(upright, frame.columns[0])
+  const upGeoBack = light ? null : frame.columns[1] === frame.columns[0] ? upGeo : uprightGeometry(upright, frame.columns[1])
   const braceGeo = bracingGeometry(upright, frame.height, config.depth, frame.diagonals, frame.horizontals)
   const plateGeo = basePlateGeometry(upright)
   const last = row.frames.length - 1
@@ -153,8 +155,18 @@ function Frame({ frame, row, structure, isNew, delay }: {
 
   return (
     <Animated position={[m(frame.x), 0, 0]} appear={isNew ? 'grow-y' : 'none'} delay={delay} duration={0.6}>
-      <mesh geometry={upGeo} material={upMat} castShadow {...pickUp} />
-      <mesh geometry={upGeoBack} material={upMat} position={[0, 0, -D]} rotation-y={Math.PI} castShadow {...pickUp} />
+      {upGeo && upGeoBack ? <>
+        <mesh geometry={upGeo} material={upMat} castShadow {...pickUp} />
+        <mesh geometry={upGeoBack} material={upMat} position={[0, 0, -D]} rotation-y={Math.PI} castShadow {...pickUp} />
+      </> : ([[frame.columns[0], 0, 0], [frame.columns[1], -D, Math.PI]] as const).map(([h, z, turn], i) => {
+        const g = lightUprightGeometry(upright, h)
+        return (
+          <group key={i} position={[0, 0, z]} rotation-y={turn}>
+            <mesh geometry={g.body} material={upMat} castShadow {...pickUp} />
+            <mesh geometry={g.plates} material={perforatedMaterial(upMat, slotTexture())} castShadow {...pickUp} />
+          </group>
+        )
+      })}
       <mesh geometry={braceGeo} material={brMat} castShadow {...pickUp} />
       {/* las bases del pórtico: una por columna (alguna puede faltar) */}
       {frame.bases[0] && <mesh geometry={plateGeo} material={MATERIALS.painted} />}

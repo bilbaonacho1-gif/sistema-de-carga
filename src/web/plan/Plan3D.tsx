@@ -17,6 +17,8 @@ import { snapRack } from '../../shared/plan/guides'
 import type { Plan, PlanPoint, PlanSelection, RackPlacement } from '../../shared/plan/types'
 import { fmt } from '../lib/format'
 import { RackModel, RackPickContext, type PickedPart } from '../three/RackModel'
+import { LightModel } from '../three/Animated'
+import { BakedRacks } from './BakedRacks'
 import { RackInstances, type InstanceStats } from './RackInstances'
 import { EYE_HEIGHT, Forklift, Person } from './Figures'
 import { usePlan } from './planStore'
@@ -533,9 +535,10 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, size, span, on
       </>}
 
       {/* pocos racks: el modelo con todo el detalle y, encima, una caja invisible para tocarlo y arrastrarlo */}
-      {shown.length <= MANY_RACKS && shown.map((r) => (shown !== racks
-        ? <PickableRack key={r.placement.id} rack={r} showLoads={showLoads} />
-        : <PlacedRackModel key={r.placement.id} rack={r} showLoads={showLoads} />))}
+      {/* todos juntos: horneados (se ven igual, en pocas pasadas); uno visto solo: vivo, para tocar sus piezas */}
+      {shown.length <= MANY_RACKS && (shown !== racks
+        ? shown.map((r) => <PickableRack key={r.placement.id} rack={r} showLoads={showLoads} />)
+        : <BakedRacks racks={shown} showLoads={showLoads} />)}
       {/* viendo un rack solo no hay caja para agarrarlo: se tocan sus piezas (vigas y parantes) */}
       {shown.length <= MANY_RACKS && shown === racks && shown.map(({ placement: p, structure }) => {
         const b = placementRect(p)
@@ -648,7 +651,8 @@ function PickableRack({ rack, showLoads }: { rack: PlacedRack; showLoads: boolea
       useDock.getState().set('editar', { collapsed: false })
     },
   }), [key, id]) // eslint-disable-line react-hooks/exhaustive-deps -- piece se compara por su clave
-  return <RackPickContext.Provider value={value}><PlacedRackModel rack={rack} showLoads={showLoads} /></RackPickContext.Provider>
+  // los parantes van livianos (los agujeros como imagen): se ven igual y un rack largo no traba
+  return <LightModel.Provider value><RackPickContext.Provider value={value}><PlacedRackModel rack={rack} showLoads={showLoads} /></RackPickContext.Provider></LightModel.Provider>
 }
 
 /**
