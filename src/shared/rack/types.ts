@@ -186,6 +186,9 @@ export interface FrameParts {
   noBaseFront?: boolean
   /** Sin la base de la columna de atrás. */
   noBaseBack?: boolean
+  /** Alto propio de la columna de adelante o de la de atrás (mm): una puede ser más alta que la otra. */
+  frontHeight?: number
+  backHeight?: number
 }
 
 export interface FrameLayout {
@@ -203,6 +206,8 @@ export interface FrameLayout {
   horizontals: number
   /** Si lleva base la columna de adelante (lado del pasillo) y la de atrás. */
   bases: [boolean, boolean]
+  /** Alto de la columna de adelante y de la de atrás (pueden ser distintas). `height` es la más baja: hasta ahí llegan las riendas. */
+  columns: [number, number]
 }
 
 export interface ModuleLayout {

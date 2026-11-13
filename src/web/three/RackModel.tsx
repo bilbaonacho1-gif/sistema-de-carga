@@ -124,7 +124,9 @@ function Frame({ frame, row, structure, isNew, delay }: {
   const { config, upright, accessories: acc } = structure
   const D = m(config.depth)
   const H = m(frame.height)
-  const upGeo = uprightGeometry(upright, frame.height)
+  // cada columna con su alto (una puede ser más alta que la otra)
+  const upGeo = uprightGeometry(upright, frame.columns[0])
+  const upGeoBack = frame.columns[1] === frame.columns[0] ? upGeo : uprightGeometry(upright, frame.columns[1])
   const braceGeo = bracingGeometry(upright, frame.height, config.depth, frame.diagonals, frame.horizontals)
   const plateGeo = basePlateGeometry(upright)
   const last = row.frames.length - 1
@@ -135,7 +137,8 @@ function Frame({ frame, row, structure, isNew, delay }: {
   const gap = m(DESIGN_RULES.backToBackGap)
   // conectores superiores: unen el par espalda con espalda, o cruzan el pasillo hasta la fila siguiente
   const tieAcross = acc.topTies && !backToBack && row.index + 1 < structure.rows.length
-  const tieY = H - 0.12
+  // el conector superior va arriba de la columna de atrás (la que mira a la otra fila)
+  const tieY = m(frame.columns[1]) - 0.12
   // guardarraíl de cabecera: uno por bloque (el par espalda con espalda comparte uno)
   const guard = acc.guardrails && isEnd && row.facing === 1
   const guardDepth = D + (pairedBehind ? D + gap : 0)
@@ -151,7 +154,7 @@ function Frame({ frame, row, structure, isNew, delay }: {
   return (
     <Animated position={[m(frame.x), 0, 0]} appear={isNew ? 'grow-y' : 'none'} delay={delay} duration={0.6}>
       <mesh geometry={upGeo} material={upMat} castShadow {...pickUp} />
-      <mesh geometry={upGeo} material={upMat} position={[0, 0, -D]} rotation-y={Math.PI} castShadow {...pickUp} />
+      <mesh geometry={upGeoBack} material={upMat} position={[0, 0, -D]} rotation-y={Math.PI} castShadow {...pickUp} />
       <mesh geometry={braceGeo} material={brMat} castShadow {...pickUp} />
       {/* las bases del pórtico: una por columna (alguna puede faltar) */}
       {frame.bases[0] && <mesh geometry={plateGeo} material={MATERIALS.painted} />}

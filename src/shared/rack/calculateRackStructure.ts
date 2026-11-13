@@ -314,9 +314,13 @@ export function calculateRackStructure(
       // el pórtico: dos columnas, sus riendas (las de la regla, o las que se le pusieron) y sus bases
       const h = frameHeight(key), own = config.frameParts?.[key]
       const count = (v: number | undefined, auto: number, max: number) => (Number.isFinite(v) ? clamp(Math.round(v as number), 0, max) : auto)
+      // cada columna puede tener su alto (por ejemplo, una más alta para un arriostre superior), nunca por debajo de las vigas
+      const col = (v: number | undefined) => (Number.isFinite(v) && (v as number) > 0 ? clamp(Math.round(v as number), Math.max(minFrameHeight(key), R.limits.height.min), R.limits.height.max) : h)
+      const columns: [number, number] = [col(own?.frontHeight), col(own?.backHeight)]
+      const low = Math.min(...columns)
       return {
-        id: `r${r}-f${i}`, row: r, index: i, key, x, height: h,
-        diagonals: count(own?.diagonals, rules.diagonalsPerFrame(h), 60), horizontals: count(own?.horizontals, rules.horizontalsPerFrame(h), 20),
+        id: `r${r}-f${i}`, row: r, index: i, key, x, height: low, columns,
+        diagonals: count(own?.diagonals, rules.diagonalsPerFrame(low), 60), horizontals: count(own?.horizontals, rules.horizontalsPerFrame(low), 20),
         bases: [!own?.noBaseFront, !own?.noBaseBack] as [boolean, boolean],
       }
     })

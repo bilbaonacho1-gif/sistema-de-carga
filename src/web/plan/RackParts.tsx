@@ -70,12 +70,6 @@ export function RackParts({ r, rackLayer, config }: { r: RackPlacement; rackLaye
     setNote(null)
   }
   const setMod = (m: number, patch: Partial<ModulePieces>) => set({ mods: cleanMods({ ...r.mods, [m]: { ...r.mods?.[m], ...patch } }) })
-  const setFrame = (f: number, h: number | undefined) => {
-    const next = { ...r.frameHeights, [f]: h }
-    const clean = Object.fromEntries(Object.entries(next).filter(([, v]) => v !== undefined)) as Record<number, number>
-    set({ frameHeights: Object.keys(clean).length ? clean : undefined })
-  }
-
   /** Cambia las riendas o las bases de un pórtico (lo que queda como "lo de siempre" no se guarda). */
   const setFrameParts = (f: number, patch: Partial<FrameParts>) => {
     const one = Object.fromEntries(Object.entries({ ...r.frameParts?.[f], ...patch }).filter(([, v]) => v !== undefined)) as FrameParts
@@ -146,10 +140,18 @@ export function RackParts({ r, rackLayer, config }: { r: RackPlacement; rackLaye
       pickedCard = (
         <section className="rack-part is-picked" aria-label="Pórtico elegido">
           <h4>Pórtico {k + 1} de {r.modules + 1}</h4>
-          <p className="rack-part__sum">2 columnas · {bases === 1 ? '1 base' : `${bases} bases`} · {f.diagonals + f.horizontals} riendas</p>
-          <NumberStepper label="Alto de las columnas" meters value={f.height} min={L.height.min} max={L.height.max} step={100} typedStep={10}
-            onChange={(v) => setFrame(k, v)}
+          <p className="rack-part__sum">2 columnas ({f.columns[0] === f.columns[1] ? metros(f.columns[0]) : `${metros(f.columns[0])} y ${metros(f.columns[1])}`}) · {bases === 1 ? '1 base' : `${bases} bases`} · {f.diagonals + f.horizontals} riendas</p>
+          <NumberStepper label="Alto de las dos columnas" meters value={ownH ?? height} min={L.height.min} max={L.height.max} step={100} typedStep={10}
+            onChange={(v) => { const fh = { ...r.frameHeights, [k]: v }; const one = { ...r.frameParts?.[k] }; delete one.frontHeight; delete one.backHeight; const fp = { ...r.frameParts }; if (Object.keys(one).length) fp[k] = one; else delete fp[k]; set({ frameHeights: fh, frameParts: Object.keys(fp).length ? fp : undefined }) }}
             hint={ownH ? 'Propio · no puede quedar más bajo que las vigas que sostiene' : `Como el resto (${metros(height)})`} />
+          {/* una columna más alta que la otra (por ejemplo, donde va un arriostre superior) */}
+          <div className="plan-xy">
+            <NumberStepper label="Columna de adelante" meters value={f.columns[0]} min={L.height.min} max={L.height.max} step={100} typedStep={10}
+              onChange={(v) => setFrameParts(k, { frontHeight: v })} hint={op?.frontHeight === undefined ? 'Igual que la otra' : 'Propia'} />
+            <NumberStepper label="Columna de atrás" meters value={f.columns[1]} min={L.height.min} max={L.height.max} step={100} typedStep={10}
+              onChange={(v) => setFrameParts(k, { backHeight: v })} hint={op?.backHeight === undefined ? 'Igual que la otra' : 'Propia'} />
+          </div>
+          <p className="muted small">Una columna puede ser más alta que la otra, por ejemplo donde va un arriostre superior. La de adelante es la del lado del pasillo.</p>
           <div className="plan-xy">
             <NumberStepper label="Riendas diagonales" value={f.diagonals} min={0} max={60} step={1} onChange={(v) => setFrameParts(k, { diagonals: v })}
               hint={op?.diagonals === undefined ? 'Las de siempre' : 'Propias'} />

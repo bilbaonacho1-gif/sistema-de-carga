@@ -280,3 +280,30 @@ describe('el pórtico por sus piezas: columnas, bases y riendas', () => {
     expect(b.frameParts).toEqual({ 2: { noBaseFront: true } })
   })
 })
+
+describe('una columna del pórtico más alta que la otra', () => {
+  it('sólo cambia esa columna, y sale aparte en la lista de materiales', async () => {
+    const { placementStructure } = await import('./depot')
+    const { DEFAULT_CONFIGURATION } = await import('../rack/technicalSpecs')
+    const plain = placementStructure(DEFAULT_CONFIGURATION, rack({ modules: 3 }))
+    const H = DEFAULT_CONFIGURATION.height
+    const s = placementStructure(DEFAULT_CONFIGURATION, rack({ modules: 3, frameParts: { 2: { backHeight: H + 1500 } } }))
+    const f = (k: number) => s.rows[0].frames.find((x) => x.key === k)!
+    expect(f(2).columns).toEqual([H, H + 1500])
+    expect(f(1).columns).toEqual([H, H])
+    // las riendas llegan hasta la columna más baja: no cambian
+    expect(f(2).height).toBe(H)
+    expect(s.counts.diagonals).toBe(plain.counts.diagonals)
+    const cols = s.materials.filter((m) => m.code.startsWith('COL-'))
+    expect(cols).toHaveLength(2)
+    expect(cols.find((m) => m.code.endsWith(`-${H + 1500}`))?.qty).toBe(1)
+    expect(cols.reduce((n, m) => n + m.qty, 0)).toBe(plain.materials.filter((m) => m.code.startsWith('COL-')).reduce((n, m) => n + m.qty, 0))
+  })
+  it('una columna nunca queda por debajo de las vigas que sostiene', async () => {
+    const { placementStructure } = await import('./depot')
+    const { DEFAULT_CONFIGURATION } = await import('../rack/technicalSpecs')
+    const s = placementStructure(DEFAULT_CONFIGURATION, rack({ modules: 2, frameParts: { 1: { frontHeight: 500 } } }))
+    const top = s.rows[0].modules[0].levels.filter((l) => l.hasBeam).pop()!
+    expect(s.rows[0].frames.find((x) => x.key === 1)!.columns[0]).toBeGreaterThan(top.elevation)
+  })
+})

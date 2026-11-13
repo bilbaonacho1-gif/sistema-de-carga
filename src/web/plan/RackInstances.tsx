@@ -62,8 +62,9 @@ function partsFor(s: RackStructure): Parts {
     }
     for (const f of row.frames) {
       const H = m(f.height), x = m(f.x)
-      put('upright', x, H / 2, -ud / 2, uw, H, ud)
-      put('upright', x, H / 2, -D + ud / 2, uw, H, ud)
+      const Hf = m(f.columns[0]), Hb = m(f.columns[1])
+      put('upright', x, Hf / 2, -ud / 2, uw, Hf, ud)
+      put('upright', x, Hb / 2, -D + ud / 2, uw, Hb, ud)
       const n = f.diagonals
       const y0 = 0.15, y1 = H - 0.15
       for (let i = 0; i < n; i++) {
