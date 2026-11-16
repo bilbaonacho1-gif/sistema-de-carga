@@ -3,18 +3,18 @@
  * encabezado con las solapas (Depósito, Mis piezas, Proyectos y, para el administrador,
  * Administración), el proyecto abierto y el menú del usuario.
  */
-import { Compass, FolderOpen, KeyRound, LifeBuoy, LogOut, RotateCcw, Shapes, ShieldCheck, UserRound, Warehouse } from 'lucide-react'
+import { Compass, FolderOpen, KeyRound, LifeBuoy, LogOut, RotateCcw, Save, Shapes, ShieldCheck, UserRound, Warehouse } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Logo } from '../web/components/Logo'
-import { Button } from '../web/components/ui'
+import { Button, Field, Input } from '../web/components/ui'
 import { usePlan } from '../web/plan/planStore'
-import { useToast } from '../web/components/overlays'
+import { Dialog, useToast } from '../web/components/overlays'
 import { AdminSection } from './Admin'
 import { Assistant } from './Assistant'
 import { canEdit, CloudError, codeFrom, roleName, useAuth } from './cloud'
 import { LoginScreen, PasswordDialog } from './Login'
 import { ProjectsSection } from './Projects'
-import { clearWork, hasWork, openByCode, saveNow, useAutosave, useProject } from './projects'
+import { clearWork, hasWork, openByCode, requestSave, saveAsNew, saveNow, useAutosave, useProject } from './projects'
 import { DepotFlow } from './DepotFlow'
 import { Intro, useIntro } from './Intro'
 import { PiecesSection } from './PiecesSection'
@@ -113,6 +113,7 @@ function Inside() {
           </button>
         )}
         <div className="cz-top__actions">
+          <SaveControl />
           <Button variant={helper ? 'secondary' : 'ghost'} icon={LifeBuoy} onClick={() => setHelper((v) => !v)} aria-pressed={helper}><span className="cz-long">Ayudante</span></Button>
           <Button variant="ghost" icon={Compass} onClick={() => { setSection('deposito'); setTour(true) }}><span className="cz-long">Recorrido</span></Button>
           <Button variant="ghost" icon={RotateCcw} onClick={reset}><span className="cz-long">Empezar de nuevo</span></Button>
@@ -138,5 +139,61 @@ function Inside() {
       {tour && <Tour onClose={() => setTour(false)} />}
       {password !== 'no' && <PasswordDialog first={password === 'first'} onClose={closePassword} />}
     </div>
+  )
+}
+
+/**
+ * Guardar: el botón del encabezado, Ctrl+S y el botón del Resumen hacen lo mismo. Con un proyecto
+ * abierto lo guarda ya; si lo que hay en pantalla todavía no es un proyecto, pregunta el nombre.
+ */
+function SaveControl() {
+  const toast = useToast()
+  const user = useAuth((x) => x.user)
+  const { current, status, saveTick } = useProject()
+  const drawn = usePlan((x) => x.plan.outline.points.length >= 3)
+  const [asking, setAsking] = useState(false)
+  const [name, setName] = useState('')
+  const [busy, setBusy] = useState(false)
+  const seen = useRef(saveTick)
+  const allowed = canEdit(user)
+  useEffect(() => {
+    if (saveTick === seen.current) return
+    seen.current = saveTick
+    if (!allowed) { toast.error('Tu usuario es de solo ver: no puede guardar proyectos.'); return }
+    if (useProject.getState().current) void saveNow().then((ok) => (ok ? toast.ok('Guardado.') : toast.error(useProject.getState().error ?? 'No se pudo guardar.')))
+    else if (!hasWork()) toast.error('Todavía no hay nada para guardar: primero creá el depósito.')
+    else setAsking(true)
+  }, [saveTick, allowed, toast])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 's') { e.preventDefault(); requestSave() } }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+  if (!allowed) return null
+  // hay algo sin guardar: cambios del proyecto abierto, o un depósito que todavía no es un proyecto
+  const pending = current ? status !== 'saved' : drawn
+  const create = async () => {
+    setBusy(true)
+    try { await saveAsNew(name); toast.ok(`Proyecto "${name.trim()}" guardado. Desde ahora los cambios se guardan solos.`); setName(''); setAsking(false) }
+    catch (e) { toast.error(e instanceof CloudError ? e.message : 'No se pudo guardar.') } finally { setBusy(false) }
+  }
+  return (
+    <>
+      <Button variant={pending ? 'secondary' : 'ghost'} icon={Save} onClick={requestSave} title="Guardar (Ctrl+S)" className={pending ? 'cz-save is-pending' : 'cz-save'}>
+        <span className="cz-long">Guardar</span>
+      </Button>
+      {asking && (
+        <Dialog open onClose={() => setAsking(false)} title="Guardar como proyecto" width={440}
+          footer={<>
+            <Button variant="ghost" onClick={() => setAsking(false)}>Cancelar</Button>
+            <Button variant="primary" icon={Save} onClick={create} disabled={busy || !name.trim()}>{busy ? 'Guardando…' : 'Guardar'}</Button>
+          </>}>
+          <form className="acc__form" style={{ marginTop: 0 }} onSubmit={(e) => { e.preventDefault(); if (name.trim() && !busy) void create() }}>
+            <p className="muted small" style={{ margin: 0 }}>Ponele un nombre. Queda en tu cuenta, en la solapa Proyectos, y desde ahí los cambios se guardan solos.</p>
+            <Field label="Nombre del proyecto">{(id) => <Input id={id} value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder="Ej. Depósito Pérez" autoFocus />}</Field>
+          </form>
+        </Dialog>
+      )}
+    </>
   )
 }

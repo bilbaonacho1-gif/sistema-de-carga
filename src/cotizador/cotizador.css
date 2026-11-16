@@ -327,3 +327,6 @@
 .adm__roles dt { font-weight: 700; }
 .adm__roles dd { margin: 2px 0 0; font-size: 13.5px; color: var(--ink-2); }
 @media (max-width: 720px) { .adm__ask { grid-template-columns: 1fr; } }
+
+/* guardar: se nota cuando hay algo sin guardar */
+.cz-save.is-pending { border-color: var(--red); color: var(--red); }

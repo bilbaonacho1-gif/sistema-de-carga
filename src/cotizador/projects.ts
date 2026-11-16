@@ -24,14 +24,19 @@ interface ProjectState {
   shared: { name: string; owner: string } | null
   status: 'saved' | 'dirty' | 'saving' | 'error'
   error: string | null
+  /** Sube cada vez que se pide guardar (el botón del disquete, Ctrl+S, el botón del Resumen). */
+  saveTick: number
 }
 const safe = {
   getItem: (k: string) => { try { return localStorage.getItem(k) } catch { return null } },
   setItem: (k: string, v: string) => { try { localStorage.setItem(k, v) } catch { /* sin memoria */ } },
   removeItem: (k: string) => { try { localStorage.removeItem(k) } catch { /* sin memoria */ } },
 }
-export const useProject = create<ProjectState>()(persist(() => ({ current: null, shared: null, status: 'saved', error: null } as ProjectState),
+export const useProject = create<ProjectState>()(persist(() => ({ current: null, shared: null, status: 'saved', error: null, saveTick: 0 } as ProjectState),
   { name: 'sdc-proyecto', storage: createJSONStorage(() => safe), partialize: (s) => ({ current: s.current, shared: s.shared }) }))
+
+/** Pedir que se guarde (lo atiende el botón de guardar del encabezado: guarda, o pregunta el nombre si todavía no es un proyecto). */
+export const requestSave = () => useProject.setState((s) => ({ saveTick: s.saveTick + 1 }))
 
 /** Lo que se está armando ahora, listo para guardar. */
 export function snapshot(): Snapshot {

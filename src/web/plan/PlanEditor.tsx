@@ -11,7 +11,8 @@
  *  - Racks (si están a la vista): se arrastran igual; Supr los borra.
  * Rueda o pellizco: zoom. Arrastrar el fondo: mover. Ctrl+Z / Ctrl+Y: deshacer / rehacer.
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { StartProjectContext } from './startContext'
 import { drawnRect, itemsOutside, setEdgeLength, setTotal, moveVertex, newId, pointAtLength, removeItem, removeVertex, sagFromPoint, setOutline, splitEdge, updateRect, addObject } from '../../shared/plan/edit'
 import { rectanglePlan } from '../../shared/plan/geometry'
 import { metrosNum, parseMetros } from '../../shared/units'
@@ -1164,21 +1165,32 @@ function StartCard({ onCreate, onDraw }: { onCreate(L: number, W: number): void;
   const [L, setL] = useState('')
   const [W, setW] = useState('')
   const l = parseMetros(L), w = parseMetros(W)
-  const ok = l >= 2000 && w >= 2000 && l <= 2_000_000 && w <= 2_000_000
+  // si el sistema guarda proyectos, acá también se le pone el nombre: queda guardado desde el arranque
+  const proj = useContext(StartProjectContext)
+  const named = !proj || proj.name.trim().length > 0
+  const ok = named && l >= 2000 && w >= 2000 && l <= 2_000_000 && w <= 2_000_000
   const clean = (v: string) => v.replace(/[^\d.,]/g, '')
   return (
-    <form className="plan-start" onPointerDown={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); if (ok) onCreate(l, w) }}>
-      <h2 className="plan-start__t">Empezá tu depósito</h2>
-      <p className="plan-start__p">Escribí las medidas del depósito en metros:</p>
+    <form className="plan-start" onPointerDown={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); if (ok) { onCreate(l, w); proj?.onStart() } }}>
+      <h2 className="plan-start__t">{proj ? 'Creá tu proyecto' : 'Empezá tu depósito'}</h2>
+      {proj && (
+        <label className="plan-start__f plan-start__name">
+          <span>Nombre del proyecto</span>
+          <span className="plan-start__in"><input autoFocus value={proj.name} maxLength={80} placeholder="ej. Depósito Pérez" onChange={(e) => proj.setName(e.target.value)} aria-label="Nombre del proyecto" /></span>
+        </label>
+      )}
+      <p className="plan-start__p">{proj ? 'Y las medidas del depósito, en metros:' : 'Escribí las medidas del depósito en metros:'}</p>
       <div className="plan-start__row">
-        <label className="plan-start__f"><span>Largo</span><span className="plan-start__in"><input autoFocus inputMode="decimal" placeholder="ej. 40" value={L} onChange={(e) => setL(clean(e.target.value))} aria-label="Largo en metros" /><small>m</small></span></label>
+        <label className="plan-start__f"><span>Largo</span><span className="plan-start__in"><input autoFocus={!proj} inputMode="decimal" placeholder="ej. 40" value={L} onChange={(e) => setL(clean(e.target.value))} aria-label="Largo en metros" /><small>m</small></span></label>
         <span className="plan-start__x" aria-hidden>×</span>
         <label className="plan-start__f"><span>Ancho</span><span className="plan-start__in"><input inputMode="decimal" placeholder="ej. 25" value={W} onChange={(e) => setW(clean(e.target.value))} aria-label="Ancho en metros" /><small>m</small></span></label>
       </div>
-      <button type="submit" className="plan-start__go" disabled={!ok}>Crear depósito{ok ? ` de ${meters(l)} × ${meters(w)}` : ''}</button>
+      <button type="submit" className="plan-start__go" disabled={!ok}>{proj ? 'Crear proyecto' : 'Crear depósito'}{ok ? ` de ${meters(l)} × ${meters(w)}` : ''}</button>
       <div className="plan-start__or"><span>o</span></div>
-      <button type="button" className="plan-start__draw" onClick={onDraw}>Dibujarlo a mano (forma en L, paredes curvas…)</button>
+      <button type="button" className="plan-start__draw" disabled={!named} onClick={() => { onDraw(); proj?.onStart() }}>Dibujarlo a mano (forma en L, paredes curvas…)</button>
       <p className="plan-start__small">Hacés clic en cada esquina y escribís el largo de cada pared. Después podés cambiar cualquier medida.</p>
+      {proj && <p className="plan-start__small">El proyecto queda guardado en tu cuenta y los cambios se guardan solos.</p>}
+      {proj && <button type="button" className="plan-start__saved" onClick={proj.openSaved}>Abrir un proyecto que ya guardé</button>}
     </form>
   )
 }

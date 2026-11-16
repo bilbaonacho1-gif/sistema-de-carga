@@ -5,7 +5,7 @@
  * cuántos racks entran en ESE depósito (filas, pasillos, columnas y zonas) y todo lo demás
  * (materiales, presupuesto) sale del depósito completo.
  */
-import { AlertTriangle, ChevronLeft, ClipboardPaste, ChevronRight, Download, Lightbulb, Mail, Phone, Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, Save, ChevronLeft, ClipboardPaste, ChevronRight, Download, Lightbulb, Mail, Phone, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { buildDepot, moduleSize, type Depot } from '../shared/plan/depot'
 import { planArea } from '../shared/plan/geometry'
@@ -29,6 +29,10 @@ import { CalcoPanel, ChecksPanel, ExportPanel, LayersPanel } from '../web/plan/P
 import { planChecks } from '../shared/plan/checks'
 import { FLOW, usePlan, type FlowStep } from '../web/plan/planStore'
 import { MultiRackEditor, PlanStage, RackEditor } from '../web/plan/PlanWorkspace'
+import { StartProjectContext } from '../web/plan/startContext'
+import { useToast } from '../web/components/overlays'
+import { canEdit, CloudError, useAuth } from './cloud'
+import { requestSave, saveAsNew, useProject } from './projects'
 import { metros, metrosNum } from '../shared/units'
 
 const L = DESIGN_RULES.limits
@@ -116,6 +120,21 @@ export function DepotFlow() {
     note: 'Simulación de referencia: no reemplaza el cálculo estructural. Medidas en metros.',
   }
   // módulos del panel en este paso (como en Photoshop: cada uno se achica o se saca por separado)
+  // al empezar sin proyecto abierto, la tarjeta de inicio pide también el nombre: se crea y queda guardado
+  const toast = useToast()
+  const user = useAuth((s) => s.user)
+  const noProject = useProject((s) => !s.current && !s.shared)
+  const [projectName, setProjectName] = useState('')
+  const startProject = useMemo(() => (canEdit(user) && noProject ? {
+    name: projectName, setName: setProjectName,
+    onStart: () => {
+      const name = projectName.trim()
+      setProjectName('')
+      saveAsNew(name).then(() => toast.ok(`Proyecto "${name}" creado. Los cambios se guardan solos.`))
+        .catch((e) => toast.error(`${e instanceof CloudError ? e.message : 'No se pudo crear el proyecto.'} Podés guardarlo después con el botón Guardar.`))
+    },
+    openSaved: () => usePlan.getState().setSection('proyectos'),
+  } : null), [user, noProject, projectName, toast])
   const modules = MODULES[flowStep]
   const panelsMoved = useDock((st) => Object.keys(st.panels).length > 0)
   const defs: { id: string; title: string; collapsed?: boolean; body: React.ReactNode }[] = [
@@ -170,8 +189,10 @@ export function DepotFlow() {
       </aside>}
       {rackView
         ? <Viewport s={preview} />
-        : <PlanStage rackLayer={rackLayer} racks={showRacks ? depot.racks : undefined}
-            summary={area > 0 && <DepotStrip depot={depot} area={area} />} />}
+        : <StartProjectContext.Provider value={startProject}>
+            <PlanStage rackLayer={rackLayer} racks={showRacks ? depot.racks : undefined}
+              summary={area > 0 && <DepotStrip depot={depot} area={area} />} />
+          </StartProjectContext.Provider>}
       {hasR && <aside className="dock-col dock-col--right" data-dock-col="right" aria-label="Paneles de la derecha">
         <div className="dock-col__scroll">{place.right.map(panel)}</div>
         <ColumnResizer side="right" />
@@ -552,7 +573,22 @@ function SummaryStep({ depot }: { depot: Depot }) {
       ]} />
       <MaterialsList lines={depot.materials} />
       <Button icon={Download} onClick={() => downloadMaterials(depot.materials, `materiales-deposito-${depot.positions}-posiciones`)} block>Descargar lista (CSV)</Button>
+      <SaveAtEnd />
     </div>
+  )
+}
+
+/** Al final del recorrido: guardar el proyecto (si ya es un proyecto, dice que está guardado). */
+function SaveAtEnd() {
+  const user = useAuth((s) => s.user)
+  const { current, status } = useProject()
+  if (!canEdit(user)) return null
+  const saved = !!current && status === 'saved'
+  return (
+    <>
+      <Button variant="primary" icon={Save} onClick={requestSave} disabled={saved} block>{current ? (saved ? 'Proyecto guardado' : 'Guardar el proyecto') : 'Guardar como proyecto'}</Button>
+      <p className="muted small">{current ? `Se guarda en "${current.name}". También con Ctrl+S o el botón Guardar de arriba.` : 'Todavía no es un proyecto: ponele un nombre y queda en tu cuenta.'}</p>
+    </>
   )
 }
 
