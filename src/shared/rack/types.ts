@@ -55,7 +55,9 @@ export interface RackConfiguration {
    * Los módulos del proyecto (A, B, C…): ver shared/rack/modules. Los campos de arriba (width, height,
    * levels…) son los del módulo que se está editando (`moduleId`); los demás esperan acá.
    */
-  moduleTypes?: { id: string; name: string; spec: Pick<RackConfiguration, 'width' | 'depth' | 'height' | 'levels' | 'floorStorage' | 'beamElevations' | 'uprightId' | 'beamId' | 'frameDefault' | 'accessories'> }[]
+  moduleTypes?: { id: string; name: string; spec: Pick<RackConfiguration, 'width' | 'depth' | 'height' | 'levels' | 'floorStorage' | 'beamElevations' | 'uprightId' | 'beamId' | 'frameDefault' | 'accessories'>
+    // el pallet y la carga de ese módulo (los guardados antes de esto no los traen: usan los del que se edita)
+    & Partial<Pick<RackConfiguration, 'palletTypeId' | 'customPallet' | 'palletWeight' | 'palletsPerModule' | 'load'>> }[]
   moduleId?: string
   /** Cómo es la carga del pallet: un bloque, o cajas apiladas (ver shared/rack/load.ts). */
   load?: { mode: 'block' | 'boxes'; boxW: number; boxD: number; boxH: number; boxKg: number; maxHeight: number }

@@ -3,6 +3,7 @@ import { useMemo } from 'react'
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { calculateRackStructure } from '../../../shared/rack/calculateRackStructure'
+import { LOAD_KEYS, withOwnLoads } from '../../../shared/rack/modules'
 import { DEFAULT_ACCESSORIES, DEFAULT_CONFIGURATION } from '../../../shared/rack/technicalSpecs'
 import type { AccessoryConfig, RackConfiguration, RackSection, RackStructure, WarehouseLayout } from '../../../shared/rack/types'
 import type { CameraPreset, CameraView } from '../../three/types'
@@ -63,7 +64,7 @@ export const useDesigner = create<DesignerState>()(
       viewRequest: 0,
       pickedBeam: null,
       pickBeam: (pickedBeam) => set({ pickedBeam }),
-      update: (patch) => set((s) => ({ config: { ...s.config, ...patch } })),
+      update: (patch) => set((s) => ({ config: { ...(LOAD_KEYS.some((k) => k in patch) ? withOwnLoads(s.config) : s.config), ...patch } })),
       updateLayout: (patch) => set((s) => ({ config: { ...s.config, layout: { ...s.config.layout, ...patch } } })),
       updateAccessories: (patch) => set((s) => ({ config: { ...s.config, accessories: { ...DEFAULT_ACCESSORIES, ...s.config.accessories, ...patch } } })),
       setSections: (sections) => set((s) => ({ config: { ...s.config, sections } })),

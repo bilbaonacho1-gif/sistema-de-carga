@@ -6,13 +6,14 @@
  *
  * Cómo se guarda: los campos de siempre de la configuración (width, height, levels…) son el módulo
  * que se está editando (`moduleId`); los demás esperan en `moduleTypes`. Un rack sin tipo usa el
- * primer módulo. Los accesorios y los colores también son de cada módulo. Lo que no es del módulo
- * (el pallet y la carga) vale para todos.
+ * primer módulo. Los accesorios, los colores, el pallet y la carga también son de cada módulo.
  */
 import type { RackConfiguration } from './types'
 
-export const SPEC_KEYS = ['width', 'depth', 'height', 'levels', 'floorStorage', 'beamElevations', 'uprightId', 'beamId', 'frameDefault', 'accessories'] as const
-export type ModuleSpec = Pick<RackConfiguration, (typeof SPEC_KEYS)[number]>
+/** Lo del pallet y la carga, que también es de cada módulo. */
+export const LOAD_KEYS = ['palletTypeId', 'customPallet', 'palletWeight', 'palletsPerModule', 'load'] as const
+export const SPEC_KEYS = ['width', 'depth', 'height', 'levels', 'floorStorage', 'beamElevations', 'uprightId', 'beamId', 'frameDefault', 'accessories', ...LOAD_KEYS] as const
+export type ModuleSpec = NonNullable<RackConfiguration['moduleTypes']>[number]['spec']
 export interface ModuleType { id: string; name: string; spec: ModuleSpec }
 
 export const MAX_MODULES = 12
@@ -26,7 +27,19 @@ export function specOf(c: RackConfiguration): ModuleSpec {
     beamElevations: c.beamElevations, uprightId: c.uprightId, beamId: c.beamId, frameDefault: c.frameDefault,
     // los accesorios y los colores también son de cada módulo
     accessories: c.accessories,
+    // y también el pallet y la carga
+    palletTypeId: c.palletTypeId, customPallet: c.customPallet, palletWeight: c.palletWeight, palletsPerModule: c.palletsPerModule, load: c.load,
   }
+}
+
+/**
+ * Un módulo guardado antes de que la carga fuera de cada uno no la trae: usa la del que se está
+ * editando. Esto se la deja escrita, para que no cambie cuando después se toca la de otro módulo.
+ */
+export function withOwnLoads(c: RackConfiguration): RackConfiguration {
+  if (!c.moduleTypes?.some((m) => m.spec.palletWeight === undefined)) return c
+  const mine = { palletTypeId: c.palletTypeId, customPallet: c.customPallet, palletWeight: c.palletWeight, palletsPerModule: c.palletsPerModule, load: c.load }
+  return { ...c, moduleTypes: c.moduleTypes.map((m) => (m.spec.palletWeight === undefined ? { ...m, spec: { ...mine, ...m.spec } } : m)) }
 }
 
 /** El módulo que se está editando (sus datos son los campos de siempre de la configuración). */
@@ -42,6 +55,20 @@ export function moduleList(c: RackConfiguration): ModuleType[] {
 export const defaultModuleId = (c: RackConfiguration): string => c.moduleTypes?.[0]?.id ?? activeModuleId(c)
 export const moduleName = (c: RackConfiguration, id: string | undefined): string => moduleList(c).find((m) => m.id === (id ?? defaultModuleId(c)))?.name ?? moduleList(c)[0].name
 
+/**
+ * La configuración con lo de un módulo encima. Lo opcional que el módulo no trae queda vacío (no se
+ * hereda del que se está editando): al guardarse, lo vacío no viaja. Las dos excepciones son los
+ * accesorios y la carga de un módulo guardado antes de que fueran de cada uno: usa los del que se edita.
+ */
+function withSpec(c: RackConfiguration, spec: ModuleSpec): RackConfiguration {
+  const own = spec.palletWeight !== undefined
+  return {
+    ...c, beamElevations: undefined, uprightId: undefined, beamId: undefined, frameDefault: undefined,
+    ...(own ? { customPallet: undefined, load: undefined } : {}),
+    ...spec, accessories: spec.accessories ?? c.accessories,
+  }
+}
+
 const resolved = new WeakMap<RackConfiguration, Map<string, RackConfiguration>>()
 /**
  * La configuración con las medidas de ESE módulo (para calcular un rack armado con él). Devuelve
@@ -56,8 +83,7 @@ export function configFor(c: RackConfiguration, id?: string): RackConfiguration 
   let out = by.get(want)
   if (!out) {
     const spec = c.moduleTypes!.find((m) => m.id === want)!.spec
-    // un módulo guardado antes de que los accesorios fueran de cada uno no los trae: usa los del que se edita
-    out = { ...c, ...spec, accessories: spec.accessories ?? c.accessories }
+    out = withSpec(c, spec)
     by.set(want, out)
   }
   return out
@@ -65,7 +91,7 @@ export function configFor(c: RackConfiguration, id?: string): RackConfiguration 
 
 /** La lista con el módulo que se estaba editando guardado en su lugar. */
 function stored(c: RackConfiguration): ModuleType[] {
-  return moduleList(c).map((m) => ({ ...m, spec: { ...m.spec } }))
+  return moduleList(withOwnLoads(c)).map((m) => ({ ...m, spec: { ...m.spec } }))
 }
 
 /** Pasa a editar otro módulo: el actual queda guardado en la lista y el elegido sube a los campos de siempre. */
@@ -73,7 +99,7 @@ export function selectModule(c: RackConfiguration, id: string): RackConfiguratio
   const list = stored(c)
   const next = list.find((m) => m.id === id)
   if (!next || id === activeModuleId(c) && c.moduleTypes?.length) return c
-  return { ...c, ...next.spec, accessories: next.spec.accessories ?? c.accessories, moduleTypes: list, moduleId: id }
+  return { ...withSpec(c, next.spec), moduleTypes: list, moduleId: id }
 }
 
 /** Crea un módulo nuevo, copia del que se está editando, y pasa a editarlo. */
@@ -96,7 +122,7 @@ export function removeModule(c: RackConfiguration, id: string): RackConfiguratio
   if (list.length < 2 || !list.some((m) => m.id === id)) return c
   const rest = list.filter((m) => m.id !== id)
   const active = activeModuleId(c) === id ? rest[0] : rest.find((m) => m.id === activeModuleId(c))!
-  return { ...c, ...active.spec, accessories: active.spec.accessories ?? c.accessories, moduleTypes: rest, moduleId: active.id }
+  return { ...withSpec(c, active.spec), moduleTypes: rest, moduleId: active.id }
 }
 
 export function renameModule(c: RackConfiguration, id: string, name: string): RackConfiguration {

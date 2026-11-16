@@ -50,7 +50,7 @@ export interface RackModuleSize {
   /** Ancho de cada tipo de parante (id → mm), para los racks que eligen el suyo. */
   uprightWidths?: Record<string, number>
   /** Medidas de cada módulo del proyecto (id → medidas): un rack usa las de su módulo. */
-  types?: Record<string, { width: number; depth: number; upright: number; name?: string }>
+  types?: Record<string, { width: number; depth: number; upright: number; name?: string; pallets?: number; palletFront?: number; palletDeep?: number }>
   /** El módulo de los racks que no dicen cuál usan. */
   defaultType?: string
   /** Para dibujar los pallets en el plano: cuántos por módulo y su medida (frente y fondo). */

@@ -272,7 +272,7 @@ function StepBody({ step, depot, preview }: { step: FlowStep; depot: Depot; prev
   switch (step) {
     case 'deposito': return null
     case 'rack': return <RackStep s={preview} />
-    case 'carga': return <LoadStep s={preview} />
+    case 'carga': return <><LoadModule /><LoadStep s={preview} /></>
     case 'distribucion': return <LayoutStep depot={depot} />
     case 'resumen': return <SummaryStep depot={depot} />
   }
@@ -444,6 +444,32 @@ function ModuleTabs() {
           ? 'Este es el módulo A. Con "Nuevo módulo" creás el B, el C… (arrancan como copia del que estás viendo). Quedan guardados en el proyecto.'
           : `Lo de abajo son las medidas del módulo ${current.name}${usedBy(active) ? ` (${usedBy(active) === 1 ? '1 rack lo usa' : `${usedBy(active)} racks lo usan`}: si lo cambiás, cambian)` : ''}. En Distribución elegís cuál va en cada lugar.`}
       </p>
+    </div>
+  )
+}
+
+/**
+ * El pallet y la carga son de cada módulo: con más de uno en el proyecto, acá se elige de cuál se
+ * está cargando (los mismos botones que en "Módulos", sin crear ni borrar).
+ */
+function LoadModule() {
+  const config = useDesigner((st) => st.config)
+  const list = moduleList(config), active = activeModuleId(config)
+  if (list.length < 2) return null
+  const current = list.find((m) => m.id === active) ?? list[0]
+  return (
+    <div className="mods mods--pick">
+      <div className="mods__row" role="tablist" aria-label="De qué módulo es la carga">
+        {list.map((m, i) => (
+          <button key={m.id} type="button" role="tab" aria-selected={m.id === active} className={`mods__tab${m.id === active ? ' is-on' : ''}`}
+            onClick={() => useDesigner.setState({ config: selectModule(config, m.id) })} title={`El pallet y la carga del módulo ${m.name}`}>
+            <i style={{ background: moduleColor(i).fill, borderColor: moduleColor(i).stroke }} aria-hidden />
+            <strong>{m.name}</strong>
+            <span>{kg(m.spec.palletWeight ?? config.palletWeight)} por pallet</span>
+          </button>
+        ))}
+      </div>
+      <p className="muted small">Lo de abajo es el pallet y la carga del <b>módulo {current.name}</b>: cada módulo tiene los suyos.</p>
     </div>
   )
 }
@@ -662,7 +688,7 @@ function SummaryStep({ depot }: { depot: Depot }) {
   const list = moduleList(config)
   const byModule: [string, string][] = list.length > 1 ? list.map((m) => {
     const mine = depot.layout.placements.filter((p) => typeOf(p, size) === m.id)
-    return [`Módulo ${m.name}`, `${fmt(mine.reduce((n, p) => n + p.modules * (p.pair ? 2 : 1), 0))} en ${plural(mine.reduce((n, p) => n + (p.pair ? 2 : 1), 0), 'fila', 'filas')}`]
+    return [`Módulo ${m.name}`, `${fmt(mine.reduce((n, p) => n + p.modules * (p.pair ? 2 : 1), 0))} en ${plural(mine.reduce((n, p) => n + (p.pair ? 2 : 1), 0), 'fila', 'filas')} · ${kg(m.spec.palletWeight ?? config.palletWeight)} por pallet`]
   }) : []
   return (
     <div className="cot-fields">
@@ -733,6 +759,9 @@ export function DepotStrip({ depot, area }: { depot: Depot; area: number }) {
 
 export function DepotPlate({ depot, area, compact }: { depot: Depot; area: number; compact?: boolean }) {
   const s = depot.sample
+  // cada módulo puede llevar otra carga: si los racks puestos no pesan todos igual, se dice de cuánto a cuánto
+  const weights = depot.racks.map((r) => r.structure.config.palletWeight)
+  const low = weights.length ? Math.min(...weights) : s.config.palletWeight, high = weights.length ? Math.max(...weights) : s.config.palletWeight
   return (
     <div className={`plate${compact ? ' plate--compact' : ''}`}>
       <span className="plate__rivet plate__rivet--tl" aria-hidden /><span className="plate__rivet plate__rivet--tr" aria-hidden />
@@ -747,7 +776,7 @@ export function DepotPlate({ depot, area, compact }: { depot: Depot; area: numbe
       <dl className="plate__rows">
         <div className="plate__row"><dt>Superficie</dt><dd>{fmt(Math.round(area))} m²</dd></div>
         <div className="plate__row"><dt>Rack</dt><dd>{metrosNum(s.config.width)} × {metrosNum(s.config.depth)} × {metros(s.config.height)}</dd></div>
-        <div className="plate__row"><dt>Carga por pallet</dt><dd>{kg(s.config.palletWeight)}</dd></div>
+        <div className="plate__row"><dt>Carga por pallet</dt><dd>{low === high ? kg(low) : `${fmt(low)} a ${kg(high)}`}</dd></div>
         <div className="plate__row plate__row--strong"><dt>Capacidad total estimada</dt><dd>{kg(depot.capacity)}</dd></div>
       </dl>
       <div className="plate__foot">{s.upright.name} · {s.beam.name} · Pallet {s.pallet.name}</div>

@@ -38,9 +38,11 @@ export function moduleSize(config: RackConfiguration): { size: RackModuleSize; s
   // las medidas de cada módulo del proyecto (A, B, C…): cada rack usa las del suyo
   const list = moduleList(config)
   const types = list.length > 1 || config.moduleTypes?.length ? Object.fromEntries(list.map((m) => {
-    if (m.id === activeModuleId(config)) return [m.id, { width: c.width, depth: c.depth, upright: sample.upright.faceWidth, name: m.name }]
+    // cada módulo con su pallet: cuántos entran y de qué medida (para dibujarlos en el plano)
+    const of = (cc: RackConfiguration, s: RackStructure) => ({ width: cc.width, depth: cc.depth, upright: s.upright.faceWidth, name: m.name, pallets: s.palletsPerModule, palletFront: s.pallet.front, palletDeep: s.pallet.deep })
+    if (m.id === activeModuleId(config)) return [m.id, of(c, sample)]
     const mc = sanitizeConfiguration({ ...configFor(config, m.id), sections: [], layout: c.layout })
-    return [m.id, { width: mc.width, depth: mc.depth, upright: calculateRackStructure({ ...mc, positions: 1 }).upright.faceWidth, name: m.name }]
+    return [m.id, of(mc, calculateRackStructure({ ...mc, positions: 1 }))]
   })) : undefined
   return { sample, size: { width: c.width, depth: c.depth, upright: sample.upright.faceWidth, backToBackGap: DESIGN_RULES.backToBackGap,
     uprightWidths: Object.fromEntries(profilesOf(c).uprights.map((u) => [u.id, u.faceWidth])),
@@ -137,7 +139,8 @@ export function buildDepot(plan: Plan, config: RackConfiguration, options: Layou
     layout, racks, sample, positions,
     manual: !!plan.racks,
     issues: rackIssues(plan, layout.placements),
-    capacity: positions * sample.config.palletWeight,
+    // cada rack con la carga de su módulo
+    capacity: racks.reduce((n, r) => n + r.structure.totalCapacity, 0),
     materials: mergeMaterials(racks.map((r) => r.structure.materials)),
     counts: sumCounts(racks.map((r) => r.structure.counts), sample.counts),
   }

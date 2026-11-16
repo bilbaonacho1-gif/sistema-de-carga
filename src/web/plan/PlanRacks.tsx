@@ -31,7 +31,9 @@ const NONE = new Set<string>()
 
 /** Pallets de cada módulo (con su medida real, centrados en su lugar), como en un plano de racks. */
 function palletShapes(r: RackPlacement, size: RackModuleSize): string {
-  const n = size.pallets ?? 0, pf = size.palletFront ?? 0, pd = size.palletDeep ?? 0
+  // el pallet del módulo con el que está armado el rack
+  const t = size.types?.[r.type ?? size.defaultType ?? ''] ?? size.types?.[size.defaultType ?? ''] ?? size
+  const n = t.pallets ?? 0, pf = t.palletFront ?? 0, pd = t.palletDeep ?? 0
   if (!n || !pf || !pd) return ''
   const b = placementRect(r)
   const horizontal = r.orientation === 'x'
