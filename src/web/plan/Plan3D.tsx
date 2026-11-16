@@ -22,6 +22,7 @@ import { BakedRacks } from './BakedRacks'
 import { RackInstances, type InstanceStats } from './RackInstances'
 import { EYE_HEIGHT, Forklift, Person } from './Figures'
 import { usePlan } from './planStore'
+import { SignPost } from './Signs3D'
 import { useDock } from '../components/dock'
 
 const m = (mm: number) => mm / 1000
@@ -33,9 +34,11 @@ const MAT = {
   inner: new THREE.MeshStandardMaterial({ color: '#c3c7cc', roughness: 0.9 }),
   door: new THREE.MeshStandardMaterial({ color: '#f2c230', roughness: 0.5, metalness: 0.2 }),
   floor: new THREE.MeshStandardMaterial({ color: '#f7f7f5', roughness: 1 }),
-  zone: new THREE.MeshStandardMaterial({ color: RED, transparent: true, opacity: 0.18 }),
+  // la zona libre: el relleno no se ve (queda para poder agarrarla) y el borde va en rojo
+  zone: new THREE.MeshBasicMaterial({ color: RED, transparent: true, opacity: 0, depthWrite: false }),
+  zoneEdge: new THREE.MeshBasicMaterial({ color: RED, transparent: true, opacity: 0.9, depthWrite: false }),
   selected: new THREE.MeshStandardMaterial({ color: RED, roughness: 0.6, emissive: RED, emissiveIntensity: 0.25 }),
-  zoneSelected: new THREE.MeshStandardMaterial({ color: RED, transparent: true, opacity: 0.4 }),
+  zoneSelected: new THREE.MeshBasicMaterial({ color: RED, transparent: true, opacity: 0.14, depthWrite: false }),
   handle: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.5 }),
   area: new THREE.MeshBasicMaterial({ color: '#2f6fb8', transparent: true, opacity: 0.16, depthWrite: false }),
   areaSelected: new THREE.MeshBasicMaterial({ color: '#2f6fb8', transparent: true, opacity: 0.3, depthWrite: false }),
@@ -85,6 +88,15 @@ function wallRingGeometry(poly: PlanPoint[], height: number, thickness: number):
 
 /** Mueve algo con el puntero: recibe cuánto se corrió (mm del plano) desde que se lo tocó. */
 type Apply = (dx: number, dy: number, free: boolean) => void
+
+/** Las cuatro franjas del borde de una zona (centro y medida de cada una, en metros, respecto del centro de la zona). */
+function zoneEdges(w: number, d: number, t: number): { x: number; z: number; w: number; d: number }[] {
+  const e = Math.min(t, w / 2, d / 2)
+  return [
+    { x: 0, z: -d / 2 + e / 2, w, d: e }, { x: 0, z: d / 2 - e / 2, w, d: e },
+    { x: -w / 2 + e / 2, z: 0, w: e, d: Math.max(0.01, d - 2 * e) }, { x: w / 2 - e / 2, z: 0, w: e, d: Math.max(0.01, d - 2 * e) },
+  ]
+}
 
 /* ------------------------------ Carteles ------------------------------ */
 
@@ -424,11 +436,11 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, size, span, on
         </mesh>
       ))}
 
-      {/* figuras para ver la escala: personas y autoelevadores puestos en el plano */}
-      {(plan.symbols ?? []).filter((f) => f.kind === 'persona' || f.kind === 'autoelevador').map((f) => (
+      {/* los símbolos del plano: personas y autoelevadores como figuras (para ver la escala); el resto, un cartel en un poste */}
+      {(plan.symbols ?? []).map((f) => (
         <group key={f.id} position={[m(f.x), 0, m(f.y)]}
           {...drag({ kind: 'symbol', id: f.id }, (dx, dy, free) => live((pl) => ({ ...pl, symbols: pl.symbols?.map((q) => (q.id === f.id ? { ...q, x: snapTo(f.x + dx, free), y: snapTo(f.y + dy, free) } : q)) })))}>
-          {f.kind === 'persona' ? <Person selected={isSel('symbol', f.id)} /> : <Forklift selected={isSel('symbol', f.id)} />}
+          {f.kind === 'persona' ? <Person selected={isSel('symbol', f.id)} /> : f.kind === 'autoelevador' ? <Forklift selected={isSel('symbol', f.id)} /> : <SignPost kind={f.kind} selected={isSel('symbol', f.id)} />}
         </group>
       ))}
 
@@ -493,12 +505,20 @@ function Scene({ plan, racks = [], showLoads = true, issues = {}, size, span, on
 
       {/* zonas libres */}
       {plan.zones.map((z) => (
-        <mesh key={z.id} material={isSel('zone', z.id) ? MAT.zoneSelected : MAT.zone} rotation-x={-Math.PI / 2} position={[m(z.x + z.w / 2), 0.01, m(z.y + z.d / 2)]}
+        // sólo el borde en rojo (el relleno se mezclaba con el amarillo de los pasillos); adentro se sigue pudiendo agarrar
+        <group key={z.id} position={[m(z.x + z.w / 2), 0, m(z.y + z.d / 2)]}
           {...drag({ kind: 'zone', id: z.id }, (dx, dy, free) => live((pl) => ({
             ...pl, zones: pl.zones.map((x) => (x.id === z.id ? { ...x, x: snapTo(z.x + dx, free), y: snapTo(z.y + dy, free) } : x)),
           })))}>
-          <planeGeometry args={[m(z.w), m(z.d)]} />
-        </mesh>
+          <mesh material={isSel('zone', z.id) ? MAT.zoneSelected : MAT.zone} rotation-x={-Math.PI / 2} position-y={0.01} renderOrder={1}>
+            <planeGeometry args={[m(z.w), m(z.d)]} />
+          </mesh>
+          {zoneEdges(m(z.w), m(z.d), isSel('zone', z.id) ? 0.3 : 0.18).map((e, i) => (
+            <mesh key={i} material={MAT.zoneEdge} rotation-x={-Math.PI / 2} position={[e.x, 0.012, e.z]} renderOrder={3}>
+              <planeGeometry args={[e.w, e.d]} />
+            </mesh>
+          ))}
+        </group>
       ))}
       {/* cada zona dice qué es, además del color */}
       {plan.zones.map((z) => <FloorLabel key={`t-${z.id}`} rect={z} text="ZONA LIBRE · SIN RACKS" color="#8f1423" y={0.013} />)}

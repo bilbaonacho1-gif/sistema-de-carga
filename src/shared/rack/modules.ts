@@ -8,7 +8,8 @@
  * que se está editando (`moduleId`); los demás esperan en `moduleTypes`. Un rack sin tipo usa el
  * primer módulo. Los accesorios, los colores, el pallet y la carga también son de cada módulo.
  */
-import type { RackConfiguration } from './types'
+import { mergeProfiles } from './profiles'
+import type { BeamProfile, RackConfiguration, UprightProfile } from './types'
 
 /** Lo del pallet y la carga, que también es de cada módulo. */
 export const LOAD_KEYS = ['palletTypeId', 'customPallet', 'palletWeight', 'palletsPerModule', 'load'] as const
@@ -129,6 +130,49 @@ export function renameModule(c: RackConfiguration, id: string, name: string): Ra
   const clean = name.trim().slice(0, 24)
   if (!clean) return c
   return { ...c, moduleTypes: stored(c).map((m) => (m.id === id ? { ...m, name: clean } : m)), moduleId: activeModuleId(c) }
+}
+
+/* ------------------------------ Módulos guardados en la cuenta ------------------------------ */
+
+/**
+ * Un módulo guardado en la cuenta del usuario, para usarlo en otros proyectos: sus datos y, si usa
+ * piezas propias ("Mis piezas"), esas piezas, para que funcione donde todavía no están.
+ */
+export interface SavedModule { v: 1; spec: ModuleSpec; profiles?: { uprights: UprightProfile[]; beams: BeamProfile[] } }
+
+/** El módulo que se está editando, listo para guardar en la cuenta. */
+export function packModule(c: RackConfiguration): SavedModule {
+  const spec = specOf(c)
+  const uprights = (c.customProfiles?.uprights ?? []).filter((u) => u.id === spec.uprightId)
+  const beams = (c.customProfiles?.beams ?? []).filter((b) => b.id === spec.beamId)
+  return { v: 1, spec, ...(uprights.length || beams.length ? { profiles: { uprights, beams } } : {}) }
+}
+
+/** Lo guardado, revisado: null si no es un módulo. */
+export function readSavedModule(data: unknown): SavedModule | null {
+  const d = data as Partial<SavedModule> | null
+  const s = d?.spec as Record<string, unknown> | undefined
+  if (!s || typeof s !== 'object' || !['width', 'depth', 'height', 'levels'].every((k) => typeof s[k] === 'number' && Number.isFinite(s[k]))) return null
+  const spec = Object.fromEntries(SPEC_KEYS.filter((k) => s[k] !== undefined && s[k] !== null).map((k) => [k, s[k]])) as unknown as ModuleSpec
+  const p = d?.profiles
+  return { v: 1, spec: { ...spec, floorStorage: !!s.floorStorage }, ...(p ? { profiles: { uprights: Array.isArray(p.uprights) ? p.uprights : [], beams: Array.isArray(p.beams) ? p.beams : [] } } : {}) }
+}
+
+/** Suma al proyecto un módulo guardado en la cuenta (como uno nuevo) y pasa a editarlo. */
+export function addSavedModule(c: RackConfiguration, name: string, saved: SavedModule): RackConfiguration {
+  const list = stored(c)
+  if (list.length >= MAX_MODULES) return c
+  const names = new Set(list.map((m) => m.name.toLowerCase()))
+  const clean = name.trim().slice(0, 20) || moduleLetter(list.length)
+  let unique = clean
+  for (let k = 2; names.has(unique.toLowerCase()); k++) unique = `${clean} ${k}`
+  const ids = new Set(list.map((m) => m.id))
+  let n = list.length, id = moduleLetter(n)
+  while (ids.has(id)) id = moduleLetter(++n)
+  // las piezas propias que usa viajan con él
+  const customProfiles = saved.profiles ? mergeProfiles(c.customProfiles, { uprights: saved.profiles.uprights, beams: saved.profiles.beams, objects: [] }).profiles : c.customProfiles
+  const spec = { ...saved.spec }
+  return { ...withSpec(c, spec), customProfiles, moduleTypes: [...list, { id, name: unique, spec }], moduleId: id }
 }
 
 /** Un color para cada módulo, para distinguirlos en el plano (relleno y borde). */

@@ -11,6 +11,7 @@
  *  - Racks (si están a la vista): se arrastran igual; Supr los borra.
  * Rueda o pellizco: zoom. Arrastrar el fondo: mover. Ctrl+Z / Ctrl+Y: deshacer / rehacer.
  */
+import { moduleColor } from '../../shared/rack/modules'
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { StartProjectContext } from './startContext'
 import { drawnRect, itemsOutside, setEdgeLength, setTotal, moveVertex, newId, pointAtLength, removeItem, removeVertex, sagFromPoint, setOutline, splitEdge, updateRect, addObject } from '../../shared/plan/edit'
@@ -61,6 +62,7 @@ const RED = '#be1e30'
 let clipboard: Clip | null = null
 let pasteCount = 0
 const BLUE = '#2f6fb8'
+const ZONE_BLUE = BLUE
 const meters = (mm: number) => `${(Math.round(mm / 10) / 100 + 0).toLocaleString('es-AR', { maximumFractionDigits: 2 })} m`
 
 /** Recorrido SVG de una pared (recta o arco). */
@@ -682,11 +684,12 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
       const s = usePlan.getState()
       const r = drawnRect(d.kind, d.a, snapPt(toPlan(e.clientX, e.clientY), e.altKey), s.plan, s.layout.aisle)
       const id = newId(d.kind === 'area' ? 'a' : 'p')
-      if (d.kind === 'area') commit((pl) => ({ ...pl, rackAreas: [...(pl.rackAreas ?? []), { id, ...r, name: `Zona ${String.fromCharCode(65 + Math.min(25, (pl.rackAreas ?? []).length))}` }] }))
+      if (d.kind === 'area') commit((pl) => ({ ...pl, rackAreas: [...(pl.rackAreas ?? []), { id, ...r, name: `Zona ${String.fromCharCode(65 + Math.min(25, (pl.rackAreas ?? []).length))}`, ...(s.areaType ? { type: s.areaType } : {}) }] }))
       else commit((pl) => ({ ...pl, aisles: [...(pl.aisles ?? []), { id, ...r }] }))
       setRectDraft(null)
       setTool('select')
-      select({ kind: d.kind, id })
+      // marcando el sector de un módulo no se abre la ficha de la zona: se sigue con el próximo sector
+      if (!(d.kind === 'area' && s.areaType)) select({ kind: d.kind, id })
     }
     drag.current = null
   }
@@ -779,6 +782,11 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
         {/* zonas de racks: sólo el borde y el nombre se agarran (adentro se puede seguir moviendo el plano) */}
         {!hidden.areas && (plan.rackAreas ?? []).map((z) => {
           const sel = isSel('area', z.id)
+          // con varios módulos en el proyecto, la zona lleva el color y el nombre del suyo
+          const types = rackLayer?.size.types, typeIds = types ? Object.keys(types) : []
+          const ti = z.type && typeIds.length > 1 ? typeIds.indexOf(z.type) : -1
+          const BLUE = ti >= 0 ? moduleColor(ti).stroke : ZONE_BLUE
+          const of = ti >= 0 ? ` · MÓDULO ${(types![z.type!].name ?? z.type!).toUpperCase()}` : ''
           const grab = (e: React.PointerEvent) => { select({ kind: 'area', id: z.id }); const p = toPlan(e.clientX, e.clientY); startDrag(e, { type: 'area', id: z.id, dx: p.x - z.x, dy: p.y - z.y, started: false }) }
           return (
             <g key={z.id}>
@@ -787,7 +795,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
               {tool === 'select' && <rect x={z.x} y={z.y} width={z.w} height={z.d} fill="none" stroke="transparent" strokeWidth={px(12)} pointerEvents="stroke" style={{ cursor: 'move' }} onPointerDown={grab} />}
               <text x={z.x + px(2)} y={z.y - px(7)} fontSize={px(12)} fill={BLUE} stroke="#fff" strokeWidth={px(4)}
                 style={{ paintOrder: 'stroke', fontFamily: 'var(--f-mono)', fontWeight: 700, cursor: tool === 'select' ? 'move' : undefined }}
-                onPointerDown={grab}>{`${z.name.toUpperCase()} · ${meters(z.w)} × ${meters(z.d)}`}</text>
+                onPointerDown={grab}>{`${z.name.toUpperCase()}${of} · ${meters(z.w)} × ${meters(z.d)}`}</text>
             </g>
           )
         })}

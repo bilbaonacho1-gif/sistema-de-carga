@@ -5,7 +5,7 @@
  * cuántos racks entran en ESE depósito (filas, pasillos, columnas y zonas) y todo lo demás
  * (materiales, presupuesto) sale del depósito completo.
  */
-import { AlertTriangle, Eye, Save, ChevronLeft, ClipboardPaste, ChevronRight, Download, Lightbulb, Mail, Phone, Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, BookmarkPlus, Eye, Save, ChevronLeft, ClipboardPaste, ChevronRight, Download, Lightbulb, Mail, Phone, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { buildDepot, moduleSize, type Depot } from '../shared/plan/depot'
 import { planArea } from '../shared/plan/geometry'
@@ -15,7 +15,7 @@ import { calculateRackStructure } from '../shared/rack/calculateRackStructure'
 import { beamCapacityForSpan } from '../shared/rack/rules'
 import { CONTACT, DESIGN_RULES, OFFICIAL_REFERENCE } from '../shared/rack/technicalSpecs'
 import { moduleKits, moduleSplit } from '../shared/rack/kits'
-import { activeModuleId, addModule, defaultModuleId, MAX_MODULES, moduleColor, moduleList, removeModule, renameModule, selectModule } from '../shared/rack/modules'
+import { activeModuleId, addModule, addSavedModule, defaultModuleId, MAX_MODULES, moduleColor, moduleList, packModule, readSavedModule, removeModule, renameModule, selectModule } from '../shared/rack/modules'
 import { typeOf } from '../shared/plan/racks'
 import { beamName, isOwnProfile, PIECE_LIMITS as P, profilesOf, uprightName } from '../shared/rack/profiles'
 import type { BeamProfile, FrameParts, RackStructure, UprightProfile } from '../shared/rack/types'
@@ -33,7 +33,7 @@ import { FLOW, usePlan, type FlowStep } from '../web/plan/planStore'
 import { MultiRackEditor, PlanStage, RackEditor } from '../web/plan/PlanWorkspace'
 import { StartProjectContext } from '../web/plan/startContext'
 import { useToast } from '../web/components/overlays'
-import { canEdit, clientLink, clientLinkCode, CloudError, useAuth } from './cloud'
+import { canEdit, clientLink, clientLinkCode, CloudError, deleteModule, listModules, saveModule, useAuth, type SavedModuleInfo } from './cloud'
 import { requestSave, saveAsNew, saveNow, useProject } from './projects'
 import { metros, metrosNum } from '../shared/units'
 
@@ -439,11 +439,67 @@ function ModuleTabs() {
         )}</Field>
         {list.length > 1 && <button type="button" className="mods__del" onClick={remove} title="Borrar este módulo" aria-label={`Borrar el módulo ${current.name}`}><Trash2 size={16} aria-hidden /></button>}
       </div>
+      <SavedModules name={current.name} full={list.length >= MAX_MODULES} />
       <p className="muted small">
         {list.length === 1
           ? 'Este es el módulo A. Con "Nuevo módulo" creás el B, el C… (arrancan como copia del que estás viendo). Quedan guardados en el proyecto.'
           : `Lo de abajo son las medidas del módulo ${current.name}${usedBy(active) ? ` (${usedBy(active) === 1 ? '1 rack lo usa' : `${usedBy(active)} racks lo usan`}: si lo cambiás, cambian)` : ''}. En Distribución elegís cuál va en cada lugar.`}
       </p>
+    </div>
+  )
+}
+
+/**
+ * Los módulos guardados en la cuenta del usuario: el que se está editando se guarda con un nombre y
+ * después se puede usar en cualquier otro proyecto (entra como un módulo más, copia del guardado).
+ */
+function SavedModules({ name, full }: { name: string; full: boolean }) {
+  const user = useAuth((s) => s.user)
+  const toast = useToast()
+  const [saved, setSaved] = useState<SavedModuleInfo[] | null>(null)
+  const [busy, setBusy] = useState(false)
+  const load = () => listModules().then(setSaved).catch(() => setSaved((prev) => prev ?? []))
+  useEffect(() => { if (user) void load() }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps -- se cargan al entrar
+  if (!user) return null
+  const fail = (e: unknown) => toast.error(e instanceof CloudError ? e.message : 'No se pudo hacer.')
+  const save = async () => {
+    const asked = window.prompt('¿Con qué nombre lo guardás en tu cuenta? Después lo podés usar en cualquier proyecto.', name)
+    const nm = asked?.trim()
+    if (!nm) return
+    const same = saved?.find((m) => m.name.toLowerCase() === nm.toLowerCase())
+    if (same && !window.confirm(`Ya tenés guardado un módulo "${same.name}". ¿Lo reemplazás por este?`)) return
+    setBusy(true)
+    try { await saveModule(nm, packModule(useDesigner.getState().config)); await load(); toast.ok(`Módulo "${nm}" guardado en tu cuenta.`) } catch (e) { fail(e) }
+    setBusy(false)
+  }
+  const use = (m: SavedModuleInfo) => {
+    const data = readSavedModule(m.data)
+    if (!data) { toast.error('Ese módulo guardado no se puede leer.'); return }
+    useDesigner.setState((st) => ({ config: addSavedModule(st.config, m.name, data) }))
+    toast.ok(`Módulo "${m.name}" sumado al proyecto.`)
+  }
+  const remove = async (m: SavedModuleInfo) => {
+    if (!window.confirm(`¿Borrar "${m.name}" de tus módulos guardados? Los proyectos que ya lo usan no cambian.`)) return
+    try { await deleteModule(m.id); await load() } catch (e) { fail(e) }
+  }
+  const sizeOf = (m: SavedModuleInfo) => { const s = readSavedModule(m.data)?.spec; return s ? `${metrosNum(s.width)} × ${metrosNum(s.depth)} × ${mm(s.height)} · ${s.levels} niveles` : '' }
+  return (
+    <div className="mods__saved">
+      {canEdit(user) && <Button icon={BookmarkPlus} size="sm" onClick={save} disabled={busy} block>Guardar este módulo en mi cuenta</Button>}
+      {!!saved?.length && (
+        <details className="plan-more" open={saved.length <= 4}>
+          <summary>Mis módulos guardados ({saved.length})</summary>
+          <ul className="mods__saved-list">
+            {saved.map((m) => (
+              <li key={m.id}>
+                <span><strong>{m.name}</strong><small>{sizeOf(m)}</small></span>
+                <button type="button" className="link-btn" disabled={full} onClick={() => use(m)} title={full ? 'El proyecto ya tiene el máximo de módulos' : 'Lo suma a este proyecto como un módulo más'}>Usar acá</button>
+                {canEdit(user) && <button type="button" className="sectors__del" aria-label={`Borrar ${m.name} de mis módulos guardados`} title="Borrarlo de mi cuenta" onClick={() => remove(m)}><Trash2 size={15} aria-hidden /></button>}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </div>
   )
 }
@@ -544,7 +600,7 @@ function FrameDefaults({ s }: { s: RackStructure }) {
 /* ------------------------------ 4. Distribución ------------------------------ */
 
 function LayoutStep({ depot }: { depot: Depot }) {
-  const { layout, setLayout, plan, commit, select, multi, setMulti, tool, setTool, rackDrawPair, setRackDrawPair, clipRacks } = usePlan()
+  const { layout, setLayout, plan, commit, select, multi, setMulti, tool, setTool, rackDrawPair, setRackDrawPair, clipRacks, markArea, areaType, selection } = usePlan()
   const config = useDesigner((s) => s.config)
   // la otra orientación, para comparar
   const other = useMemo(() => buildDepot(plan, config, { ...layout, orientation: layout.orientation === 'x' ? 'y' : 'x' }), [plan, config, layout])
@@ -645,13 +701,60 @@ function LayoutStep({ depot }: { depot: Depot }) {
   return (
     <div className="cot-fields">
       {mode}
-      {mods.length > 1 && (
-        <Field label="Módulo con el que se llena" hint={plan.rackAreas?.length ? 'Cada zona de racks puede tener el suyo: tocá la zona en el plano y elegilo.' : 'Para usar módulos distintos por sector, marcá zonas de racks y elegí el módulo de cada una.'}>{(id) => (
-          <Select id={id} value={layout.type && mods.some((m) => m.id === layout.type) ? layout.type : mods[0].id} onChange={(e) => setLayout({ type: e.target.value })}>
-            {mods.map((m) => <option key={m.id} value={m.id}>Módulo {m.name} · {metrosNum(m.spec.width)} × {metrosNum(m.spec.depth)} × {mm(m.spec.height)}</option>)}
-          </Select>
-        )}</Field>
-      )}
+      {mods.length > 1 && (() => {
+        const areas = plan.rackAreas ?? []
+        const whole = layout.type && mods.some((m) => m.id === layout.type) ? layout.type : mods[0].id
+        const picked = mods.find((m) => m.id === pick) ?? mods[0]
+        const marking = tool === 'area' && !!areaType
+        return (
+          <div className="sectors">
+            <span className="field__label">¿Qué módulo va en cada sector?</span>
+            <div className="mods__pick" role="radiogroup" aria-label="Módulo del sector que vas a marcar">
+              {mods.map((m, i) => (
+                <button key={m.id} type="button" role="radio" aria-checked={m.id === picked.id} className={`mods__tab${m.id === picked.id ? ' is-on' : ''}`}
+                  onClick={() => { setRackType(m.id); if (marking) markArea(m.id) }}>
+                  <i style={{ background: moduleColor(i).fill, borderColor: moduleColor(i).stroke }} aria-hidden /><strong>{m.name}</strong>
+                  <span>{metrosNum(m.spec.width)} × {metrosNum(m.spec.depth)} × {mm(m.spec.height)}</span>
+                </button>
+              ))}
+            </div>
+            <Button icon={Plus} variant={marking ? 'primary' : undefined} onClick={() => (marking ? setTool('select') : markArea(picked.id))} block>
+              {marking ? `Arrastrá en el plano el sector del ${picked.name}… (Esc termina)` : `Marcar el sector del módulo ${picked.name}`}
+            </Button>
+            {areas.length > 0 && (
+              <ul className="sectors__list">
+                {areas.map((a) => {
+                  const type = a.type && mods.some((m) => m.id === a.type) ? a.type : whole
+                  const color = moduleColor(mods.findIndex((m) => m.id === type))
+                  const on = selection?.kind === 'area' && selection.id === a.id
+                  return (
+                    <li key={a.id} className={on ? 'is-on' : undefined}>
+                      <button type="button" className="sectors__name" onClick={() => select({ kind: 'area', id: a.id })} title="Verla en el plano">
+                        <i style={{ background: color.fill, borderColor: color.stroke }} aria-hidden />{a.name} <span>{metrosNum(a.w)} × {metros(a.d)}</span>
+                      </button>
+                      <Select aria-label={`Módulo de ${a.name}`} value={type} onChange={(e) => commit((p) => ({ ...p, rackAreas: p.rackAreas?.map((x) => (x.id === a.id ? { ...x, type: e.target.value } : x)) }))}>
+                        {mods.map((m) => <option key={m.id} value={m.id}>Módulo {m.name}</option>)}
+                      </Select>
+                      <button type="button" className="sectors__del" aria-label={`Sacar ${a.name}`} title="Sacar este sector"
+                        onClick={() => { commit((p) => ({ ...p, rackAreas: p.rackAreas?.filter((x) => x.id !== a.id) })); select(null) }}><Trash2 size={15} aria-hidden /></button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+            {areas.length > 0
+              ? <p className="muted small">Cada sector se llena con su módulo. Lo que queda sin marcar no lleva racks. Para mover o agrandar un sector, agarralo del borde en el plano.</p>
+              : <>
+                <p className="muted small">Elegí el módulo, tocá el botón y arrastrá en el plano el lado donde va. Repetilo con cada módulo. Si no marcás nada, todo el depósito se llena con uno solo:</p>
+                <Field label="Módulo para todo el depósito">{(id) => (
+                  <Select id={id} value={whole} onChange={(e) => setLayout({ type: e.target.value })}>
+                    {mods.map((m) => <option key={m.id} value={m.id}>Módulo {m.name} · {metrosNum(m.spec.width)} × {metrosNum(m.spec.depth)} × {mm(m.spec.height)}</option>)}
+                  </Select>
+                )}</Field>
+              </>}
+          </div>
+        )
+      })()}
       <Field label={plan.rackAreas?.length ? 'Filas (de las zonas sin orientación propia)' : 'Filas'}>{() => (
         <Segmented label="Orientación de las filas" value={layout.orientation} onChange={(orientation) => setLayout({ orientation })}
           options={[{ value: 'x', label: 'Horizontales' }, { value: 'y', label: 'Verticales' }]} />

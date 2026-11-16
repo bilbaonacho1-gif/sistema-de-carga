@@ -55,6 +55,8 @@ const MESSAGES: Record<string, string> = {
   link: 'Este link ya no está disponible. Pedile uno nuevo a quien te lo mandó.',
   muchos: 'Llegaste al máximo de proyectos guardados. Borrá alguno que no uses.',
   dato: 'El dato no es válido.',
+  nombre_modulo: 'Escribí un nombre para el módulo.',
+  muchos_modulos: 'Llegaste al máximo de módulos guardados. Borrá alguno que no uses.',
 }
 export class CloudError extends Error {
   code: string
@@ -155,6 +157,15 @@ export const shareProject = async (id: string, on: boolean) =>
   (await rpc<{ share_code: string | null }>('sdc_project_share', { p_token: token(), p_id: id, p_on: on })).share_code
 export const openShared = async (code: string) =>
   (await rpc<{ project: { name: string; data: unknown; updated_at: string; owner: string; mine: boolean; id: string | null } }>('sdc_project_shared', { p_token: token(), p_code: code })).project
+
+/* ------------------------------ Módulos guardados ------------------------------ */
+
+export interface SavedModuleInfo { id: string; name: string; data: unknown; updated_at: string }
+/** Los módulos que el usuario guardó en su cuenta (para usarlos en cualquier proyecto). */
+export const listModules = async () => (await rpc<{ modules: SavedModuleInfo[] }>('sdc_modules', { p_token: token() })).modules
+/** Guarda un módulo en la cuenta. Con un nombre que ya estaba, lo reemplaza. */
+export const saveModule = (name: string, data: unknown) => rpc<{ id: string }>('sdc_module_save', { p_token: token(), p_name: name, p_data: data })
+export const deleteModule = (id: string) => rpc('sdc_module_delete', { p_token: token(), p_id: id })
 
 /** Prende o apaga el link para el cliente de un proyecto (sólo mirar, sin usuario). Devuelve su código. */
 export const clientLinkCode = async (id: string, on: boolean) =>

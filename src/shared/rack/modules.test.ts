@@ -4,7 +4,7 @@ import { rectanglePlan } from '../plan/geometry'
 import { DEFAULT_LAYOUT } from '../plan/layout'
 import { attachRack, fitPlacement, rackDims } from '../plan/racks'
 import type { RackPlacement } from '../plan/types'
-import { activeModuleId, addModule, configFor, moduleList, removeModule, renameModule, selectModule, withOwnLoads } from './modules'
+import { activeModuleId, addModule, addSavedModule, configFor, moduleList, packModule, readSavedModule, removeModule, renameModule, selectModule, withOwnLoads } from './modules'
 import type { RackConfiguration } from './types'
 import { DEFAULT_CONFIGURATION } from './technicalSpecs'
 
@@ -168,5 +168,35 @@ describe('la capacidad del depósito con módulos de distinta carga', () => {
     const { size } = moduleSize(c)
     expect(size.types!.A.pallets).toBe(2)
     expect(size.types!.B.pallets).toBe(3)
+  })
+})
+
+describe('módulos guardados en la cuenta', () => {
+  it('se guarda el que se edita y se suma a otro proyecto como un módulo más', () => {
+    const origin: RackConfiguration = { ...DEFAULT_CONFIGURATION, width: 1800, height: 8000, levels: 5, palletWeight: 700 }
+    const saved = readSavedModule(JSON.parse(JSON.stringify(packModule(origin))))!
+    expect(saved.spec.width).toBe(1800)
+    const other: RackConfiguration = { ...DEFAULT_CONFIGURATION }
+    const next = addSavedModule(other, 'Liviano', saved)
+    expect(moduleList(next).map((m) => m.name)).toEqual(['A', 'Liviano'])
+    expect([next.width, next.height, next.levels, next.palletWeight]).toEqual([1800, 8000, 5, 700])
+    // el A del proyecto sigue como estaba
+    expect(configFor(next, 'A').width).toBe(DEFAULT_CONFIGURATION.width)
+    // usarlo dos veces no repite el nombre
+    expect(moduleList(addSavedModule(next, 'Liviano', saved)).map((m) => m.name)).toEqual(['A', 'Liviano', 'Liviano 2'])
+  })
+
+  it('lo que no es un módulo no se lee', () => {
+    expect(readSavedModule(null)).toBeNull()
+    expect(readSavedModule({ spec: { width: 'x' } })).toBeNull()
+  })
+
+  it('las piezas propias que usa viajan con el módulo', () => {
+    const mine = { id: 'mp-1', name: 'Parante mío', faceWidth: 120, depth: 90, thickness: 2.5, maxLoad: 9000, maxHeight: 12000 }
+    const origin = { ...DEFAULT_CONFIGURATION, uprightId: 'mp-1', customProfiles: { uprights: [mine], beams: [] } } as unknown as RackConfiguration
+    const saved = readSavedModule(JSON.parse(JSON.stringify(packModule(origin))))!
+    const next = addSavedModule({ ...DEFAULT_CONFIGURATION }, 'Con parante', saved)
+    expect(next.uprightId).toBe('mp-1')
+    expect(next.customProfiles?.uprights.map((u) => u.id)).toEqual(['mp-1'])
   })
 })

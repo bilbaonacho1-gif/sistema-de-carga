@@ -139,6 +139,10 @@ interface PlanState {
   /** El módulo del proyecto (A, B, C…) con el que se ponen los racks nuevos. null = el primero. */
   rackType: string | null
   setRackType(id: string | null): void
+  /** Marcando un sector para un módulo: la zona de racks que se dibuje nace con ese módulo. */
+  areaType: string | null
+  /** Pasa a marcar en el plano el sector donde va ese módulo. */
+  markArea(type: string): void
   setRackDrawPair(v: boolean): void
   setSymbolKind(k: SymbolKind): void
   /** Modo "elegir varios": tocar un rack lo suma a la selección (como Shift + clic). */
@@ -184,7 +188,7 @@ export const usePlan = create<PlanState>()(
         const next = s.viewOnly ? undefined : s.future[0]
         return next ? { plan: next, future: s.future.slice(1), past: [...s.past, s.plan], selection: null } : s
       }),
-      setTool: (tool) => set((s) => (s.viewOnly ? s : { tool, draft: [], selection: null })),
+      setTool: (tool) => set((s) => (s.viewOnly ? s : { tool, draft: [], selection: null, areaType: null })),
       select: (selection) => set((s) => (s.viewOnly ? s : { selection })),
       setDraft: (draft) => set({ draft }),
       setSnap: (snap) => set({ snap }),
@@ -220,6 +224,8 @@ export const usePlan = create<PlanState>()(
       rackDrawPair: true,
       rackType: null,
       setRackType: (rackType) => set({ rackType }),
+      areaType: null,
+      markArea: (areaType) => set((s) => (s.viewOnly ? s : { tool: 'area', draft: [], selection: null, areaType })),
       setRackDrawPair: (rackDrawPair) => set({ rackDrawPair }),
       setSymbolKind: (symbolKind) => set({ symbolKind, tool: 'symbol', draft: [] }),
       multi: false,
