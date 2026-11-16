@@ -205,14 +205,63 @@
 /* pasar las piezas a otra computadora */
 .pieces__share { display: grid; gap: 6px; margin-top: 14px; padding-top: 4px; border-top: 1px solid var(--line-2); }
 
-/* ---------- Ingreso ---------- */
-.login { min-height: 100dvh; display: grid; place-items: center; padding: 20px; background: var(--bg); }
-.login__card { width: min(440px, 100%); padding: 26px 26px 22px; border: 1px solid var(--line); border-radius: 16px; background: #fff; box-shadow: 0 18px 50px rgba(20, 24, 30, .12); }
-.login__brand { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
-.login__brand h1 { margin: 0; font: 800 22px/1.1 var(--f-display); text-transform: uppercase; }
-.login__form { display: grid; gap: 12px; }
-.login__error { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--red-tint); color: #8f1423; font-size: 13.5px; }
-.login__alt { justify-self: center; }
+/* ---------- Ingreso: la marca de un lado, el formulario del otro ---------- */
+.acc { min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); background: #fff; }
+.acc__side { position: relative; display: grid; place-items: center; padding: 48px clamp(28px, 5vw, 72px); overflow: hidden; color: #fff;
+  background: radial-gradient(120% 90% at 0% 0%, #343a42 0%, #1d2024 55%, #15171a 100%); }
+/* las franjas rojas de la marca: en diagonal, arriba a la derecha, y se van apagando hacia abajo (no pisan el texto) */
+.acc__side::before, .acc__side::after { content: ''; position: absolute; top: -12%; height: 74%; background: var(--red); transform: skewX(-14deg);
+  -webkit-mask-image: linear-gradient(to bottom, #000 45%, transparent); mask-image: linear-gradient(to bottom, #000 45%, transparent); }
+.acc__side::before { right: 4%; width: 120px; opacity: .92; }
+.acc__side::after { right: calc(4% + 142px); width: 22px; opacity: .5; }
+.acc__side-in { position: relative; z-index: 1; display: grid; gap: 18px; width: 100%; max-width: 480px; }
+.acc__brand { display: flex; align-items: center; gap: 14px; font: 700 12.5px var(--f-body); text-transform: uppercase; letter-spacing: .16em; color: #f0b9c0; }
+.acc__brand .logo { border-radius: 12px; }
+.acc__side h1 { margin: 6px 0 0; font: 800 clamp(38px, 4.2vw, 58px)/.98 var(--f-display); text-transform: uppercase; letter-spacing: .005em; }
+.acc__side p { margin: 0; max-width: 38ch; font-size: 16.5px; line-height: 1.5; color: #d2d6db; }
+.acc__side .intro__rack { width: min(360px, 90%); margin: 10px 0 2px; padding: 16px 18px 6px; border-radius: 14px; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .1); backdrop-filter: blur(2px); }
+.acc__side .intro__upright { stroke: #c3c8cd; }
+.acc__points { display: grid; gap: 10px; margin: 4px 0 0; padding: 0; list-style: none; font-size: 15px; color: #e8eaed; }
+.acc__points li { display: flex; align-items: center; gap: 10px; }
+.acc__points svg { flex: none; padding: 6px; width: 30px; height: 30px; border-radius: 8px; background: rgba(255, 255, 255, .1); color: #fff; }
+
+.acc__main { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; padding: 40px clamp(20px, 5vw, 64px); background: #fff; overflow-y: auto; }
+.acc__box { width: 100%; max-width: 400px; animation: acc-in .4s ease-out both; }
+.acc__box h2 { margin: 0; font: 800 38px/1 var(--f-display); text-transform: uppercase; color: var(--ink); }
+.acc__sub { margin: 8px 0 0; font-size: 15px; line-height: 1.5; color: var(--ink-2); }
+.acc__wait { margin: 0; font-size: 16px; color: var(--ink-2); }
+.acc__form { display: grid; gap: 14px; margin-top: 22px; }
+.acc__form .input, .acc__form input:not([type=checkbox]) { height: 46px; font-size: 15.5px; }
+.acc__two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.acc__secret { position: relative; }
+.acc__secret input { padding-right: 46px; }
+.acc__secret button { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 38px; height: 38px; border: 0; border-radius: 8px; background: none; color: var(--ink-3); cursor: pointer; }
+.acc__secret button:hover { color: var(--ink); background: var(--bg); }
+.acc__error { margin: 0; padding: 10px 12px; border-left: 3px solid var(--red); border-radius: 8px; background: var(--red-tint); color: #8f1423; font-size: 14px; }
+.acc__alt { margin: 2px 0 0; text-align: center; font-size: 14.5px; color: var(--ink-2); }
+.acc__done { display: grid; place-items: center; width: 60px; height: 60px; border-radius: 50%; background: #e7f4ec; color: #2e7d4f; }
+.acc__foot { margin: 0; font-size: 12.5px; color: var(--ink-3); }
+.acc__mobile { display: none; align-items: center; gap: 12px; margin-bottom: 22px; font: 800 20px/1.1 var(--f-display); text-transform: uppercase; }
+@keyframes acc-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (max-width: 860px) {
+  .acc { grid-template-columns: minmax(0, 1fr); }
+  .acc__side { display: none; }
+  .acc__main { justify-content: flex-start; padding-top: 36px; background: var(--bg); }
+  .acc__box { padding: 24px 22px; border: 1px solid var(--line); border-radius: 16px; background: #fff; box-shadow: 0 14px 40px rgba(20, 24, 30, .1); }
+  .acc__mobile { display: flex; }
+}
+@media (max-width: 420px) { .acc__two { grid-template-columns: 1fr; } }
+/* pantallas bajas: todo un poco más chico para que entre sin bajar */
+@media (max-height: 760px) and (min-width: 861px) {
+  .acc__side { padding-block: 28px; }
+  .acc__side-in { gap: 12px; }
+  .acc__side h1 { font-size: clamp(32px, 3.4vw, 44px); }
+  .acc__side .intro__rack { width: min(270px, 80%); padding: 12px 14px 4px; }
+  .acc__points { gap: 7px; font-size: 14px; }
+  .acc__main { padding-block: 24px; gap: 14px; }
+  .acc__form { gap: 11px; margin-top: 16px; }
+}
+@media (prefers-reduced-motion: reduce) { .acc__box { animation: none; } }
 
 /* ---------- Encabezado: proyecto abierto, usuario, aviso de pedidos ---------- */
 .cz-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 4px; padding: 0 5px; border-radius: 999px; background: var(--red); color: #fff; font: 700 11px/1 var(--f-body); }

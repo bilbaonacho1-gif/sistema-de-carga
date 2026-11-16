@@ -16,7 +16,7 @@ export function useIntro(): [boolean, () => void] {
 }
 
 /** Rack selectivo de frente: pórticos, vigas y pallets que se dibujan en orden. */
-function RackDrawing() {
+export function RackDrawing() {
   const xs = [20, 120, 220, 320]
   const levels = [150, 95, 40]
   return (

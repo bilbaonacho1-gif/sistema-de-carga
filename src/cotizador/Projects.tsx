@@ -68,7 +68,7 @@ export function ProjectsSection() {
         <h2>Lo que tenés abierto</h2>
         {current ? <>
           <p className="proj__name"><FolderOpen size={18} aria-hidden /> <strong>{current.name}</strong> <span className={`proj__st proj__st--${status}`}>{STATUS[status]}</span></p>
-          {status === 'error' && <p className="login__error">{error}</p>}
+          {status === 'error' && <p className="acc__error">{error}</p>}
           <p className="muted small">Los cambios se guardan solos a los pocos segundos. Podés cerrarlo, abrir otro y después seguir con este.</p>
           <div className="proj__btns">
             <Button icon={Save} onClick={() => run(async () => { if (!(await saveNow())) throw new CloudError('x', useProject.getState().error ?? 'No se pudo guardar.') }, 'Guardado.')} disabled={busy || status === 'saved'}>Guardar ahora</Button>
@@ -86,7 +86,7 @@ export function ProjectsSection() {
       {edit ? <>
         <section className="proj__card">
           <header className="proj__head"><h2>Mis proyectos</h2><Button size="sm" variant="ghost" icon={RefreshCw} onClick={load}>Actualizar</Button></header>
-          {loadError && <p className="login__error">{loadError}</p>}
+          {loadError && <p className="acc__error">{loadError}</p>}
           {list && !list.length && <p className="muted">Todavía no guardaste ninguno.</p>}
           <ul className="proj__list">
             {list?.map((p) => (
