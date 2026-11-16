@@ -5,7 +5,7 @@
  * cuántos racks entran en ESE depósito (filas, pasillos, columnas y zonas) y todo lo demás
  * (materiales, presupuesto) sale del depósito completo.
  */
-import { AlertTriangle, Save, ChevronLeft, ClipboardPaste, ChevronRight, Download, Lightbulb, Mail, Phone, Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, Eye, Save, ChevronLeft, ClipboardPaste, ChevronRight, Download, Lightbulb, Mail, Phone, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { buildDepot, moduleSize, type Depot } from '../shared/plan/depot'
 import { planArea } from '../shared/plan/geometry'
@@ -31,8 +31,8 @@ import { FLOW, usePlan, type FlowStep } from '../web/plan/planStore'
 import { MultiRackEditor, PlanStage, RackEditor } from '../web/plan/PlanWorkspace'
 import { StartProjectContext } from '../web/plan/startContext'
 import { useToast } from '../web/components/overlays'
-import { canEdit, CloudError, useAuth } from './cloud'
-import { requestSave, saveAsNew, useProject } from './projects'
+import { canEdit, clientLink, clientLinkCode, CloudError, useAuth } from './cloud'
+import { requestSave, saveAsNew, saveNow, useProject } from './projects'
 import { metros, metrosNum } from '../shared/units'
 
 const L = DESIGN_RULES.limits
@@ -584,10 +584,31 @@ function SaveAtEnd() {
   const { current, status } = useProject()
   if (!canEdit(user)) return null
   const saved = !!current && status === 'saved'
+  const toast = useToast()
+  const [link, setLink] = useState('')
+  const sendToClient = async () => {
+    if (!current) return
+    try {
+      await saveNow()
+      const code = await clientLinkCode(current.id, true)
+      if (!code) return
+      const url = clientLink(code)
+      setLink(url)
+      try { await navigator.clipboard.writeText(url); toast.ok('Link para el cliente copiado.') } catch { toast.ok('Link listo: copialo del cuadro de abajo.') }
+    } catch (e) { toast.error(e instanceof CloudError ? e.message : 'No se pudo armar el link.') }
+  }
   return (
     <>
       <Button variant="primary" icon={Save} onClick={requestSave} disabled={saved} block>{current ? (saved ? 'Proyecto guardado' : 'Guardar el proyecto') : 'Guardar como proyecto'}</Button>
       <p className="muted small">{current ? `Se guarda en "${current.name}". También con Ctrl+S o el botón Guardar de arriba.` : 'Todavía no es un proyecto: ponele un nombre y queda en tu cuenta.'}</p>
+      {/* terminado el proyecto: un link para que el cliente lo vea sin poder tocar nada */}
+      {current && <>
+        <Button icon={Eye} onClick={sendToClient} block>Link para el cliente (solo ver)</Button>
+        {link && <div className="proj__share proj__share--client">
+          <p><b>Link copiado.</b> Mandáselo al cliente: ve el plano y el 3D, se puede mover, pero no cambia ni marca nada.</p>
+          <input readOnly value={link} onFocus={(e) => e.target.select()} aria-label="Link para el cliente" />
+        </div>}
+      </>}
     </>
   )
 }
@@ -595,7 +616,7 @@ function SaveAtEnd() {
 /* ------------------------------ Placa del depósito ------------------------------ */
 
 /** Los números del depósito en una franja, arriba del plano. */
-function DepotStrip({ depot, area }: { depot: Depot; area: number }) {
+export function DepotStrip({ depot, area }: { depot: Depot; area: number }) {
   return (
     <dl className="depot-strip">
       <div><dt>Posiciones</dt><dd>{fmt(depot.positions)}</dd></div>

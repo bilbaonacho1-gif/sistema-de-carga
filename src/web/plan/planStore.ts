@@ -117,6 +117,9 @@ interface PlanState {
   /** En el 3D, edición bloqueada: se puede girar y elegir, pero nada se mueve arrastrando (así no se corre algo sin querer). */
   lock3d: boolean
   setLock3d(v: boolean): void
+  /** Sólo mirar (el link para el cliente): se puede mover la vista, pero nada se elige, se mueve ni se cambia. */
+  viewOnly: boolean
+  setViewOnly(v: boolean): void
   /** Objeto propio que se está poniendo en el depósito (se pone uno con cada clic). */
   placeObject: (ObjectShape & { id?: string }) | null
   setPlaceObject(o: (ObjectShape & { id?: string }) | null): void
@@ -166,19 +169,20 @@ export const usePlan = create<PlanState>()(
       workspace: 'rack',
       flowStep: 'deposito',
       layout: DEFAULT_LAYOUT,
-      commit: (fn) => set((s) => ({ plan: withMarks(s.plan, fn(s.plan)), past: [...s.past, s.plan].slice(-HISTORY), future: [] })),
-      begin: () => set((s) => ({ past: [...s.past, s.plan].slice(-HISTORY), future: [] })),
-      live: (fn) => set((s) => ({ plan: withMarks(s.plan, fn(s.plan)) })),
+      // mirando solamente (viewOnly), nada de esto hace efecto: ni cambios, ni elegir, ni herramientas
+      commit: (fn) => set((s) => (s.viewOnly ? s : { plan: withMarks(s.plan, fn(s.plan)), past: [...s.past, s.plan].slice(-HISTORY), future: [] })),
+      begin: () => set((s) => (s.viewOnly ? s : { past: [...s.past, s.plan].slice(-HISTORY), future: [] })),
+      live: (fn) => set((s) => (s.viewOnly ? s : { plan: withMarks(s.plan, fn(s.plan)) })),
       undo: () => set((s) => {
-        const prev = s.past[s.past.length - 1]
+        const prev = s.viewOnly ? undefined : s.past[s.past.length - 1]
         return prev ? { plan: prev, past: s.past.slice(0, -1), future: [s.plan, ...s.future], selection: null } : s
       }),
       redo: () => set((s) => {
-        const next = s.future[0]
+        const next = s.viewOnly ? undefined : s.future[0]
         return next ? { plan: next, future: s.future.slice(1), past: [...s.past, s.plan], selection: null } : s
       }),
-      setTool: (tool) => set({ tool, draft: [], selection: null }),
-      select: (selection) => set({ selection }),
+      setTool: (tool) => set((s) => (s.viewOnly ? s : { tool, draft: [], selection: null })),
+      select: (selection) => set((s) => (s.viewOnly ? s : { selection })),
       setDraft: (draft) => set({ draft }),
       setSnap: (snap) => set({ snap }),
       setSnapStep: (snapStep) => set({ snapStep }),
@@ -196,8 +200,10 @@ export const usePlan = create<PlanState>()(
       setSection: (section) => set({ section }),
       lock3d: true,
       setLock3d: (lock3d) => set({ lock3d }),
+      viewOnly: false,
+      setViewOnly: (viewOnly) => set(viewOnly ? { viewOnly, selection: null, tool: 'select', draft: [], lock3d: true, isolate: null, piece: null } : { viewOnly }),
       placeObject: null,
-      setPlaceObject: (placeObject) => set({ placeObject, tool: placeObject ? 'object' : 'select', draft: [] }),
+      setPlaceObject: (placeObject) => set((s) => (s.viewOnly ? s : { placeObject, tool: placeObject ? 'object' : 'select', draft: [] })),
       clipRacks: null,
       setClipRacks: (clipRacks) => set({ clipRacks }),
       walk: null,

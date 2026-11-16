@@ -5,6 +5,7 @@
  *  - las referencias (qué es cada color) y una escala gráfica.
  * Los números y pasillos aparecen recién cuando hay lugar para leerlos (al acercarse).
  */
+import { usePlan } from './planStore'
 import { useMemo, useState } from 'react'
 import { placementRect, type RackPlacement } from '../../shared/plan/layout'
 import type { Plan } from '../../shared/plan/types'
@@ -137,6 +138,7 @@ export function Legend({ plan, racks, issues }: { plan: Plan; racks: boolean; is
     try { const saved = localStorage.getItem('sdc-legend'); return saved === null ? roomy : saved !== '0' } catch { return roomy }
   })
   const toggle = () => { setOpen(!open); try { localStorage.setItem('sdc-legend', open ? '0' : '1') } catch { /* sin memoria */ } }
+  const viewOnly = usePlan((s) => s.viewOnly)
   const items: [string, string][] = [
     ...(racks ? [['rack', 'Rack (fila con su número)'] as [string, string]] : []),
     ...(issues ? [['rack-bad', 'Rack con problema'] as [string, string]] : []),
@@ -146,7 +148,7 @@ export function Legend({ plan, racks, issues }: { plan: Plan; racks: boolean; is
     ...(plan.columns.length ? [['column', 'Columna'] as [string, string]] : []),
     ...(plan.walls.length ? [['wall', 'Tabique'] as [string, string]] : []),
     ...(plan.doors.length ? [['door', 'Portón'] as [string, string]] : []),
-    ['cota', 'Medida (tocala para cambiarla)'],
+    ['cota', viewOnly ? 'Medida' : 'Medida (tocala para cambiarla)'],
   ]
   return (
     <div className={`plan-legend${open ? ' is-open' : ''}`}>

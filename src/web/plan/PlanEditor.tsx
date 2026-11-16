@@ -396,7 +396,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
     }
     const raw = toPlan(e.clientX, e.clientY)
     // Shift + arrastrar el fondo: recuadro para elegir varios racks
-    if (tool === 'select' && (e.shiftKey || usePlan.getState().multi) && rackLayer) {
+    if (tool === 'select' && (e.shiftKey || usePlan.getState().multi) && rackLayer && !usePlan.getState().viewOnly) {
       drag.current = { type: 'box', a: raw }
       setBoxDraft({ a: raw, b: raw })
       return
@@ -515,7 +515,8 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
   }
 
   const startDrag = (e: React.PointerEvent, d: Drag) => {
-    if (tool !== 'select') return
+    // mirando solamente, nada se agarra: el arrastre sigue de largo y mueve la vista
+    if (tool !== 'select' || usePlan.getState().viewOnly) return
     e.stopPropagation()
     svgRef.current!.setPointerCapture(e.pointerId)
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
@@ -724,9 +725,10 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
     ? typedLen > 0 ? pointAtLength(last, cursor, draft[draft.length - 2], typedLen, snap) : cursor ? ortho(snapPt(cursor), last) : null
     : null
   const empty = plan.outline.points.length < 3
+  const viewOnly = usePlan((s) => s.viewOnly)
 
   return (
-    <div ref={wrapRef} className={`plan-editor plan-editor--${tool}`}>
+    <div ref={wrapRef} className={`plan-editor plan-editor--${tool}${viewOnly ? ' plan-editor--view' : ''}`}>
       <svg ref={svgRef} viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`} width="100%" height="100%"
         onPointerDown={onBackgroundDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
         onPointerLeave={() => setCursor(null)}
@@ -931,7 +933,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
             </g>
           )
         })()}
-        {tool === 'select' && plan.outline.points.map((p, i) => (
+        {tool === 'select' && !viewOnly && plan.outline.points.map((p, i) => (
           <rect key={`v${i}`} className="no-export" x={p.x - px(6)} y={p.y - px(6)} width={px(12)} height={px(12)} rx={px(2)}
             fill={isSel('vertex', i) ? RED : '#fff'} stroke={RED} strokeWidth={px(2)} style={{ cursor: 'grab' }}
             onPointerDown={(e) => { select({ kind: 'vertex', index: i }); startDrag(e, { type: 'vertex', index: i, started: false }) }} />

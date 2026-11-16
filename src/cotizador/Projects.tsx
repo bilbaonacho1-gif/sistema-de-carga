@@ -3,12 +3,12 @@
  * nombre, se deja, se empieza otro y después se sigue con el mismo. Para pasarle uno a otra persona
  * se comparte con un código (o un link), que el otro pega acá.
  */
-import { Check, Copy, FolderOpen, Link2, Pencil, Plus, RefreshCw, Save, Share2, Trash2, X } from 'lucide-react'
+import { Check, Copy, Eye, FolderOpen, Link2, Pencil, Plus, RefreshCw, Save, Share2, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useToast } from '../web/components/overlays'
 import { Button, Field, Input } from '../web/components/ui'
 import { usePlan } from '../web/plan/planStore'
-import { canEdit, CloudError, codeFrom, deleteProject, listProjects, renameProject, shareLink, shareProject, useAuth, type ProjectInfo } from './cloud'
+import { canEdit, clientLink, clientLinkCode, CloudError, codeFrom, deleteProject, listProjects, renameProject, shareLink, shareProject, useAuth, type ProjectInfo } from './cloud'
 import { closeProject, hasWork, openByCode, openProject, saveAsNew, saveNow, startNew, useProject } from './projects'
 
 const say = (e: unknown) => (e instanceof CloudError ? e.message : 'No se pudo hacer.')
@@ -28,6 +28,8 @@ export function ProjectsSection() {
   const [busy, setBusy] = useState(false)
   // el proyecto del que se está mostrando el código para compartir
   const [sharing, setSharing] = useState<string | null>(null)
+  // el proyecto del que se está mostrando el link para el cliente
+  const [client, setClient] = useState<string | null>(null)
   const load = useCallback(async () => {
     if (!edit) { setList([]); return }
     try { setList(await listProjects()); setLoadError(null) } catch (e) { setLoadError(say(e)) }
@@ -57,6 +59,10 @@ export function ProjectsSection() {
     void run(async () => { await deleteProject(p.id); if (current?.id === p.id) closeProject() }, 'Proyecto eliminado.')
   }
   const share = (p: ProjectInfo, on: boolean) => run(async () => { await shareProject(p.id, on); setSharing(on ? p.id : null) }, on ? undefined : 'Ya no está compartido: el código dejó de servir.')
+  const forClient = (p: ProjectInfo, on: boolean) => run(async () => {
+    if (on && current?.id === p.id) await saveNow()
+    await clientLinkCode(p.id, on); setClient(on ? p.id : null); if (on) setSharing(null)
+  }, on ? undefined : 'El link del cliente dejó de funcionar.')
   const copy = async (text: string, what: string) => {
     try { await navigator.clipboard.writeText(text); toast.ok(`${what} copiado.`) } catch { toast.error('No se pudo copiar. Seleccionalo y copialo a mano.') }
   }
@@ -94,15 +100,27 @@ export function ProjectsSection() {
                 <div className="proj__row">
                   <div className="proj__info">
                     <strong>{p.name}</strong>
-                    <span>guardado el {when(p.updated_at)}{current?.id === p.id ? ' · abierto ahora' : ''}{p.share_code ? ' · compartido' : ''}</span>
+                    <span>guardado el {when(p.updated_at)}{current?.id === p.id ? ' · abierto ahora' : ''}{p.share_code ? ' · compartido' : ''}{p.view_code ? ' · con link de cliente' : ''}</span>
                   </div>
                   <div className="proj__btns">
                     {current?.id !== p.id && <Button size="sm" variant="primary" icon={FolderOpen} onClick={() => open(p)} disabled={busy}>Abrir</Button>}
-                    <Button size="sm" icon={Share2} onClick={() => (p.share_code ? setSharing(sharing === p.id ? null : p.id) : share(p, true))} disabled={busy}>Compartir</Button>
+                    <Button size="sm" icon={Eye} onClick={() => (p.view_code ? (setClient(client === p.id ? null : p.id), setSharing(null)) : forClient(p, true))} disabled={busy} title="Un link para que el cliente lo vea, sin poder cambiar nada">Link para el cliente</Button>
+                    <Button size="sm" icon={Share2} onClick={() => (p.share_code ? (setSharing(sharing === p.id ? null : p.id), setClient(null)) : share(p, true))} disabled={busy} title="Un código para pasárselo a otro usuario del sistema">Compartir</Button>
                     <Button size="sm" icon={Pencil} onClick={() => rename(p)} disabled={busy} aria-label={`Cambiar el nombre de ${p.name}`}>Nombre</Button>
                     <Button size="sm" icon={Trash2} onClick={() => remove(p)} disabled={busy} aria-label={`Eliminar ${p.name}`}>Eliminar</Button>
                   </div>
                 </div>
+                {client === p.id && p.view_code && (
+                  <div className="proj__share proj__share--client">
+                    <p>Mandale este <b>link al cliente</b>. Lo abre sin usuario ni contraseña y ve el plano y el 3D: se puede mover y acercar, pero <b>no puede cambiar ni marcar nada</b>. Siempre ve la última versión guardada.</p>
+                    <div className="proj__code">
+                      <input readOnly value={clientLink(p.view_code)} onFocus={(e) => e.target.select()} aria-label="Link para el cliente" />
+                      <Button size="sm" variant="primary" icon={Copy} onClick={() => copy(clientLink(p.view_code!), 'Link')}>Copiar link</Button>
+                      <a className="btn btn--secondary btn--sm" href={clientLink(p.view_code)} target="_blank" rel="noreferrer">Ver cómo lo ve</a>
+                    </div>
+                    <button type="button" className="link-btn" onClick={() => forClient(p, false)}>Apagar el link (deja de funcionar)</button>
+                  </div>
+                )}
                 {sharing === p.id && p.share_code && (
                   <div className="proj__share">
                     <p>Pasale este <b>código</b> a quien quieras. Lo pega en "Abrir con un código" y ve el proyecto (una copia: no te cambia el tuyo).</p>

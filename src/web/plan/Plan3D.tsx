@@ -214,8 +214,8 @@ function useDrag() {
     onPointerDown: (e: ThreeEvent<PointerEvent>) => {
       if (e.button !== 0) return
       const s = usePlan.getState()
-      // caminando a pie no se agarra ni se mueve nada: sólo se mira
-      if (s.walk) return
+      // caminando a pie, o mirando solamente (link del cliente), no se agarra ni se mueve nada
+      if (s.walk || s.viewOnly) return
       // poniendo algo con un clic (pegar, un objeto, una figura): el clic es para el piso, no para agarrar lo que hay
       if (placingNow()) return
       e.stopPropagation()
@@ -253,7 +253,7 @@ function useDrag() {
       window.addEventListener('pointerup', up)
       window.addEventListener('pointercancel', up)
     },
-    onPointerOver: (e: ThreeEvent<PointerEvent>) => { if (placingNow()) return; e.stopPropagation(); gl.domElement.style.cursor = apply && !usePlan.getState().lock3d ? 'grab' : 'pointer' },
+    onPointerOver: (e: ThreeEvent<PointerEvent>) => { if (placingNow() || usePlan.getState().viewOnly) return; e.stopPropagation(); gl.domElement.style.cursor = apply && !usePlan.getState().lock3d ? 'grab' : 'pointer' },
     onPointerOut: () => { gl.domElement.style.cursor = '' },
   })
 }

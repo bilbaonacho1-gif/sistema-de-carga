@@ -46,6 +46,7 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
   const view3d = want3d && !empty
   const [fit, setFit] = useState(0)
   const fitTick = usePlan((s) => s.fitTick)
+  const viewOnly = usePlan((s) => s.viewOnly)
   const pallets = (racks ?? []).reduce((n, r) => n + r.structure.pallets.length, 0)
   const [loads, setLoads] = useState<boolean | null>(null)
   // con muchos racks el 3D va en lote y las cajas no pesan: se ven siempre; con pocos racks muy largos, sólo si no son demasiadas
@@ -62,10 +63,12 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
         {!view3d && !empty && <button type="button" className="vp-btn" onClick={() => setFit((n) => n + 1)}><Maximize2 size={14} aria-hidden /> Encuadrar</button>}
         {!empty && <>
           <button type="button" className={`vp-btn${walk && view3d ? ' is-active' : ''}`} aria-pressed={!!walk && view3d} onClick={startWalk} title="Recorrer el depósito a la altura de los ojos de una persona"><Footprints size={14} aria-hidden /> A&nbsp;pie</button>
+          {!viewOnly && <>
           <button type="button" className={`vp-btn vp-btn--icon${placing === 'persona' ? ' is-active' : ''}`} aria-pressed={placing === 'persona'} onClick={() => place('persona')} title="Poner una persona para ver la escala" aria-label="Poner una persona para ver la escala"><PersonStanding size={16} aria-hidden /></button>
           <button type="button" className={`vp-btn vp-btn--icon${placing === 'autoelevador' ? ' is-active' : ''}`} aria-pressed={placing === 'autoelevador'} onClick={() => place('autoelevador')} title="Poner un autoelevador para ver la escala" aria-label="Poner un autoelevador para ver la escala"><Forklift size={16} aria-hidden /></button>
+          </>}
         </>}
-        {view3d && !walk && (
+        {view3d && !walk && !viewOnly && (
           <button type="button" className={`vp-btn${lock3d ? '' : ' is-active'}`} aria-pressed={!lock3d} onClick={() => setLock3d(!lock3d)}
             title={lock3d ? 'La edición está bloqueada: nada se mueve al arrastrar. Tocá para poder mover cosas.' : 'Se pueden mover cosas arrastrando. Tocá para bloquear y sólo mirar.'}>
             {lock3d ? <><Lock size={14} aria-hidden /> Bloqueado</> : <><LockOpen size={14} aria-hidden /> Editando</>}
@@ -108,7 +111,7 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
         {tool === 'rackpaste' && view3d && <p className="plan-stage__hint plan-stage__hint--place">Tocá el piso donde va la copia · Esc termina</p>}
         {tool === 'object' && view3d && <p className="plan-stage__hint plan-stage__hint--place">Tocá el piso donde va el objeto (podés poner varios) · Esc termina</p>}
         {view3d && !isoOn && !walk && !placing && tool !== 'rackpaste' && tool !== 'object' && (
-          <p className="plan-stage__hint">{lock3d ? 'Edición bloqueada: arrastrá para girar la vista · para mover cosas, tocá el candado' : 'Tocá algo para elegirlo y arrastralo para moverlo · arrastrá el fondo para girar'}</p>
+          <p className="plan-stage__hint">{viewOnly ? 'Arrastrá para girar la vista · rueda o los botones + y − para acercar' : lock3d ? 'Edición bloqueada: arrastrá para girar la vista · para mover cosas, tocá el candado' : 'Tocá algo para elegirlo y arrastralo para moverlo · arrastrá el fondo para girar'}</p>
         )}
       </div>
     </section>

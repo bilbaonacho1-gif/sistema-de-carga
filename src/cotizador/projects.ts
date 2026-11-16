@@ -74,6 +74,9 @@ function apply(data: unknown): boolean {
   return true
 }
 
+/** Para el link del cliente: pone el proyecto en pantalla sin guardarlo ni abrirlo como propio. */
+export const showForView = (data: unknown) => apply(data)
+
 const fail = (e: unknown) => (e instanceof CloudError ? e.message : 'No se pudo guardar.')
 
 /** Guarda ya el proyecto abierto (si cambió algo). */

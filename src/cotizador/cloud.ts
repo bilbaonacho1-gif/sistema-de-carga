@@ -24,7 +24,7 @@ export interface AdminUser {
   id: string; username: string; full_name: string; role: Role; status: 'pending' | 'active' | 'blocked'
   note: string | null; created_at: string; last_login: string | null; must_change: boolean; projects: number
 }
-export interface ProjectInfo { id: string; name: string; share_code: string | null; created_at: string; updated_at: string }
+export interface ProjectInfo { id: string; name: string; share_code: string | null; view_code: string | null; created_at: string; updated_at: string }
 
 export const ROLES: { id: Role; name: string; what: string }[] = [
   { id: 'viewer', name: 'Solo ver', what: 'Entra y abre proyectos que le comparten con un código. No guarda proyectos propios.' },
@@ -52,6 +52,7 @@ const MESSAGES: Record<string, string> = {
   vos_mismo: 'No te podés eliminar a vos mismo.',
   no_existe: 'Eso ya no existe (puede que lo hayan borrado).',
   codigo: 'Ese código no corresponde a ningún proyecto compartido.',
+  link: 'Este link ya no está disponible. Pedile uno nuevo a quien te lo mandó.',
   muchos: 'Llegaste al máximo de proyectos guardados. Borrá alguno que no uses.',
   dato: 'El dato no es válido.',
 }
@@ -154,6 +155,14 @@ export const shareProject = async (id: string, on: boolean) =>
   (await rpc<{ share_code: string | null }>('sdc_project_share', { p_token: token(), p_id: id, p_on: on })).share_code
 export const openShared = async (code: string) =>
   (await rpc<{ project: { name: string; data: unknown; updated_at: string; owner: string; mine: boolean; id: string | null } }>('sdc_project_shared', { p_token: token(), p_code: code })).project
+
+/** Prende o apaga el link para el cliente de un proyecto (sólo mirar, sin usuario). Devuelve su código. */
+export const clientLinkCode = async (id: string, on: boolean) =>
+  (await rpc<{ view_code: string | null }>('sdc_project_client', { p_token: token(), p_id: id, p_on: on })).view_code
+/** Lo que ve el cliente con su link: no hace falta usuario. */
+export const viewProject = async (code: string) =>
+  (await rpc<{ project: { name: string; data: unknown; updated_at: string } }>('sdc_view', { p_code: code })).project
+export const clientLink = (code: string) => `${window.location.origin}${window.location.pathname}?ver=${code}`
 
 /** Del texto pegado (un código suelto o un link entero) saca el código. */
 export function codeFrom(text: string): string {
