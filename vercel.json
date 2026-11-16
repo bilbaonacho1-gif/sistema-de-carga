@@ -4,5 +4,11 @@
   "installCommand": "npm ci",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "cleanUrls": true
+  "cleanUrls": true,
+  "crons": [
+    {
+      "path": "/api/keepalive",
+      "schedule": "0 9 * * *"
+    }
+  ]
 }

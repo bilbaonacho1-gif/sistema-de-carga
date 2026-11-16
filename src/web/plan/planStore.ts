@@ -25,6 +25,9 @@ const safeStorage = {
   removeItem: (k: string) => { try { localStorage.removeItem(k) } catch { /* sin memoria */ } },
 }
 
+/** Las solapas del sistema: el depósito, las piezas propias, los proyectos guardados y la administración de usuarios. */
+export type Section = 'deposito' | 'piezas' | 'proyectos' | 'admin'
+
 export type PlanTool = 'select' | 'outline' | 'column' | 'wall' | 'door' | 'zone' | 'area' | 'aisle' | 'measure' | 'dim' | 'text' | 'symbol' | 'calibrate' | 'rackdraw' | 'rackpaste' | 'object'
 
 /** Capas del plano que se pueden apagar (como en AutoCAD). */
@@ -121,8 +124,8 @@ interface PlanState {
   clipRacks: RackPlacement[] | null
   setClipRacks(r: RackPlacement[] | null): void
   /** Sección a la vista: el depósito (plano y racks) o el taller de piezas propias. */
-  section: 'deposito' | 'piezas'
-  setSection(s: 'deposito' | 'piezas'): void
+  section: Section
+  setSection(s: Section): void
   /** Pieza de metal tocada en el 3D (de un rack visto solo): una viga (plano de carga) o los parantes. */
   piece: RackPiece | null
   setPiece(p: RackPiece | null): void
