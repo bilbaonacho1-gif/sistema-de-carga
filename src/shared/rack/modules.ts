@@ -6,11 +6,12 @@
  *
  * Cómo se guarda: los campos de siempre de la configuración (width, height, levels…) son el módulo
  * que se está editando (`moduleId`); los demás esperan en `moduleTypes`. Un rack sin tipo usa el
- * primer módulo. Lo que no es del módulo (pallet, carga, accesorios, colores) vale para todos.
+ * primer módulo. Los accesorios y los colores también son de cada módulo. Lo que no es del módulo
+ * (el pallet y la carga) vale para todos.
  */
 import type { RackConfiguration } from './types'
 
-export const SPEC_KEYS = ['width', 'depth', 'height', 'levels', 'floorStorage', 'beamElevations', 'uprightId', 'beamId', 'frameDefault'] as const
+export const SPEC_KEYS = ['width', 'depth', 'height', 'levels', 'floorStorage', 'beamElevations', 'uprightId', 'beamId', 'frameDefault', 'accessories'] as const
 export type ModuleSpec = Pick<RackConfiguration, (typeof SPEC_KEYS)[number]>
 export interface ModuleType { id: string; name: string; spec: ModuleSpec }
 
@@ -23,6 +24,8 @@ export function specOf(c: RackConfiguration): ModuleSpec {
   return {
     width: c.width, depth: c.depth, height: c.height, levels: c.levels, floorStorage: c.floorStorage,
     beamElevations: c.beamElevations, uprightId: c.uprightId, beamId: c.beamId, frameDefault: c.frameDefault,
+    // los accesorios y los colores también son de cada módulo
+    accessories: c.accessories,
   }
 }
 
@@ -53,7 +56,8 @@ export function configFor(c: RackConfiguration, id?: string): RackConfiguration 
   let out = by.get(want)
   if (!out) {
     const spec = c.moduleTypes!.find((m) => m.id === want)!.spec
-    out = { ...c, ...spec }
+    // un módulo guardado antes de que los accesorios fueran de cada uno no los trae: usa los del que se edita
+    out = { ...c, ...spec, accessories: spec.accessories ?? c.accessories }
     by.set(want, out)
   }
   return out
@@ -69,7 +73,7 @@ export function selectModule(c: RackConfiguration, id: string): RackConfiguratio
   const list = stored(c)
   const next = list.find((m) => m.id === id)
   if (!next || id === activeModuleId(c) && c.moduleTypes?.length) return c
-  return { ...c, ...next.spec, moduleTypes: list, moduleId: id }
+  return { ...c, ...next.spec, accessories: next.spec.accessories ?? c.accessories, moduleTypes: list, moduleId: id }
 }
 
 /** Crea un módulo nuevo, copia del que se está editando, y pasa a editarlo. */
@@ -92,7 +96,7 @@ export function removeModule(c: RackConfiguration, id: string): RackConfiguratio
   if (list.length < 2 || !list.some((m) => m.id === id)) return c
   const rest = list.filter((m) => m.id !== id)
   const active = activeModuleId(c) === id ? rest[0] : rest.find((m) => m.id === activeModuleId(c))!
-  return { ...c, ...active.spec, moduleTypes: rest, moduleId: active.id }
+  return { ...c, ...active.spec, accessories: active.spec.accessories ?? c.accessories, moduleTypes: rest, moduleId: active.id }
 }
 
 export function renameModule(c: RackConfiguration, id: string, name: string): RackConfiguration {

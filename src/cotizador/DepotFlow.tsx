@@ -157,7 +157,7 @@ export function DepotFlow() {
       {m.id === 'revision' && <ChecksPanel checks={checks} />}
       {m.id === 'exportar' && <ExportPanel racks={showRacks ? depot.layout.placements : []} size={size} sheet={sheet} />}
       {m.id === 'accesorios' && <>
-        <p className="muted small">Protección, pisos, refuerzos, señalización y colores. Van en todos los racks del depósito.</p>
+        <AccessoriesNote />
         <AccessoriesStep s={depot.sample} counts={depot.counts} multiRow={depot.layout.rows > 1} closed />
       </>}
       {m.id === 'paso' && <>
@@ -445,6 +445,18 @@ function ModuleTabs() {
           : `Lo de abajo son las medidas del módulo ${current.name}${usedBy(active) ? ` (${usedBy(active) === 1 ? '1 rack lo usa' : `${usedBy(active)} racks lo usan`}: si lo cambiás, cambian)` : ''}. En Distribución elegís cuál va en cada lugar.`}
       </p>
     </div>
+  )
+}
+
+/** De qué módulo son los accesorios y los colores que se están eligiendo. */
+function AccessoriesNote() {
+  const config = useDesigner((st) => st.config)
+  const list = moduleList(config), current = list.find((m) => m.id === activeModuleId(config)) ?? list[0]
+  return (
+    <p className="muted small">
+      Protección, pisos, refuerzos, señalización y colores.{' '}
+      {list.length > 1 ? <>Son los del <b>módulo {current.name}</b>: cada módulo tiene los suyos.</> : 'Van en todos los racks armados con este módulo.'}
+    </p>
   )
 }
 

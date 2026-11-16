@@ -53,6 +53,22 @@ describe('módulos del proyecto (A, B, C…)', () => {
     expect(placementStructure(taller, { ...b, height: 7000 }).config.height).toBe(7000)
   })
 
+  it('los accesorios y los colores son de cada módulo', () => {
+    const a0 = { ...DEFAULT_CONFIGURATION, accessories: { ...DEFAULT_CONFIGURATION.accessories, beamColor: 'rojo' as const, backMesh: false } }
+    let c = addModule(a0)                                    // B, en edición: arranca con los del A
+    expect(c.accessories).toEqual(a0.accessories)
+    c = { ...c, accessories: { ...c.accessories, beamColor: 'azul' as const, uprightColor: 'naranja' as const, backMesh: true } }
+    expect(placementStructure(c, rack({ type: 'B' })).accessories).toMatchObject({ beamColor: 'azul', uprightColor: 'naranja', backMesh: true })
+    expect(placementStructure(c, rack({ type: 'A' })).accessories).toMatchObject({ beamColor: 'rojo', backMesh: false })
+    // al volver a editar el A, se ven los suyos; y los del B quedaron guardados
+    const back = selectModule(c, 'A')
+    expect(back.accessories).toMatchObject({ beamColor: 'rojo', backMesh: false })
+    expect(placementStructure(back, rack({ type: 'B' })).accessories.beamColor).toBe('azul')
+    // un módulo guardado antes de este cambio (sin accesorios propios) no se rompe
+    const old = { ...back, moduleTypes: back.moduleTypes!.map((m) => (m.id === 'B' ? { ...m, spec: { ...m.spec, accessories: undefined } } : m)) }
+    expect(placementStructure(old, rack({ type: 'B' })).accessories.beamColor).toBe('rojo')
+  })
+
   it('el depósito se llena con el módulo elegido, o cada zona con el suyo', () => {
     let c = addModule(DEFAULT_CONFIGURATION)
     c = { ...c, width: 1800, height: 8000 }                  // B: más corto y más alto
