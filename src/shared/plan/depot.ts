@@ -2,6 +2,7 @@
  * EL DEPÓSITO COMPLETO: cada rack ubicado se arma con el mismo motor del cotizador
  * (calculateRackStructure) y se suman posiciones, capacidad y la lista de materiales.
  */
+import { activeModuleId, configFor, defaultModuleId, moduleList } from '../rack/modules'
 import { calculateRackStructure, sanitizeConfiguration } from '../rack/calculateRackStructure'
 import { DESIGN_RULES } from '../rack/technicalSpecs'
 import type { ComponentCounts, MaterialLine, RackConfiguration, RackSection, RackStructure } from '../rack/types'
@@ -34,8 +35,16 @@ export interface Depot {
 export function moduleSize(config: RackConfiguration): { size: RackModuleSize; sample: RackStructure } {
   const c = sanitizeConfiguration({ ...config, sections: [], layout: { ...config.layout, rows: 1, backToBack: false, warehouseLength: 0, warehouseWidth: 0 } })
   const sample = calculateRackStructure({ ...c, positions: 1 })
+  // las medidas de cada módulo del proyecto (A, B, C…): cada rack usa las del suyo
+  const list = moduleList(config)
+  const types = list.length > 1 || config.moduleTypes?.length ? Object.fromEntries(list.map((m) => {
+    if (m.id === activeModuleId(config)) return [m.id, { width: c.width, depth: c.depth, upright: sample.upright.faceWidth, name: m.name }]
+    const mc = sanitizeConfiguration({ ...configFor(config, m.id), sections: [], layout: c.layout })
+    return [m.id, { width: mc.width, depth: mc.depth, upright: calculateRackStructure({ ...mc, positions: 1 }).upright.faceWidth, name: m.name }]
+  })) : undefined
   return { sample, size: { width: c.width, depth: c.depth, upright: sample.upright.faceWidth, backToBackGap: DESIGN_RULES.backToBackGap,
     uprightWidths: Object.fromEntries(profilesOf(c).uprights.map((u) => [u.id, u.faceWidth])),
+    ...(types ? { types, defaultType: defaultModuleId(config) } : {}),
     pallets: sample.palletsPerModule, palletFront: sample.pallet.front, palletDeep: sample.pallet.deep } }
 }
 
@@ -68,7 +77,9 @@ function rackSections(p: RackPlacement, c: RackConfiguration): RackSection[] {
 }
 
 /** Estructura de un rack ubicado: una fila, o un par espalda con espalda, de `modules` módulos. */
-export function placementStructure(config: RackConfiguration, p: RackPlacement): RackStructure {
+export function placementStructure(all: RackConfiguration, p: RackPlacement): RackStructure {
+  // las medidas del módulo con el que está armado (A, B, C…)
+  const config = configFor(all, p.type)
   // un rack puede tener su propia altura y cantidad de niveles
   const c = sanitizeConfiguration({
     ...config, height: p.height ?? config.height, levels: p.levels ?? config.levels,
@@ -94,7 +105,7 @@ const structures = new WeakMap<RackConfiguration, Map<string, RackStructure>>()
 function cachedStructure(config: RackConfiguration, p: RackPlacement): RackStructure {
   let byKey = structures.get(config)
   if (!byKey) { byKey = new Map(); structures.set(config, byKey) }
-  const key = `${p.modules}|${p.pair}|${p.levels ?? ''}|${p.height ?? ''}|${p.beamLength ?? ''}|${p.frameDepth ?? ''}|${p.beamElevations?.join(',') ?? ''}|${p.uprightId ?? ''}|${p.beamId ?? ''}|${p.mods ? JSON.stringify(p.mods) : ''}|${p.frameHeights ? JSON.stringify(p.frameHeights) : ''}|${p.frameParts ? JSON.stringify(p.frameParts) : ''}`
+  const key = `${p.type ?? ''}|${p.modules}|${p.pair}|${p.levels ?? ''}|${p.height ?? ''}|${p.beamLength ?? ''}|${p.frameDepth ?? ''}|${p.beamElevations?.join(',') ?? ''}|${p.uprightId ?? ''}|${p.beamId ?? ''}|${p.mods ? JSON.stringify(p.mods) : ''}|${p.frameHeights ? JSON.stringify(p.frameHeights) : ''}|${p.frameParts ? JSON.stringify(p.frameParts) : ''}`
   let s = byKey.get(key)
   if (!s) { s = placementStructure(config, p); byKey.set(key, s) }
   return s

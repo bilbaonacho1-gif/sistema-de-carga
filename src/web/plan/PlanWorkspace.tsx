@@ -2,18 +2,19 @@
  * Visor del depósito: el plano (2D, editable) o el depósito en 3D (también editable: se toca y
  * se arrastra), con los racks ubicados si los hay. Lo seleccionado tiene su barra de acciones.
  */
+import { configFor, moduleList } from '../../shared/rack/modules'
 import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Box, Lock, LockOpen, ChevronDown, ChevronRight, Combine, Copy, Focus, Footprints, Forklift, PersonStanding, Scissors, Map as MapIcon, Maximize2, Package, RotateCw, Trash2 } from 'lucide-react'
 import { rackNames } from './PlanNotes'
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import type { PlacedRack } from '../../shared/plan/depot'
 import { removeItem, removeVertex } from '../../shared/plan/edit'
-import { duplicateWithin, fitPlacement, freezeRacks, joinRacks, mapRacks, rackSelection, removeRacks, selectedRackIds, guarded, moveRack, rotateRack, setRackModules, setRackPair, splitRack } from '../../shared/plan/racks'
+import { duplicateWithin, fitPlacement, freezeRacks, joinRacks, mapRacks, rackSelection, removeRacks, selectedRackIds, guarded, moveRack, rotateRack, setRackModules, setRackPair, splitRack, typeOf } from '../../shared/plan/racks'
 import { outlinePolygon, planBounds, pointInPolygon } from '../../shared/plan/geometry'
 import { placementRect } from '../../shared/plan/layout'
 import { metros } from '../../shared/units'
 import { NumberStepper } from '../components/fields'
 import type { Plan, PlanSelection, RackPlacement } from '../../shared/plan/types'
-import { Segmented, Spinner } from '../components/ui'
+import { Field, Segmented, Select, Spinner } from '../components/ui'
 import { PlanEditor, type PlanRackLayer } from './PlanEditor'
 import { PlanPanel } from './PlanPanel'
 import { usePlan } from './planStore'
@@ -178,7 +179,14 @@ function useKeys3d(active: boolean, layer?: PlanRackLayer) {
  * Lo que se puede hacer con el rack seleccionado: módulos, simple o doble, girar, duplicar y borrar.
  * Va en el panel de la izquierda (arriba de todo) mientras el rack está seleccionado.
  */
-export function RackEditor({ rackLayer, defaults }: { rackLayer: PlanRackLayer; defaults: RackDefaults }) {
+/** Las medidas "de siempre" de un rack: las del módulo con el que está armado. */
+function forModule(all: RackDefaults, type: string | undefined): RackDefaults {
+  if (!all.config) return all
+  const config = configFor(all.config, type)
+  return { height: config.height, levels: config.levels, config }
+}
+
+export function RackEditor({ rackLayer, defaults: all }: { rackLayer: PlanRackLayer; defaults: RackDefaults }) {
   const { selection, commit, select, layout, plan } = usePlan()
   /** Medida escrita que no se pudo aplicar (el rack quedaría en un lugar prohibido). */
   const [rejected, setRejected] = useState<{ n: number; why: string } | null>(null)
@@ -197,11 +205,22 @@ export function RackEditor({ rackLayer, defaults }: { rackLayer: PlanRackLayer; 
   const apply = (next: Plan | null) => { if (next) commit(() => next) }
   const noRoom = 'No entra: pisaría una zona libre, un pasillo o saldría de la zona de racks'
   const issue = rackLayer.issues?.[r.id]
+  // el módulo del proyecto con el que está armado: sus medidas son "las de siempre" de este rack
+  const mods = all.config ? moduleList(all.config) : []
+  const mine = typeOf(r, size) ?? mods[0]?.id
+  const defaults = forModule(all, r.type)
   return (
     <div className="plan-sel rack-editor">
       <h2 className="section-label">Rack {r.pair ? 'doble (espalda con espalda)' : 'simple'}</h2>
       <span className="muted small">{metros(fitPlacement(r, size).length)} × {metros(fitPlacement(r, size).depth)}</span>
       {issue && <p className="rack-editor__issue"><AlertTriangle size={14} aria-hidden /> {issue}</p>}
+      {mods.length > 1 && (
+        <Field label="Módulo" hint="Con qué módulo del proyecto está armado este rack.">{(id) => (
+          <Select id={id} value={mine} onChange={(e) => { const next = tryEdit((p) => mapRacks(p, [r.id], (q) => fitPlacement({ ...q, type: e.target.value }, size))); if (next) { commit(() => next); setRejected(null) } else setRejected({ n: (rejected?.n ?? 0) + 1, why: 'Con ese módulo el rack no entra donde está.' }) }}>
+            {mods.map((m) => <option key={m.id} value={m.id}>Módulo {m.name}</option>)}
+          </Select>
+        )}</Field>
+      )}
       {/* todo escrito a mano: si el rack no entra ahí, no se aplica y se avisa */}
       <div key={`${r.id}-${rejected?.n ?? 0}`} className="rack-editor__fields">
         <NumberStepper label="Módulos" value={r.modules} min={1} max={120} step={1}
@@ -349,7 +368,7 @@ function RackItem({ r, name, rackLayer, defaults, ids }: { r: RackPlacement; nam
         <div className="rack-list__b">
           <NumberStepper label="Módulos" value={r.modules} min={1} max={120} step={1}
             onChange={(v) => { const next = tryEdit((p) => setRackModules(p, r.id, v)); if (next) commit(() => next) }} />
-          <RackOverrides racks={[r]} defaults={defaults} onlyLevels={!!defaults.config} onChange={(patch) => commit(() => mapRacks(base, [r.id], (q) => ({ ...q, ...patch })))} />
+          <RackOverrides racks={[r]} defaults={forModule(defaults, r.type)} onlyLevels={!!defaults.config} onChange={(patch) => commit(() => mapRacks(base, [r.id], (q) => ({ ...q, ...patch })))} />
           <div className="rack-editor__actions">
             <button type="button" className="vp-btn" disabled={!rot} onClick={() => rot && commit(() => rot)}><RotateCw size={14} aria-hidden /> Girar</button>
             <button type="button" className="vp-btn" disabled={!pair} onClick={() => pair && commit(() => pair)}>{r.pair ? 'Hacer simple' : 'Hacer doble'}</button>
@@ -358,7 +377,7 @@ function RackItem({ r, name, rackLayer, defaults, ids }: { r: RackPlacement; nam
             <button type="button" className="vp-btn" onClick={() => { const rest = ids.filter((x) => x !== r.id); commit(() => removeRacks(base, [r.id])); select(rest.length === 1 ? { kind: 'rack', id: rest[0] } : rest.length ? { kind: 'racks', ids: rest } : null); setFocusRack(null) }}><Trash2 size={14} aria-hidden /> Borrar este</button>
           </div>
           {/* las piezas de este rack (vigas y parantes), igual que con un rack solo */}
-          {defaults.config && <RackParts r={r} rackLayer={rackLayer} config={defaults.config} />}
+          {defaults.config && <RackParts r={r} rackLayer={rackLayer} config={forModule(defaults, r.type).config!} />}
         </div>
       )}
     </li>

@@ -136,6 +136,9 @@ interface PlanState {
   symbolKind: SymbolKind
   /** Dibujar fila de racks: simple o doble (espalda con espalda). */
   rackDrawPair: boolean
+  /** El módulo del proyecto (A, B, C…) con el que se ponen los racks nuevos. null = el primero. */
+  rackType: string | null
+  setRackType(id: string | null): void
   setRackDrawPair(v: boolean): void
   setSymbolKind(k: SymbolKind): void
   /** Modo "elegir varios": tocar un rack lo suma a la selección (como Shift + clic). */
@@ -215,6 +218,8 @@ export const usePlan = create<PlanState>()(
       }),
       symbolKind: 'matafuego',
       rackDrawPair: true,
+      rackType: null,
+      setRackType: (rackType) => set({ rackType }),
       setRackDrawPair: (rackDrawPair) => set({ rackDrawPair }),
       setSymbolKind: (symbolKind) => set({ symbolKind, tool: 'symbol', draft: [] }),
       multi: false,

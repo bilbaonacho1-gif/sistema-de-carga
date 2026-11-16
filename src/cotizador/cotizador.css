@@ -353,3 +353,20 @@
 .proj__share--client { background: #eef7f0; }
 .proj__share input[readonly] { flex: 1; min-width: 180px; width: 100%; padding: 7px 10px; border: 1px dashed #2e7d4f; border-radius: 8px; background: #fff; font: 600 12.5px var(--f-mono); color: var(--ink); }
 .proj__share a.btn { text-decoration: none; }
+
+/* ---------- Módulos del proyecto (A, B, C…) ---------- */
+.mods { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--bg); }
+.mods__row, .mods__pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.mods__tab { display: grid; grid-template-columns: auto 1fr; column-gap: 7px; align-items: center; min-width: 96px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; text-align: left; cursor: pointer; }
+.mods__tab i { grid-row: span 2; width: 14px; height: 14px; border: 1px solid; border-radius: 3px; }
+.mods__tab strong { font: 800 15px/1.1 var(--f-display); text-transform: uppercase; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px; }
+.mods__tab span { grid-column: 2; font: 600 11px/1.2 var(--f-mono); color: var(--ink-2); white-space: nowrap; }
+.mods__tab:hover { border-color: var(--ink-3); }
+.mods__tab.is-on { border-color: var(--red); box-shadow: 0 0 0 2px var(--red-tint); }
+.mods__add { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border: 1px dashed var(--ink-3); border-radius: 10px; background: transparent; font: 700 13px var(--f-body); color: var(--ink); cursor: pointer; }
+.mods__add:hover:not(:disabled) { border-color: var(--red); color: var(--red); }
+.mods__add:disabled { opacity: .45; cursor: default; }
+.mods__now { display: flex; align-items: flex-end; gap: 6px; }
+.mods__now .field { flex: 1; min-width: 0; }
+.mods__del { display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink-2); cursor: pointer; }
+.mods__del:hover { border-color: var(--red); color: var(--red); }

@@ -29,6 +29,8 @@ export interface LayoutOptions {
   endGap: number
   /** Separación mínima a columnas, tabiques y zonas (mm). */
   obstacleGap: number
+  /** Con qué módulo se llena el depósito (si una zona no elige el suyo). Sin esto, el primero. */
+  type?: string
 }
 
 export const DEFAULT_LAYOUT: LayoutOptions = {
@@ -47,6 +49,10 @@ export interface RackModuleSize {
   backToBackGap: number
   /** Ancho de cada tipo de parante (id → mm), para los racks que eligen el suyo. */
   uprightWidths?: Record<string, number>
+  /** Medidas de cada módulo del proyecto (id → medidas): un rack usa las de su módulo. */
+  types?: Record<string, { width: number; depth: number; upright: number; name?: string }>
+  /** El módulo de los racks que no dicen cuál usan. */
+  defaultType?: string
   /** Para dibujar los pallets en el plano: cuántos por módulo y su medida (frente y fondo). */
   pallets?: number
   palletFront?: number
@@ -149,10 +155,16 @@ const EMPTY: LayoutResult = { placements: [], rows: 0, modules: 0 }
 export function autoLayout(plan: Plan, size: RackModuleSize, opt: LayoutOptions): LayoutResult {
   if (plan.outline.points.length < 3 || size.width <= 0 || size.depth <= 0) return EMPTY
   const areas = plan.rackAreas ?? []
+  // cada zona se llena con su módulo (o con el elegido para todo el depósito, o el primero)
+  const withType = (id: string | undefined) => {
+    const type = id && size.types?.[id] ? id : opt.type && size.types?.[opt.type] ? opt.type : size.defaultType
+    const t = type ? size.types?.[type] : undefined
+    return { type: t ? type : undefined, size: t ? { ...size, ...t } : size }
+  }
   const placements = areas.length
-    ? areas.flatMap((a, i) => layoutRegion(plan, size, { ...opt, orientation: a.orientation ?? opt.orientation },
-      { x0: a.x, y0: a.y, x1: a.x + a.w, y1: a.y + a.d }, `z${i + 1}-`))
-    : layoutRegion(plan, size, opt, null, '')
+    ? areas.flatMap((a, i) => { const w = withType(a.type); return layoutRegion(plan, w.size, { ...opt, orientation: a.orientation ?? opt.orientation },
+      { x0: a.x, y0: a.y, x1: a.x + a.w, y1: a.y + a.d }, `z${i + 1}-`, w.type) })
+    : layoutRegion(plan, withType(undefined).size, opt, null, '', withType(undefined).type)
   return {
     placements,
     rows: placements.reduce((n, p) => n + (p.pair ? 2 : 1), 0),
@@ -161,7 +173,7 @@ export function autoLayout(plan: Plan, size: RackModuleSize, opt: LayoutOptions)
 }
 
 /** Racks de una región (una zona de racks, o todo el depósito si `area` es null). */
-function layoutRegion(plan: Plan, size: RackModuleSize, opt: LayoutOptions, area: Box | null, prefix: string): RackPlacement[] {
+function layoutRegion(plan: Plan, size: RackModuleSize, opt: LayoutOptions, area: Box | null, prefix: string, type?: string): RackPlacement[] {
   // se trabaja siempre con filas a lo largo de X; para filas en Y se espeja el plano
   const flip = opt.orientation === 'y'
   let poly = outlinePolygon(plan.outline, 100)
@@ -232,7 +244,7 @@ function layoutRegion(plan: Plan, size: RackModuleSize, opt: LayoutOptions, area
       const pos = flip ? swap(corner) : corner
       placements.push({
         id: `${prefix}r${bi + 1}-${ii + 1}`, x: pos.x, y: pos.y, orientation: opt.orientation,
-        modules, length, depth: band.depth, pair: band.pair,
+        modules, length, depth: band.depth, pair: band.pair, ...(type ? { type } : {}),
       })
     })
   })

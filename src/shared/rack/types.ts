@@ -51,6 +51,12 @@ export interface RackConfiguration {
   frameParts?: Record<number, FrameParts>
   /** Cómo son TODOS los pórticos mientras no tengan piezas propias (se elige en el módulo inicial). */
   frameDefault?: FrameParts
+  /**
+   * Los módulos del proyecto (A, B, C…): ver shared/rack/modules. Los campos de arriba (width, height,
+   * levels…) son los del módulo que se está editando (`moduleId`); los demás esperan acá.
+   */
+  moduleTypes?: { id: string; name: string; spec: Pick<RackConfiguration, 'width' | 'depth' | 'height' | 'levels' | 'floorStorage' | 'beamElevations' | 'uprightId' | 'beamId' | 'frameDefault'> }[]
+  moduleId?: string
   /** Cómo es la carga del pallet: un bloque, o cajas apiladas (ver shared/rack/load.ts). */
   load?: { mode: 'block' | 'boxes'; boxW: number; boxD: number; boxH: number; boxKg: number; maxHeight: number }
   /** Perfiles elegidos a mano. 'auto' = el motor elige el más liviano que alcanza. */

@@ -5,6 +5,7 @@
  *  - las referencias (qué es cada color) y una escala gráfica.
  * Los números y pasillos aparecen recién cuando hay lugar para leerlos (al acercarse).
  */
+import { moduleColor } from '../../shared/rack/modules'
 import { usePlan } from './planStore'
 import { useMemo, useState } from 'react'
 import { placementRect, type RackPlacement } from '../../shared/plan/layout'
@@ -131,7 +132,9 @@ export function ScaleBar({ mmPerPx }: { mmPerPx: number }) {
 }
 
 /** Referencias: qué es cada cosa del plano (sólo lo que hay en este plano). */
-export function Legend({ plan, racks, issues }: { plan: Plan; racks: boolean; issues: boolean }) {
+export function Legend({ plan, racks, issues, modules }: { plan: Plan; racks: boolean; issues: boolean
+  /** Los módulos del proyecto (si hay más de uno, cada uno con su color). */
+  modules?: string[] }) {
   // abierto o cerrado como se dejó la última vez; si nunca se tocó, abierto sólo en pantallas grandes (en una chica tapa el plano)
   const [open, setOpen] = useState(() => {
     const roomy = typeof window === 'undefined' || (window.innerHeight >= 820 && window.innerWidth >= 1280)
@@ -140,7 +143,7 @@ export function Legend({ plan, racks, issues }: { plan: Plan; racks: boolean; is
   const toggle = () => { setOpen(!open); try { localStorage.setItem('sdc-legend', open ? '0' : '1') } catch { /* sin memoria */ } }
   const viewOnly = usePlan((s) => s.viewOnly)
   const items: [string, string][] = [
-    ...(racks ? [['rack', 'Rack (fila con su número)'] as [string, string]] : []),
+    ...(racks && !(modules && modules.length > 1) ? [['rack', 'Rack (fila con su número)'] as [string, string]] : []),
     ...(issues ? [['rack-bad', 'Rack con problema'] as [string, string]] : []),
     ...(plan.rackAreas?.length ? [['area', 'Zona de racks'] as [string, string]] : []),
     ...(plan.aisles?.length ? [['aisle', 'Pasillo marcado'] as [string, string]] : []),
@@ -153,7 +156,12 @@ export function Legend({ plan, racks, issues }: { plan: Plan; racks: boolean; is
   return (
     <div className={`plan-legend${open ? ' is-open' : ''}`}>
       <button type="button" className="plan-legend__head" onClick={toggle} aria-expanded={open}>Referencias {open ? '▾' : '▸'}</button>
-      {open && <ul>{items.map(([k, t]) => <li key={k}><span className={`plan-legend__sw plan-legend__sw--${k}`} aria-hidden />{t}</li>)}</ul>}
+      {open && <ul>
+        {racks && modules && modules.length > 1 && modules.map((name, i) => (
+          <li key={`m${i}`}><span className="plan-legend__sw" style={{ background: moduleColor(i).fill, border: `1px solid ${moduleColor(i).stroke}` }} aria-hidden />Módulo {name}</li>
+        ))}
+        {items.map(([k, t]) => <li key={k}><span className={`plan-legend__sw plan-legend__sw--${k}`} aria-hidden />{t}</li>)}
+      </ul>}
     </div>
   )
 }

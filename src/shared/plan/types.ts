@@ -67,6 +67,8 @@ export interface PlanRackArea {
   name: string
   /** Hacia dónde corren las filas en esta zona (si no está, la orientación general). */
   orientation?: 'x' | 'y'
+  /** Con qué módulo del proyecto se llena esta zona (si no está, el elegido para todo el depósito). */
+  type?: string
 }
 
 /**
@@ -123,6 +125,8 @@ export interface RackPlacement {
   y: number
   orientation: 'x' | 'y'
   modules: number
+  /** Con qué módulo del proyecto está armado (A, B, C…). Sin esto, el primero. */
+  type?: string
   /** Largo a lo largo de la fila (mm). */
   length: number
   /** Profundidad que ocupa (mm): una fila, o las dos del par más su separación. */

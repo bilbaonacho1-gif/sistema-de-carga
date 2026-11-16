@@ -15,10 +15,12 @@ import { calculateRackStructure } from '../shared/rack/calculateRackStructure'
 import { beamCapacityForSpan } from '../shared/rack/rules'
 import { CONTACT, DESIGN_RULES, OFFICIAL_REFERENCE } from '../shared/rack/technicalSpecs'
 import { moduleKits, moduleSplit } from '../shared/rack/kits'
+import { activeModuleId, addModule, defaultModuleId, MAX_MODULES, moduleColor, moduleList, removeModule, renameModule, selectModule } from '../shared/rack/modules'
+import { typeOf } from '../shared/plan/racks'
 import { beamName, isOwnProfile, PIECE_LIMITS as P, profilesOf, uprightName } from '../shared/rack/profiles'
 import type { BeamProfile, FrameParts, RackStructure, UprightProfile } from '../shared/rack/types'
 import { NumberStepper, Switch } from '../web/components/fields'
-import { Button, Field, KeyValue, Segmented, Select } from '../web/components/ui'
+import { Button, Field, Input, KeyValue, Segmented, Select } from '../web/components/ui'
 import { fmt, plural } from '../web/lib/format'
 import { AccessoriesStep, AccGroup, BeamHeights, LoadStep, MaterialsList, downloadMaterials } from '../web/pages/designer/CotizadorPanel'
 import { Viewport, Warnings } from '../web/pages/designer/CotizadorView'
@@ -41,7 +43,7 @@ const kg = (n: number) => `${fmt(n)} kg`
 
 const META: Record<FlowStep, { title: string; short: string; help: string }> = {
   deposito: { title: 'Tu depósito', short: 'Depósito', help: 'Dibujá el lugar: contorno, columnas, portones y las zonas donde no van racks. Si ya sabés dónde van los racks y los pasillos, marcalos con "Zona de racks" y "Pasillo". Todo lo demás se calcula a partir de este plano.' },
-  rack: { title: 'El módulo inicial', short: 'Rack', help: 'Este es el módulo inicial, el más importante: acá le cambiás todo (medidas, cada viga, los pórticos, los perfiles y los accesorios). Después lo ponés en el depósito, le sumás módulos y lo copiás.' },
+  rack: { title: 'Los módulos', short: 'Módulos', help: 'Acá creás los módulos del proyecto (A, B, C…), cada uno con sus medidas, sus vigas, sus pórticos y sus perfiles. Quedan guardados en el proyecto. Después, en Distribución, elegís cuál va en cada lugar y los copiás.' },
   carga: { title: 'Pallet y carga', short: 'Carga', help: 'El pallet define cuántos entran por módulo. Si el cliente usa uno especial, elegí "A medida".' },
   distribucion: { title: 'Cuántos racks entran', short: 'Distribución', help: 'Armá los racks desde un módulo inicial: lo ponés en el plano, le sumás módulos y lo copiás y pegás donde quieras. Si preferís, el sistema también llena el depósito solo.' },
   resumen: { title: 'Resumen y materiales', short: 'Resumen', help: 'El depósito completo: racks, posiciones y todas las piezas. Acá se baja la lista de materiales; el plano sale del panel "Exportar".' },
@@ -210,7 +212,7 @@ const MODULES: Record<FlowStep, { id: string; title: string; collapsed?: boolean
     { id: 'calco', title: 'Calcar un plano', collapsed: true }, { id: 'capas', title: 'Capas', collapsed: true },
     { id: 'revision', title: 'Revisión del plano' }, { id: 'exportar', title: 'Exportar', collapsed: true },
   ],
-  rack: [{ id: 'paso', title: 'El módulo inicial' }, { id: 'accesorios', title: 'Accesorios' }],
+  rack: [{ id: 'paso', title: 'Módulos del proyecto' }, { id: 'accesorios', title: 'Accesorios' }],
   carga: [{ id: 'paso', title: 'Pallet y carga' }],
   distribucion: [
     { id: 'marcar', title: 'Dónde van los racks' }, { id: 'paso', title: 'Distribución' },
@@ -322,6 +324,7 @@ function RackStep({ s }: { s: RackStructure }) {
   const toPieces = () => usePlan.getState().setSection('piezas')
   return (
     <div className="cot-fields">
+      <ModuleTabs />
       <NumberStepper label="Largo de viga (ancho del módulo)" meters value={config.width} min={L.width.min} max={L.width.max} step={50} typedStep={10} slider onChange={(width) => update({ width })}
         hint={`${plural(s.palletsPerModule, 'pallet', 'pallets')} por nivel en cada módulo`} />
       <NumberStepper label="Profundidad del pórtico" meters value={config.depth} min={L.depth.min} max={L.depth.max} step={50} typedStep={10} slider onChange={(depth) => update({ depth })} />
@@ -385,6 +388,62 @@ function RackStep({ s }: { s: RackStructure }) {
         )}
         {!myBeam && !myUpright && <p className="muted small">Elegí una de la lista o poné vos las medidas con la última opción. Las tuyas quedan guardadas en "Mis piezas".</p>}
       </AccGroup>
+    </div>
+  )
+}
+
+/**
+ * Los módulos del proyecto: A, B, C… Se elige cuál editar (lo de abajo son sus medidas), se crean
+ * nuevos copiando el que está a la vista, se les cambia el nombre y se borran.
+ */
+function ModuleTabs() {
+  const config = useDesigner((st) => st.config)
+  const list = moduleList(config), active = activeModuleId(config)
+  const current = list.find((m) => m.id === active) ?? list[0]
+  const setConfig = (next: typeof config) => useDesigner.setState({ config: next })
+  // cuántos racks del plano están armados con cada módulo
+  const racks = usePlan((st) => st.plan.racks)
+  const usedBy = (id: string) => (racks ?? []).filter((r) => (r.type ?? defaultModuleId(config)) === id).length
+  const remove = () => {
+    const n = usedBy(active), first = list.find((m) => m.id !== active)!
+    if (!window.confirm(`¿Borrar el módulo ${current.name}?${n ? ` Hay ${n === 1 ? '1 rack armado' : `${n} racks armados`} con él: ${n === 1 ? 'pasa' : 'pasan'} a ser del módulo ${first.name}.` : ''}`)) return
+    const next = removeModule(config, active), fallback = defaultModuleId(next)
+    // los racks, las zonas y lo elegido para llenar que usaban este módulo pasan al primero que queda
+    const p = usePlan.getState()
+    p.commit((pl) => ({
+      ...pl, racks: pl.racks?.map((r) => ((r.type ?? defaultModuleId(config)) === active ? { ...r, type: fallback } : r.type ? r : { ...r, type: defaultModuleId(config) })),
+      rackAreas: pl.rackAreas?.map((a) => (a.type === active ? { ...a, type: undefined } : a)),
+    }))
+    if (p.layout.type === active) p.setLayout({ type: undefined })
+    if (p.rackType === active) p.setRackType(null)
+    setConfig(next)
+  }
+  return (
+    <div className="mods">
+      <div className="mods__row" role="tablist" aria-label="Módulos del proyecto">
+        {list.map((m, i) => (
+          <button key={m.id} type="button" role="tab" aria-selected={m.id === active} className={`mods__tab${m.id === active ? ' is-on' : ''}`} onClick={() => setConfig(selectModule(config, m.id))}
+            title={`Módulo ${m.name}: viga de ${mm(m.spec.width)}, ${mm(m.spec.depth)} de fondo, ${mm(m.spec.height)} de alto, ${m.spec.levels} niveles`}>
+            <i style={{ background: moduleColor(i).fill, borderColor: moduleColor(i).stroke }} aria-hidden />
+            <strong>{m.name}</strong>
+            <span>{metrosNum(m.spec.width)} × {metrosNum(m.spec.depth)} × {mm(m.spec.height)}</span>
+          </button>
+        ))}
+        <button type="button" className="mods__add" disabled={list.length >= MAX_MODULES} onClick={() => setConfig(addModule(config))} title="Crea un módulo nuevo, copia del que estás viendo">
+          <Plus size={15} aria-hidden /> Nuevo módulo
+        </button>
+      </div>
+      <div className="mods__now">
+        <Field label={`Nombre del módulo que estás editando`}>{(id) => (
+          <Input id={id} value={current.name} maxLength={24} onChange={(e) => e.target.value.trim() && setConfig(renameModule(config, active, e.target.value))} />
+        )}</Field>
+        {list.length > 1 && <button type="button" className="mods__del" onClick={remove} title="Borrar este módulo" aria-label={`Borrar el módulo ${current.name}`}><Trash2 size={16} aria-hidden /></button>}
+      </div>
+      <p className="muted small">
+        {list.length === 1
+          ? 'Este es el módulo A. Con "Nuevo módulo" creás el B, el C… (arrancan como copia del que estás viendo). Quedan guardados en el proyecto.'
+          : `Lo de abajo son las medidas del módulo ${current.name}${usedBy(active) ? ` (${usedBy(active) === 1 ? '1 rack lo usa' : `${usedBy(active)} racks lo usan`}: si lo cambiás, cambian)` : ''}. En Distribución elegís cuál va en cada lugar.`}
+      </p>
     </div>
   )
 }
@@ -454,6 +513,10 @@ function LayoutStep({ depot }: { depot: Depot }) {
   const area = planArea(plan.outline)
   const used = depot.layout.placements.reduce((n, p) => { const r = placementRect(p); return n + (r.w * r.h) / 1e6 }, 0)
   const issues = Object.entries(depot.issues)
+  // los módulos del proyecto y cuál está elegido para poner
+  const mods = useMemo(() => moduleList(config), [config])
+  const { rackType, setRackType } = usePlan()
+  const pick = rackType && mods.some((m) => m.id === rackType) ? rackType : mods[0].id
   const add = () => {
     let id = ''
     commit((p) => { const r = addRack(freezeRacks(p, depot.layout.placements), moduleSize(config).size); id = r.id; return r.plan })
@@ -502,13 +565,25 @@ function LayoutStep({ depot }: { depot: Depot }) {
     <div className="cot-fields">
       {mode}
       <ol className="mod-steps">
-        <li><b>Poné el módulo inicial</b> tocando el plano donde va.</li>
+        <li><b>{mods.length > 1 ? 'Elegí el módulo y ponelo' : 'Poné el módulo inicial'}</b> tocando el plano donde va.</li>
         <li><b>Sumale módulos adicionales</b> con el <i>+</i> de cada punta.</li>
         <li><b>Copialo y pegalo</b> (Ctrl+C y Ctrl+V): si lo pegás a continuación de otro, se unen.</li>
       </ol>
       <div className="rack-tools">
+        {mods.length > 1 && (
+          <Field label="¿Qué módulo ponés?">{() => (
+            <div className="mods__pick" role="radiogroup" aria-label="Módulo para poner">
+              {mods.map((m, i) => (
+                <button key={m.id} type="button" role="radio" aria-checked={m.id === pick} className={`mods__tab${m.id === pick ? ' is-on' : ''}`} onClick={() => setRackType(m.id)}>
+                  <i style={{ background: moduleColor(i).fill, borderColor: moduleColor(i).stroke }} aria-hidden /><strong>{m.name}</strong>
+                  <span>{metrosNum(m.spec.width)} × {metrosNum(m.spec.depth)} × {mm(m.spec.height)}</span>
+                </button>
+              ))}
+            </div>
+          )}</Field>
+        )}
         <Button icon={Plus} variant={tool === 'rackdraw' ? 'primary' : undefined} onClick={() => setTool(tool === 'rackdraw' ? 'select' : 'rackdraw')} block>
-          {tool === 'rackdraw' ? 'Tocá el plano… (Esc termina)' : 'Poner un módulo inicial'}
+          {tool === 'rackdraw' ? 'Tocá el plano… (Esc termina)' : mods.length > 1 ? `Poner un módulo ${mods.find((m) => m.id === pick)?.name ?? ''}` : 'Poner un módulo inicial'}
         </Button>
         <Segmented label="Simple o doble" value={rackDrawPair ? 'doble' : 'simple'} onChange={(v) => setRackDrawPair(v === 'doble')}
           options={[{ value: 'simple', label: 'Simple' }, { value: 'doble', label: 'Doble (espalda con espalda)' }]} />
@@ -532,6 +607,13 @@ function LayoutStep({ depot }: { depot: Depot }) {
   return (
     <div className="cot-fields">
       {mode}
+      {mods.length > 1 && (
+        <Field label="Módulo con el que se llena" hint={plan.rackAreas?.length ? 'Cada zona de racks puede tener el suyo: tocá la zona en el plano y elegilo.' : 'Para usar módulos distintos por sector, marcá zonas de racks y elegí el módulo de cada una.'}>{(id) => (
+          <Select id={id} value={layout.type && mods.some((m) => m.id === layout.type) ? layout.type : mods[0].id} onChange={(e) => setLayout({ type: e.target.value })}>
+            {mods.map((m) => <option key={m.id} value={m.id}>Módulo {m.name} · {metrosNum(m.spec.width)} × {metrosNum(m.spec.depth)} × {mm(m.spec.height)}</option>)}
+          </Select>
+        )}</Field>
+      )}
       <Field label={plan.rackAreas?.length ? 'Filas (de las zonas sin orientación propia)' : 'Filas'}>{() => (
         <Segmented label="Orientación de las filas" value={layout.orientation} onChange={(orientation) => setLayout({ orientation })}
           options={[{ value: 'x', label: 'Horizontales' }, { value: 'y', label: 'Verticales' }]} />
@@ -562,12 +644,21 @@ function LayoutStep({ depot }: { depot: Depot }) {
 /* ------------------------------ 6. Resumen ------------------------------ */
 
 function SummaryStep({ depot }: { depot: Depot }) {
+  // con varios módulos en el proyecto: cuántos hay puestos de cada uno
+  const config = useDesigner((st) => st.config)
+  const size = useMemo(() => moduleSize(config).size, [config])
+  const list = moduleList(config)
+  const byModule: [string, string][] = list.length > 1 ? list.map((m) => {
+    const mine = depot.layout.placements.filter((p) => typeOf(p, size) === m.id)
+    return [`Módulo ${m.name}`, `${fmt(mine.reduce((n, p) => n + p.modules * (p.pair ? 2 : 1), 0))} en ${plural(mine.reduce((n, p) => n + (p.pair ? 2 : 1), 0), 'fila', 'filas')}`]
+  }) : []
   return (
     <div className="cot-fields">
       <KeyValue items={[
         ['Filas de rack', fmt(depot.layout.rows)],
         ['Módulos iniciales', fmt(moduleSplit(depot.layout.rows, depot.layout.modules).initial)],
         ['Módulos adicionales', fmt(moduleSplit(depot.layout.rows, depot.layout.modules).extra)],
+        ...byModule,
         ['Posiciones', fmt(depot.positions)],
         ['Capacidad estimada', kg(depot.capacity)],
       ]} />

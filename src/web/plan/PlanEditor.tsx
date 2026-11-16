@@ -20,7 +20,7 @@ import './plan-extra.css'
 import { apex, arcOf, edgeLength, edges, nearestOnEdge, planBounds, pointOnEdge, tangentOnEdge, type Edge } from '../../shared/plan/geometry'
 import type { Plan, PlanPoint, PlanSelection } from '../../shared/plan/types'
 import type { RackModuleSize, RackPlacement } from '../../shared/plan/layout'
-import { freezeRacks, moveRack, moveRackWithin, moveRacksBy, rackSelection, racksInBox, removeRacks, selectedRackIds, attachRack, extendRack } from '../../shared/plan/racks'
+import { freezeRacks, moveRack, moveRackWithin, moveRacksBy, rackSelection, racksInBox, removeRacks, selectedRackIds, attachRack, extendRack, rackDims } from '../../shared/plan/racks'
 import { PlanCotas } from './PlanCotas'
 import { Legend, PlanRackNotes, ScaleBar } from './PlanNotes'
 import { PlanAnnotations } from './PlanAnnotations'
@@ -219,10 +219,14 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
     const layer = layerRef.current
     if (!layer) return null
     const sz = layer.size
+    // el módulo elegido para poner (A, B, C…): el rack nuevo sale con sus medidas
+    const picked = usePlan.getState().rackType
+    const type = picked && sz.types?.[picked] ? { type: picked } : {}
+    const dims = rackDims({ ...type } as RackPlacement, sz)
     const horizontal = Math.abs(b.x - a.x) >= Math.abs(b.y - a.y)
     const L = Math.abs(horizontal ? b.x - a.x : b.y - a.y)
-    const modules = Math.max(1, Math.floor((L - sz.upright) / (sz.width + sz.upright)))
-    const base = fitPlacement({ id: 'nuevo', x: 0, y: 0, orientation: horizontal ? 'x' : 'y', modules, length: 0, depth: 0, pair: rackDrawPair }, sz)
+    const modules = Math.max(1, Math.floor((L - dims.upright) / (dims.width + dims.upright)))
+    const base = fitPlacement({ id: 'nuevo', x: 0, y: 0, orientation: horizontal ? 'x' : 'y', modules, length: 0, depth: 0, pair: rackDrawPair, ...type }, sz)
     const x0 = horizontal ? Math.min(a.x, b.x) : a.x, y0 = horizontal ? a.y : Math.min(a.y, b.y)
     const box = placementRect({ ...base, x: x0, y: y0 })
     const others = layer.racks.map(placementRect)
@@ -647,7 +651,7 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
       const layer = layerRef.current
       // un clic sin arrastrar: el módulo inicial (un solo módulo) desde ahí; arrastrando salen varios
       const far = Math.hypot(b.x - d.a.x, b.y - d.a.y) > 800
-      const made = layer && rackFromDrag(d.a, far ? b : { x: d.a.x + layer.size.width + 2 * layer.size.upright, y: d.a.y })
+      const made = layer && rackFromDrag(d.a, far ? b : { x: d.a.x + 1500, y: d.a.y })
       if (layer && made) {
         let id = newId('r')
         commit((pl) => {
@@ -1074,7 +1078,8 @@ export function PlanEditor({ fitRequest, rackLayer }: { fitRequest: number; rack
             setInline(null)
           }} />
       )}
-      {!empty && <Legend plan={plan} racks={!!rackLayer?.racks.length} issues={!!rackLayer?.issues && Object.keys(rackLayer.issues).length > 0} />}
+      {!empty && <Legend plan={plan} racks={!!rackLayer?.racks.length} issues={!!rackLayer?.issues && Object.keys(rackLayer.issues).length > 0}
+        modules={rackLayer?.size.types ? Object.values(rackLayer.size.types).map((t) => t.name ?? '') : undefined} />}
       {!empty && <ScaleBar mmPerPx={scale} />}
       {textInput && (
         <input className="cota-input cota-input--text" autoFocus value={textInput.text} placeholder="Escribí el texto" aria-label="Texto"

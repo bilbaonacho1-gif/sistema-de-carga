@@ -14,8 +14,13 @@ type Rect = { x: number; y: number; w: number; h: number }
 /** Medidas del módulo de este rack: las del depósito, o las propias si se cambiaron sus piezas. */
 export function rackDims(p: RackPlacement, size: RackModuleSize): { width: number; depth: number; upright: number } {
   const up = p.uprightId && p.uprightId !== 'auto' ? size.uprightWidths?.[p.uprightId] ?? UPRIGHT_PROFILES.find((u) => u.id === p.uprightId)?.faceWidth : undefined
-  return { width: p.beamLength ?? size.width, depth: p.frameDepth ?? size.depth, upright: up ?? size.upright }
+  // las medidas de su módulo (A, B, C…); encima, las que se le cambiaron a este rack
+  const t = size.types?.[p.type ?? ''] ?? (size.defaultType ? size.types?.[size.defaultType] : undefined)
+  return { width: p.beamLength ?? t?.width ?? size.width, depth: p.frameDepth ?? t?.depth ?? size.depth, upright: up ?? t?.upright ?? size.upright }
 }
+
+/** El módulo del proyecto con el que está armado un rack (el suyo, o el primero si no dice). */
+export const typeOf = (p: RackPlacement, size: RackModuleSize): string | undefined => (p.type && size.types?.[p.type] ? p.type : size.defaultType)
 
 /** Largo de viga de cada módulo del rack (cada uno puede tener el suyo). */
 export function moduleWidths(p: RackPlacement, size: RackModuleSize): number[] {
@@ -369,7 +374,7 @@ export function joinRacks(plan: Plan, ids: string[], size: RackModuleSize): { pl
   const pos = (r: RackPlacement) => (o === 'x' ? r.x : r.y), across = (r: RackPlacement) => (o === 'x' ? r.y : r.x)
   rs.sort((a, b) => pos(a) - pos(b))
   const f = rs[0]
-  const same = (r: RackPlacement) => r.orientation === o && r.pair === f.pair && Math.abs(across(r) - across(f)) <= 50
+  const same = (r: RackPlacement) => r.orientation === o && r.pair === f.pair && Math.abs(across(r) - across(f)) <= 50 && typeOf(r, size) === typeOf(f, size)
     && r.height === f.height && r.levels === f.levels && r.frameDepth === f.frameDepth && (r.uprightId ?? 'auto') === (f.uprightId ?? 'auto')
   if (!rs.every(same)) return null
   const up = rackDims(f, size).upright
@@ -383,7 +388,7 @@ export function joinRacks(plan: Plan, ids: string[], size: RackModuleSize): { pl
     for (let m = 0; m < r.modules; m++) {
       const e: ModulePieces = { ...r.mods?.[m] }
       // las vigas distintas a las del primero quedan como propias de cada módulo
-      if (r.beamLength !== f.beamLength && e.width === undefined) e.width = r.beamLength ?? size.width
+      if (r.beamLength !== f.beamLength && e.width === undefined) e.width = rackDims(r, size).width
       if (r.beamId !== f.beamId && e.beamId === undefined && r.beamId && r.beamId !== 'auto') e.beamId = r.beamId
       if (r.beamElevations && r.beamElevations.join() !== f.beamElevations?.join() && !e.beamElevations) e.beamElevations = r.beamElevations
       if (Object.keys(e).length) mods[off + m] = e
@@ -436,7 +441,8 @@ export function attachRack(plan: Plan, id: string, size: RackModuleSize, reach =
   const up = rackDims(me, size).upright
   let best: { other: RackPlacement; before: boolean; gap: number } | null = null
   for (const x of plan.racks ?? []) {
-    if (x.id === id || x.orientation !== o || x.pair !== me.pair) continue
+    // sólo se unen racks del mismo módulo (dos módulos distintos pegados quedan como dos racks)
+    if (x.id === id || x.orientation !== o || x.pair !== me.pair || typeOf(x, size) !== typeOf(me, size)) continue
     const other = fitPlacement(x, size)
     if (Math.abs(across(other) - across(me)) > 400) continue
     // yo después del otro, o yo antes del otro (se permite que se pisen hasta medio módulo)

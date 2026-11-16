@@ -6,6 +6,8 @@
  * dibuja un puñado de elementos en vez de miles. Los trazos no cambian de grosor con el zoom
  * (vector-effect), y los bastidores aparecen recién al acercarse. El rack elegido va aparte, encima.
  */
+import { moduleColor } from '../../shared/rack/modules'
+import { typeOf } from '../../shared/plan/racks'
 import { memo, useMemo } from 'react'
 import { placementRect, type RackModuleSize, type RackPlacement } from '../../shared/plan/layout'
 import { frameCenters, moduleWidths, rackDims } from '../../shared/plan/racks'
@@ -86,11 +88,16 @@ export const PlanRacks = memo(function PlanRacks({ racks, size, px, selected = N
   }, [racks, size, showPallets, view])
   const paths = useMemo(() => {
     let ok = '', bad = '', okFrames = '', badFrames = '', selRows = '', selFrames = ''
+    // con varios módulos en el proyecto, los racks de cada uno van de un color
+    const ids = Object.keys(size.types ?? {})
+    const byType: { rows: string; frames: string }[] = ids.length > 1 ? ids.map(() => ({ rows: '', frames: '' })) : []
     for (const r of racks) {
       const s = rackShapes(r, size, detail || selected.has(r.id))
-      if (selected.has(r.id)) { selRows += s.rows; selFrames += s.frames } else if (issues[r.id]) { bad += s.rows; badFrames += s.frames } else { ok += s.rows; okFrames += s.frames }
+      if (selected.has(r.id)) { selRows += s.rows; selFrames += s.frames } else if (issues[r.id]) { bad += s.rows; badFrames += s.frames }
+      else if (byType.length) { const g = byType[Math.max(0, ids.indexOf(typeOf(r, size) ?? ''))]; g.rows += s.rows; g.frames += s.frames }
+      else { ok += s.rows; okFrames += s.frames }
     }
-    return { ok, bad, okFrames, badFrames, selRows, selFrames }
+    return { ok, bad, okFrames, badFrames, selRows, selFrames, byType }
   }, [racks, size, detail, selected, issues])
   // un solo rack elegido: con su recuadro punteado
   const single = selected.size === 1 ? racks.find((r) => selected.has(r.id)) : undefined
@@ -102,6 +109,12 @@ export const PlanRacks = memo(function PlanRacks({ racks, size, px, selected = N
       <g pointerEvents="none">
         {paths.ok && <path d={paths.ok} fill="#fdebd3" stroke={ORANGE} strokeWidth={1.2} vectorEffect="non-scaling-stroke" />}
         {paths.okFrames && <path d={paths.okFrames} stroke="#c2651a" strokeWidth={1.4} vectorEffect="non-scaling-stroke" />}
+        {paths.byType.map((g, i) => g.rows && (
+          <g key={i}>
+            <path d={g.rows} fill={moduleColor(i).fill} stroke={moduleColor(i).stroke} strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
+            {g.frames && <path d={g.frames} stroke={moduleColor(i).stroke} strokeWidth={1.4} vectorEffect="non-scaling-stroke" />}
+          </g>
+        ))}
         {paths.bad && <path d={paths.bad} fill="#f8d4d8" stroke={RED} strokeWidth={1.4} vectorEffect="non-scaling-stroke" />}
         {pallets && <path d={pallets} fill="#f3d9b5" fillOpacity={0.55} stroke="#b0702c" strokeWidth={0.8} strokeDasharray="3 2" vectorEffect="non-scaling-stroke" />}
         {paths.badFrames && <path d={paths.badFrames} stroke="#a3192a" strokeWidth={1.4} vectorEffect="non-scaling-stroke" />}

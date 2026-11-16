@@ -2,6 +2,8 @@
  * Panel izquierdo del depósito: herramientas con su instructivo, arranque rápido,
  * grilla de columnas y las medidas de lo que esté seleccionado.
  */
+import { moduleList } from '../../shared/rack/modules'
+import { useDesigner } from '../pages/designer/designerStore'
 import { Box, Circle, DoorOpen, Footprints, Grid3x3, LayoutGrid, Minus as WallIcon, MousePointer2, MoveHorizontal, PenLine, Redo2, RotateCcw, RotateCw, Ruler, Shapes, Square, Trash2, Type, Undo2, type LucideIcon } from 'lucide-react'
 import { useState } from 'react'
 import { columnGrid, itemsOutside, removeItem, removeOutside, removeVertex, rotateAisle, setEdgeLength, setSag, splitEdge, updateObject, updateRect } from '../../shared/plan/edit'
@@ -278,6 +280,7 @@ export function Selection() {
           <Segmented label="Filas" value={a.orientation ?? layout.orientation} onChange={(orientation) => upd({ orientation })}
             options={[{ value: 'x', label: 'Horizontales' }, { value: 'y', label: 'Verticales' }]} />
         )}</Field>
+        <AreaModule value={a.type} onChange={(type) => upd({ type })} />
         <div className="plan-xy">
           <NumberStepper label="Ancho" meters value={a.w} min={1000} max={500_000} step={1000} typedStep={10} onChange={(w) => upd({ w })} />
           <NumberStepper label="Fondo" meters value={a.d} min={1000} max={500_000} step={1000} typedStep={10} onChange={(d) => upd({ d })} />
@@ -492,4 +495,19 @@ export function ObjectFields({ o, onChange }: { o: ObjectShape; onChange(patch: 
       </div>
     </div>
   </>
+}
+
+/** Con qué módulo del proyecto (A, B, C…) se llena una zona de racks. Sólo aparece si hay más de uno. */
+function AreaModule({ value, onChange }: { value: string | undefined; onChange(v: string | undefined): void }) {
+  const config = useDesigner((s) => s.config)
+  const mods = moduleList(config)
+  if (mods.length < 2) return null
+  return (
+    <Field label="Módulo de esta zona" hint="Cuando el depósito se llena solo, esta zona se arma con este módulo.">{(id) => (
+      <Select id={id} value={value && mods.some((m) => m.id === value) ? value : ''} onChange={(e) => onChange(e.target.value || undefined)}>
+        <option value="">El elegido para todo el depósito</option>
+        {mods.map((m) => <option key={m.id} value={m.id}>Módulo {m.name}</option>)}
+      </Select>
+    )}</Field>
+  )
 }
