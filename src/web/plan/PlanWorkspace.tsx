@@ -3,7 +3,7 @@
  * se arrastra), con los racks ubicados si los hay. Lo seleccionado tiene su barra de acciones.
  */
 import { configFor, moduleList } from '../../shared/rack/modules'
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Box, Lock, LockOpen, ChevronDown, ChevronRight, Combine, Copy, Focus, Footprints, Forklift, PersonStanding, Scissors, Map as MapIcon, Maximize2, Package, RotateCw, Trash2 } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Box, Lock, LockOpen, ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, Combine, Copy, Focus, Footprints, Forklift, Plane, RotateCcw, PersonStanding, Scissors, Map as MapIcon, Maximize2, Package, RotateCw, Trash2 } from 'lucide-react'
 import { rackNames } from './PlanNotes'
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import type { PlacedRack } from '../../shared/plan/depot'
@@ -18,6 +18,7 @@ import { Field, Segmented, Select, Spinner } from '../components/ui'
 import { PlanEditor, type PlanRackLayer } from './PlanEditor'
 import { PlanPanel } from './PlanPanel'
 import { usePlan } from './planStore'
+import { flyBridge, type FlyKey } from './fly'
 import { RackParts } from './RackParts'
 import type { RackConfiguration } from '../../shared/rack/types'
 
@@ -50,6 +51,8 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
   const viewOnly = usePlan((s) => s.viewOnly)
   const pallets = (racks ?? []).reduce((n, r) => n + r.structure.pallets.length, 0)
   const [loads, setLoads] = useState<boolean | null>(null)
+  // "Vuelo": los botones para moverse por el depósito como en un helicóptero (con el teclado anda siempre)
+  const [fly, setFly] = useState(false)
   // con muchos racks el 3D va en lote y las cajas no pesan: se ven siempre; con pocos racks muy largos, sólo si no son demasiadas
   // viendo un rack solo, los pallets se ven siempre (son pocos)
   const isoOn = !!isolate?.length && !!racks?.some((r) => isolate.includes(r.placement.id))
@@ -64,6 +67,9 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
         {!view3d && !empty && <button type="button" className="vp-btn" onClick={() => setFit((n) => n + 1)}><Maximize2 size={14} aria-hidden /> Encuadrar</button>}
         {!empty && <>
           <button type="button" className={`vp-btn${walk && view3d ? ' is-active' : ''}`} aria-pressed={!!walk && view3d} onClick={startWalk} title="Recorrer el depósito a la altura de los ojos de una persona"><Footprints size={14} aria-hidden /> A&nbsp;pie</button>
+          <button type="button" className={`vp-btn${fly && view3d && !walk ? ' is-active' : ''}`} aria-pressed={fly && view3d && !walk}
+            onClick={() => { if (walk) { setWalk(null); setFly(true) } else if (!view3d) { setView3d(true); setFly(true) } else setFly(!fly) }}
+            title="Moverse por el depósito como en un helicóptero: correrse, girar, subir y bajar"><Plane size={14} aria-hidden /> Vuelo</button>
           {!viewOnly && <>
           <button type="button" className={`vp-btn vp-btn--icon${placing === 'persona' ? ' is-active' : ''}`} aria-pressed={placing === 'persona'} onClick={() => place('persona')} title="Poner una persona para ver la escala" aria-label="Poner una persona para ver la escala"><PersonStanding size={16} aria-hidden /></button>
           <button type="button" className={`vp-btn vp-btn--icon${placing === 'autoelevador' ? ' is-active' : ''}`} aria-pressed={placing === 'autoelevador'} onClick={() => place('autoelevador')} title="Poner un autoelevador para ver la escala" aria-label="Poner un autoelevador para ver la escala"><Forklift size={16} aria-hidden /></button>
@@ -108,14 +114,44 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
             <p className="plan-stage__hint">Arrastrá para mirar · flechas o WASD para caminar · clic en el piso para ir hasta ahí · Esc sale</p>
           </div>
         )}
+        {view3d && fly && !walk && (
+          <div className="fly" role="group" aria-label="Vuelo sobre el depósito">
+            <FlyBtn k="turnLeft" label="Girar a la izquierda"><RotateCcw size={18} aria-hidden /></FlyBtn>
+            <FlyBtn k="forward" label="Avanzar"><ArrowUp size={18} aria-hidden /></FlyBtn>
+            <FlyBtn k="turnRight" label="Girar a la derecha"><RotateCw size={18} aria-hidden /></FlyBtn>
+            <FlyBtn k="left" label="Ir a la izquierda"><ArrowLeft size={18} aria-hidden /></FlyBtn>
+            <FlyBtn k="back" label="Retroceder"><ArrowDown size={18} aria-hidden /></FlyBtn>
+            <FlyBtn k="right" label="Ir a la derecha"><ArrowRight size={18} aria-hidden /></FlyBtn>
+            <FlyBtn k="up" label="Subir"><ChevronsUp size={18} aria-hidden /></FlyBtn>
+            <button type="button" className="fly__home" onClick={() => flyBridge.home?.()} title="Volver a ver todo el depósito">Todo</button>
+            <FlyBtn k="down" label="Bajar"><ChevronsDown size={18} aria-hidden /></FlyBtn>
+          </div>
+        )}
         {placing && <p className="plan-stage__hint plan-stage__hint--place">Tocá el piso donde va {placing === 'persona' ? 'la persona' : 'el autoelevador'}{view3d ? '' : ' (después miralo en 3D)'} · Esc termina</p>}
         {tool === 'rackpaste' && view3d && <p className="plan-stage__hint plan-stage__hint--place">Tocá el piso donde va la copia · Esc termina</p>}
         {tool === 'object' && view3d && <p className="plan-stage__hint plan-stage__hint--place">Tocá el piso donde va el objeto (podés poner varios) · Esc termina</p>}
         {view3d && !isoOn && !walk && !placing && tool !== 'rackpaste' && tool !== 'object' && (
-          <p className="plan-stage__hint">{viewOnly ? 'Arrastrá para girar la vista · rueda o los botones + y − para acercar' : lock3d ? 'Edición bloqueada: arrastrá para girar la vista · para mover cosas, tocá el candado' : 'Tocá algo para elegirlo y arrastralo para moverlo · arrastrá el fondo para girar'}</p>
+          <p className="plan-stage__hint">{fly ? 'Vuelo: flechas o WASD para moverte · Q y E giran · R y F suben y bajan · doble clic en un rack para ir hasta él'
+            : viewOnly ? 'Arrastrá para girar · rueda para acercar a donde apuntás · doble clic para ir hasta ahí'
+              : lock3d ? 'Edición bloqueada: arrastrá para girar · doble clic en un rack para ir hasta él · para mover cosas, tocá el candado'
+                : 'Tocá algo para elegirlo y arrastralo para moverlo · arrastrá el fondo para girar · doble clic para ir hasta ahí'}</p>
         )}
       </div>
     </section>
+  )
+}
+
+/** Un botón del vuelo: mientras se lo mantiene apretado, la cámara se mueve. */
+function FlyBtn({ k, label, children }: { k: FlyKey; label: string; children: ReactNode }) {
+  const stop = () => flyBridge.hold?.(k, false)
+  return (
+    <button type="button" aria-label={label} title={label}
+      onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); flyBridge.hold?.(k, true) }}
+      onPointerUp={stop} onPointerCancel={stop} onLostPointerCapture={stop}
+      // con el teclado (Enter o espacio): un empujón corto
+      onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { flyBridge.hold?.(k, true); window.setTimeout(stop, 220) } }}>
+      {children}
+    </button>
   )
 }
 

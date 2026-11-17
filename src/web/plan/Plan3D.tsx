@@ -23,6 +23,7 @@ import { RackInstances, type InstanceStats } from './RackInstances'
 import { EYE_HEIGHT, Forklift, Person } from './Figures'
 import { usePlan } from './planStore'
 import { SignPost } from './Signs3D'
+import { flyBridge, type FlyKey } from './fly'
 import { useDock } from '../components/dock'
 
 const m = (mm: number) => mm / 1000
@@ -328,9 +329,9 @@ export function Plan3D(props: Props) {
   const [view] = useState(() => {
     const b = planBounds(plan)
     const center = new THREE.Vector3(m((b.minX + b.maxX) / 2), 0, m((b.minY + b.maxY) / 2))
-    return { center, span: Math.max(m(b.maxX - b.minX), m(b.maxY - b.minY), 5) }
+    return { center, span: Math.max(m(b.maxX - b.minX), m(b.maxY - b.minY), 5), half: { x: m(b.maxX - b.minX) / 2, z: m(b.maxY - b.minY) / 2 } }
   })
-  const { center, span } = view
+  const { center, span, half } = view
   const [stats, setStats] = useState<InstanceStats | null>(null)
   const zoomRef = useRef<((k: number) => void) | null>(null)
   const many = modulesIn(props.racks) > MANY_MODULES
@@ -347,7 +348,9 @@ export function Plan3D(props: Props) {
         shadow-mapSize={[2048, 2048]} shadow-camera-left={-span} shadow-camera-right={span} shadow-camera-top={span} shadow-camera-bottom={-span} />
       <Grid position={[0, -0.002, 0]} infiniteGrid cellSize={1} sectionSize={5} cellColor="#dfe2e6" sectionColor="#c9cdd2" fadeDistance={span * 4} />
       <Scene {...props} span={span} onStats={setStats} />
-      <OrbitControls makeDefault target={center} enableDamping maxPolarAngle={Math.PI / 2 - 0.02} minDistance={2} maxDistance={span * 6} />
+      {/* la rueda acerca hacia donde está el puntero y el clic derecho corre la vista sobre el piso: así se llega a cualquier rincón */}
+      <OrbitControls makeDefault target={center} enableDamping zoomToCursor screenSpacePanning={false} maxPolarAngle={Math.PI / 2 - 0.02} minDistance={2} maxDistance={span * 6} />
+      <FlyControls center={center} span={span} half={half} />
       <WalkControls center={center} span={span} />
       <ZoomBridge zoomRef={zoomRef} min={2} max={span * 6} />
       <IsolateCamera racks={props.racks} center={center} span={span} />
@@ -680,6 +683,131 @@ function PickableRack({ rack, showLoads }: { rack: PlacedRack; showLoads: boolea
   }), [key, id]) // eslint-disable-line react-hooks/exhaustive-deps -- piece se compara por su clave
   // los parantes van livianos (los agujeros como imagen): se ven igual y un rack largo no traba
   return <LightModel.Provider value><RackPickContext.Provider value={value}><PlacedRackModel rack={rack} showLoads={showLoads} /></RackPickContext.Provider></LightModel.Provider>
+}
+
+/**
+ * VUELO (como ir en helicóptero sobre el depósito): la vista ya no gira siempre alrededor del centro.
+ * Las flechas o WASD corren la cámara sobre el piso hacia donde mira, Q y E la giran en el lugar,
+ * R y F la suben y la bajan, y un doble clic vuela hasta lo que se tocó (un rack, un rincón) y lo deja
+ * de centro: desde ahí, arrastrar gira alrededor de eso. Los botones de afuera hacen lo mismo.
+ */
+function FlyControls({ center, span, half }: { center: THREE.Vector3; span: number; half: { x: number; z: number } }) {
+  const camera = useThree((s) => s.camera)
+  const gl = useThree((s) => s.gl)
+  const scene = useThree((s) => s.scene)
+  const controls = useThree((s) => s.controls) as unknown as { enabled: boolean; target: THREE.Vector3; update(): void } | null
+  const invalidate = useThree((s) => s.invalidate)
+  useEffect(() => {
+    if (!controls) return
+    const el = gl.domElement
+    const held = new Set<FlyKey>()
+    let fast = false, raf = 0, last = 0, tween = 0
+    // el punto al que se mira no se va del depósito (con un margen): así nadie se pierde en el piso vacío
+    const EDGE = 3
+    const inside = (v: THREE.Vector3) => v.set(
+      Math.min(center.x + half.x + EDGE, Math.max(center.x - half.x - EDGE, v.x)), v.y,
+      Math.min(center.z + half.z + EDGE, Math.max(center.z - half.z - EDGE, v.z)))
+    const keep = () => {
+      const t = controls.target, was = t.clone()
+      inside(t)
+      camera.position.x += t.x - was.x; camera.position.z += t.z - was.z
+      camera.position.y = Math.min(span * 5, Math.max(0.8, camera.position.y))
+    }
+    // lo mismo al acercar con la rueda hacia un punto lejano o al correr la vista con el clic derecho
+    const onChange = () => { if (!usePlan.getState().walk) keep() }
+    const events = controls as unknown as { addEventListener(type: string, fn: () => void): void; removeEventListener(type: string, fn: () => void): void }
+    events.addEventListener('change', onChange)
+    const tick = (now: number) => {
+      raf = 0
+      if (!held.size || usePlan.getState().walk) { held.clear(); return }
+      const dt = Math.min(0.05, (now - last) / 1000)
+      last = now
+      const dist = camera.position.distanceTo(controls.target)
+      const speed = Math.min(span, Math.max(3, dist * 0.9)) * (fast ? 2.5 : 1) * dt
+      // hacia adelante: a donde mira la cámara, sobre el piso
+      const fwd = new THREE.Vector3()
+      camera.getWorldDirection(fwd); fwd.y = 0
+      if (fwd.lengthSq() < 1e-4) { fwd.set(0, 1, 0).applyQuaternion(camera.quaternion); fwd.y = 0 }
+      fwd.normalize()
+      const right = new THREE.Vector3(-fwd.z, 0, fwd.x)
+      const move = new THREE.Vector3()
+      if (held.has('forward')) move.add(fwd)
+      if (held.has('back')) move.sub(fwd)
+      if (held.has('right')) move.add(right)
+      if (held.has('left')) move.sub(right)
+      if (move.lengthSq()) { move.normalize().multiplyScalar(speed); camera.position.add(move); controls.target.add(move) }
+      const rise = (held.has('up') ? 1 : 0) - (held.has('down') ? 1 : 0)
+      if (rise) camera.position.y += rise * speed * 0.7
+      const turn = (held.has('turnLeft') ? 1 : 0) - (held.has('turnRight') ? 1 : 0)
+      if (turn) {
+        // gira en el lugar: lo que se mueve es el punto al que mira
+        const off = controls.target.clone().sub(camera.position).applyAxisAngle(new THREE.Vector3(0, 1, 0), turn * 1.2 * dt * (fast ? 1.8 : 1))
+        controls.target.copy(camera.position).add(off)
+      }
+      keep()
+      controls.update(); invalidate()
+      raf = requestAnimationFrame(tick)
+    }
+    const hold = (key: FlyKey, on: boolean) => {
+      if (on) held.add(key); else held.delete(key)
+      if (on && !raf) { cancelAnimationFrame(tween); last = performance.now(); raf = requestAnimationFrame(tick) }
+    }
+    /** Lleva la cámara, de a poco, a mirar `to` desde `from`. */
+    const glide = (toTarget: THREE.Vector3, toPos: THREE.Vector3) => {
+      cancelAnimationFrame(tween)
+      const t0 = performance.now(), fromTarget = controls.target.clone(), fromPos = camera.position.clone()
+      const step = (now: number) => {
+        const k = Math.min(1, (now - t0) / 380), e = 1 - (1 - k) ** 3
+        controls.target.lerpVectors(fromTarget, toTarget, e)
+        camera.position.lerpVectors(fromPos, toPos, e)
+        controls.update(); invalidate()
+        if (k < 1) tween = requestAnimationFrame(step)
+      }
+      tween = requestAnimationFrame(step)
+    }
+    const home = () => glide(center.clone(), new THREE.Vector3(center.x + span * 0.7, span * 0.75, center.z + span * 1.05))
+    // doble clic: volar hasta lo que se tocó y dejarlo de centro
+    const ray = new THREE.Raycaster()
+    const dbl = (e: MouseEvent) => {
+      if (usePlan.getState().walk) return
+      const r = el.getBoundingClientRect()
+      ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera)
+      const hit = ray.intersectObjects(scene.children, true).find((h) => h.object.visible && h.point.y > -0.5)
+      const floor = new THREE.Vector3()
+      const at = hit?.point ?? ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), floor)
+      if (!at) return
+      const to = inside(new THREE.Vector3(at.x, Math.min(3, Math.max(0, at.y)), at.z))
+      const off = camera.position.clone().sub(controls.target)
+      off.setLength(Math.max(Math.min(off.length(), 8), off.length() * 0.5))
+      glide(to, to.clone().add(off))
+    }
+    const KEYS: Record<string, FlyKey> = { arrowup: 'forward', w: 'forward', arrowdown: 'back', s: 'back', arrowleft: 'left', a: 'left', arrowright: 'right', d: 'right', q: 'turnLeft', e: 'turnRight', r: 'up', pageup: 'up', f: 'down', pagedown: 'down' }
+    const typing = (e: KeyboardEvent) => !!(e.target as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable]')
+    const down = (e: KeyboardEvent) => {
+      const k = KEYS[e.key.toLowerCase()]
+      if (!k || e.ctrlKey || e.metaKey || e.altKey || typing(e) || usePlan.getState().walk) return
+      e.preventDefault()
+      fast = e.shiftKey
+      hold(k, true)
+    }
+    const up = (e: KeyboardEvent) => { const k = KEYS[e.key.toLowerCase()]; if (k) hold(k, false); fast = e.shiftKey }
+    const blur = () => held.clear()
+    flyBridge.hold = hold; flyBridge.home = home
+    el.addEventListener('dblclick', dbl)
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    window.addEventListener('blur', blur)
+    return () => {
+      flyBridge.hold = null; flyBridge.home = null
+      events.removeEventListener('change', onChange)
+      cancelAnimationFrame(raf); cancelAnimationFrame(tween)
+      el.removeEventListener('dblclick', dbl)
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
+      window.removeEventListener('blur', blur)
+    }
+  }, [controls, camera, gl, scene, invalidate, center, span, half])
+  return null
 }
 
 /**

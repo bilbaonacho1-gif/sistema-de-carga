@@ -88,3 +88,10 @@
 
 /* textos del plano: que las letras no se junten al achicar o agrandar el plano */
 .plan-editor svg text { text-rendering: geometricPrecision; font-kerning: none; }
+
+/* Vuelo: los botones para moverse por el depósito en 3D */
+.fly { position: absolute; z-index: 7; left: 12px; bottom: 12px; display: grid; grid-template-columns: repeat(3, 44px); grid-auto-rows: 44px; gap: 4px; touch-action: none; user-select: none; }
+.fly button { display: grid; place-items: center; border: 0; border-radius: 10px; background: rgba(31, 35, 40, .82); color: #fff; cursor: pointer; touch-action: none; }
+.fly button:hover, .fly button:active { background: #1f2328; }
+.fly .fly__home { font: 700 12px var(--f-body); letter-spacing: .02em; }
+.plan3d:has(~ .fly) .plan3d__legend { left: 164px; max-width: calc(100% - 240px); }
