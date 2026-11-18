@@ -23,7 +23,7 @@ import { RackInstances, type InstanceStats } from './RackInstances'
 import { EYE_HEIGHT, Forklift, Person } from './Figures'
 import { usePlan } from './planStore'
 import { SignPost } from './Signs3D'
-import { flyBridge, type FlyKey } from './fly'
+import { flyBridge, isFlying as flyingNow, type FlyKey } from './fly'
 import { useDock } from '../components/dock'
 
 const m = (mm: number) => mm / 1000
@@ -240,10 +240,12 @@ function useDrag() {
       }
       s.select(select)
       // con la edición bloqueada se elige, pero no se mueve nada (y el arrastre gira la vista)
-      // volando, el arrastre es para mirar: se elige, pero no se mueve nada
-      if (!apply || s.lock3d || s.fly) return
+      if (!apply || s.lock3d) return
+      // mientras se arrastra, la vista no se mueve (ni girando ni apuntando)
       const ctrl = controls as unknown as { enabled: boolean } | null
+      const wasEnabled = ctrl?.enabled ?? false
       if (ctrl) ctrl.enabled = false
+      flyBridge.moving = true
       const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -e.point.y)
       const start = e.point.clone()
       const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), hit = new THREE.Vector3()
@@ -261,7 +263,8 @@ function useDrag() {
         window.removeEventListener('pointermove', move)
         window.removeEventListener('pointerup', up)
         window.removeEventListener('pointercancel', up)
-        if (ctrl) ctrl.enabled = true
+        if (ctrl) ctrl.enabled = wasEnabled
+        flyBridge.moving = false
       }
       window.addEventListener('pointermove', move)
       window.addEventListener('pointerup', up)
@@ -620,7 +623,7 @@ function ZoomBridge({ zoomRef, min, max }: { zoomRef: MutableRefObject<((k: numb
   const invalidate = useThree((s) => s.invalidate)
   useEffect(() => {
     zoomRef.current = (k) => {
-      if (usePlan.getState().fly && flyBridge.nudge) { flyBridge.nudge(k < 1 ? 1 : -1); return }
+      if (flyingNow(usePlan.getState()) && flyBridge.nudge) { flyBridge.nudge(k < 1 ? 1 : -1); return }
       if (!controls) return
       const off = camera.position.clone().sub(controls.target)
       const d = Math.min(max, Math.max(min, off.length() * k))
@@ -688,13 +691,14 @@ function PickableRack({ rack, showLoads }: { rack: PlacedRack; showLoads: boolea
 }
 
 /**
- * VUELO (como un dron sobre el depósito). Con "Vuelo" prendido la vista deja de girar alrededor de un
+ * VUELO (como un dron sobre el depósito): así se maneja siempre la vista 3D. No gira alrededor de un
  * centro: arrastrando con el mouse se apunta a donde se quiere mirar (también para arriba) y
  * "Adelante" (o W, o la flecha) va derecho hacia allá, subiendo o bajando solo; "Atrás" vuelve. La
- * rueda avanza hacia donde está el puntero. Una cruz en el medio marca hacia dónde se va.
+ * rueda avanza hacia donde está el puntero. Una cruz en el medio marca hacia dónde se va. El doble
+ * clic lleva hasta lo que se tocó (un rack, un rincón).
  *
- * Sin "Vuelo" el teclado igual sirve: flechas o WASD corren la vista sobre el piso, Q y E giran, R y F
- * suben y bajan. El doble clic lleva hasta lo que se tocó (un rack, un rincón) y lo deja de centro.
+ * Viendo un rack solo, la vista vuelve a girar alrededor de él (para tocar sus piezas): ahí el
+ * teclado corre la vista sobre el piso, Q y E giran, R y F suben y bajan.
  */
 function FlyControls({ center, span, half }: { center: THREE.Vector3; span: number; half: { x: number; z: number } }) {
   const camera = useThree((s) => s.camera)
@@ -702,7 +706,7 @@ function FlyControls({ center, span, half }: { center: THREE.Vector3; span: numb
   const scene = useThree((s) => s.scene)
   const controls = useThree((s) => s.controls) as unknown as { enabled: boolean; target: THREE.Vector3; update(): void } | null
   const invalidate = useThree((s) => s.invalidate)
-  const flying = usePlan((s) => s.fly && !s.walk)
+  const flying = usePlan(flyingNow)
   useEffect(() => {
     if (!controls) return
     const el = gl.domElement
@@ -726,7 +730,7 @@ function FlyControls({ center, span, half }: { center: THREE.Vector3; span: numb
       p.set(Math.min(center.x + half.x + ROOM, Math.max(center.x - half.x - ROOM, p.x)), Math.min(span * 3, Math.max(0.4, p.y)),
         Math.min(center.z + half.z + ROOM, Math.max(center.z - half.z - ROOM, p.z)))
     }
-    const isFlying = () => { const s = usePlan.getState(); return s.fly && !s.walk }
+    const isFlying = () => flyingNow(usePlan.getState())
     // lo mismo al acercar con la rueda hacia un punto lejano o al correr la vista con el clic derecho
     const onChange = () => { if (!usePlan.getState().walk && !isFlying()) keep() }
     const events = controls as unknown as { addEventListener(type: string, fn: () => void): void; removeEventListener(type: string, fn: () => void): void }
@@ -841,9 +845,9 @@ function FlyControls({ center, span, half }: { center: THREE.Vector3; span: numb
     }
     // volando: arrastrar mira; la rueda avanza o retrocede hacia donde está el puntero
     let dragging: { x: number; y: number } | null = null
-    const pdown = (e: PointerEvent) => { if (isFlying() && e.button === 0) dragging = { x: e.clientX, y: e.clientY } }
+    const pdown = (e: PointerEvent) => { if (isFlying() && e.button === 0 && !flyBridge.moving) dragging = { x: e.clientX, y: e.clientY } }
     const pmove = (e: PointerEvent) => {
-      if (!dragging || !isFlying()) return
+      if (!dragging || !isFlying() || flyBridge.moving) return
       const dx = e.clientX - dragging.x, dy = e.clientY - dragging.y
       dragging = { x: e.clientX, y: e.clientY }
       cancelAnimationFrame(tween)

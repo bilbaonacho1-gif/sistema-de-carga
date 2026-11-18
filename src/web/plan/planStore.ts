@@ -112,12 +112,6 @@ interface PlanState {
    */
   walk: Walk | null
   setWalk(w: Walk | null): void
-  /**
-   * Vuelo en el 3D (como un dron): el mouse apunta la vista y "adelante" va hacia donde se mira,
-   * también para arriba o para abajo. No se puede a la vez que la vista a pie.
-   */
-  fly: boolean
-  setFly(v: boolean): void
   /** Camina `move` mm hacia donde mira y gira `turn` radianes. */
   walkBy(move: number, turn: number): void
   /** En el 3D, edición bloqueada: se puede girar y elegir, pero nada se mueve arrastrando (así no se corre algo sin querer). */
@@ -206,7 +200,7 @@ export const usePlan = create<PlanState>()(
       focusRack: null,
       setFocusRack: (focusRack) => set({ focusRack }),
       isolate: null,
-      setIsolate: (isolate) => set((s) => ({ isolate, piece: isolate ? s.piece : null, ...(isolate ? { fly: false } : {}) })),
+      setIsolate: (isolate) => set((s) => ({ isolate, piece: isolate ? s.piece : null })),
       piece: null,
       setPiece: (piece) => set({ piece }),
       section: 'deposito',
@@ -220,9 +214,7 @@ export const usePlan = create<PlanState>()(
       clipRacks: null,
       setClipRacks: (clipRacks) => set({ clipRacks }),
       walk: null,
-      setWalk: (walk) => set(walk ? { walk, fly: false } : { walk }),
-      fly: false,
-      setFly: (fly) => set(fly ? { fly, walk: null, isolate: null } : { fly }),
+      setWalk: (walk) => set({ walk }),
       walkBy: (move, turn) => set((s) => {
         if (!s.walk) return s
         const yaw = s.walk.yaw + turn

@@ -3,7 +3,7 @@
  * se arrastra), con los racks ubicados si los hay. Lo seleccionado tiene su barra de acciones.
  */
 import { configFor, moduleList } from '../../shared/rack/modules'
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Box, Lock, LockOpen, ChevronDown, ChevronRight, Combine, Copy, Focus, Footprints, Forklift, Plane, PersonStanding, Scissors, Map as MapIcon, Maximize2, Package, RotateCw, Trash2 } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Box, Lock, LockOpen, ChevronDown, ChevronRight, Combine, Copy, Focus, Footprints, Forklift, PersonStanding, Scissors, Map as MapIcon, Maximize2, Package, RotateCw, Trash2 } from 'lucide-react'
 import { rackNames } from './PlanNotes'
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import type { PlacedRack } from '../../shared/plan/depot'
@@ -18,7 +18,7 @@ import { Field, Segmented, Select, Spinner } from '../components/ui'
 import { PlanEditor, type PlanRackLayer } from './PlanEditor'
 import { PlanPanel } from './PlanPanel'
 import { usePlan } from './planStore'
-import { flyBridge, type FlyKey } from './fly'
+import { flyBridge, isFlying, type FlyKey } from './fly'
 import { RackParts } from './RackParts'
 import type { RackConfiguration } from '../../shared/rack/types'
 
@@ -51,9 +51,8 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
   const viewOnly = usePlan((s) => s.viewOnly)
   const pallets = (racks ?? []).reduce((n, r) => n + r.structure.pallets.length, 0)
   const [loads, setLoads] = useState<boolean | null>(null)
-  // "Vuelo": moverse por el depósito como un dron (el mouse apunta, "Adelante" va para allá)
-  const fly = usePlan((s) => s.fly)
-  const setFly = usePlan((s) => s.setFly)
+  // el 3D se maneja como un dron (el mouse apunta, "Adelante" va para allá), salvo a pie o viendo un rack solo
+  const fly = usePlan(isFlying)
   // con muchos racks el 3D va en lote y las cajas no pesan: se ven siempre; con pocos racks muy largos, sólo si no son demasiadas
   // viendo un rack solo, los pallets se ven siempre (son pocos)
   const isoOn = !!isolate?.length && !!racks?.some((r) => isolate.includes(r.placement.id))
@@ -68,9 +67,6 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
         {!view3d && !empty && <button type="button" className="vp-btn" onClick={() => setFit((n) => n + 1)}><Maximize2 size={14} aria-hidden /> Encuadrar</button>}
         {!empty && <>
           <button type="button" className={`vp-btn${walk && view3d ? ' is-active' : ''}`} aria-pressed={!!walk && view3d} onClick={startWalk} title="Recorrer el depósito a la altura de los ojos de una persona"><Footprints size={14} aria-hidden /> A&nbsp;pie</button>
-          <button type="button" className={`vp-btn${fly && view3d && !walk ? ' is-active' : ''}`} aria-pressed={fly && view3d && !walk}
-            onClick={() => { if (!view3d) { setView3d(true); setFly(true) } else setFly(!(fly && !walk)) }}
-            title="Moverse por el depósito como un dron: arrastrando apuntás a donde querés ir y con Adelante vas para allá"><Plane size={14} aria-hidden /> Vuelo</button>
           {!viewOnly && <>
           <button type="button" className={`vp-btn vp-btn--icon${placing === 'persona' ? ' is-active' : ''}`} aria-pressed={placing === 'persona'} onClick={() => place('persona')} title="Poner una persona para ver la escala" aria-label="Poner una persona para ver la escala"><PersonStanding size={16} aria-hidden /></button>
           <button type="button" className={`vp-btn vp-btn--icon${placing === 'autoelevador' ? ' is-active' : ''}`} aria-pressed={placing === 'autoelevador'} onClick={() => place('autoelevador')} title="Poner un autoelevador para ver la escala" aria-label="Poner un autoelevador para ver la escala"><Forklift size={16} aria-hidden /></button>
@@ -115,7 +111,7 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
             <p className="plan-stage__hint">Arrastrá para mirar · flechas o WASD para caminar · clic en el piso para ir hasta ahí · Esc sale</p>
           </div>
         )}
-        {view3d && fly && !walk && <>
+        {view3d && fly && <>
           {/* hacia dónde se va con "Adelante" */}
           <span className="fly__aim" aria-hidden />
           <div className="fly" role="group" aria-label="Vuelo por el depósito">
@@ -128,10 +124,9 @@ export function PlanStage({ rackLayer, racks, summary }: { rackLayer?: PlanRackL
         {tool === 'rackpaste' && view3d && <p className="plan-stage__hint plan-stage__hint--place">Tocá el piso donde va la copia · Esc termina</p>}
         {tool === 'object' && view3d && <p className="plan-stage__hint plan-stage__hint--place">Tocá el piso donde va el objeto (podés poner varios) · Esc termina</p>}
         {view3d && !isoOn && !walk && !placing && tool !== 'rackpaste' && tool !== 'object' && (
-          <p className="plan-stage__hint">{fly ? 'Vuelo: arrastrá para apuntar (también para arriba) · Adelante (o W) va hacia la cruz · la rueda avanza hacia el mouse · doble clic en un rack para ir hasta él'
-            : viewOnly ? 'Arrastrá para girar · rueda para acercar a donde apuntás · doble clic para ir hasta ahí'
-              : lock3d ? 'Edición bloqueada: arrastrá para girar · doble clic en un rack para ir hasta él · para mover cosas, tocá el candado'
-                : 'Tocá algo para elegirlo y arrastralo para moverlo · arrastrá el fondo para girar · doble clic para ir hasta ahí'}</p>
+          <p className="plan-stage__hint">{viewOnly || lock3d
+            ? 'Arrastrá para apuntar (también para arriba) · Adelante (o W) va hacia la cruz · la rueda avanza hacia el mouse · doble clic en un rack para ir hasta él'
+            : 'Tocá algo para elegirlo y arrastralo para moverlo · arrastrá el fondo para apuntar · Adelante (o W) va hacia la cruz'}</p>
         )}
       </div>
     </section>
