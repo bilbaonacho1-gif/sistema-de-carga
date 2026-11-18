@@ -1,6 +1,6 @@
 /**
- * VUELO SOBRE EL DEPÓSITO (el 3D visto "desde un helicóptero"): los botones de afuera del lienzo y
- * el teclado le piden a la cámara que se corra, suba, baje o gire. Esto es el puente entre los dos.
+ * VUELO SOBRE EL DEPÓSITO (como un dron): los botones de afuera del lienzo le piden a la cámara que
+ * avance o retroceda hacia donde se mira, o que vuelva a ver todo. Esto es el puente entre los dos.
  */
 export type FlyKey = 'forward' | 'back' | 'left' | 'right' | 'up' | 'down' | 'turnLeft' | 'turnRight'
 
@@ -9,4 +9,6 @@ export const flyBridge: {
   hold: ((key: FlyKey, on: boolean) => void) | null
   /** Volver a la vista general del depósito. */
   home: (() => void) | null
-} = { hold: null, home: null }
+  /** Un empujón hacia donde se mira (1) o para atrás (-1): lo usan los botones + y −. */
+  nudge: ((sign: number) => void) | null
+} = { hold: null, home: null, nudge: null }
